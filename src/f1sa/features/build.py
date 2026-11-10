@@ -41,8 +41,11 @@ from f1sa.etl.spark import build_spark, configure_session
 from f1sa.etl.sql_jobs import run_sql_views
 from f1sa.features import schemas as FS
 from f1sa.features.gaps import gaps_from_enriched
+from f1sa.features.lineage import unknown_constructor_ids
+from f1sa.features.outlap import outlap_features
 from f1sa.features.pitloss import pit_loss_features, race_summary_features, team_outlap_features
 from f1sa.features.stints import stint_features
+from f1sa.features.telemetry_agg import telemetry_lap_features
 
 
 class BuildError(RuntimeError):
@@ -87,6 +90,14 @@ def compute_features(
         "pit_loss": sel(pit_loss_features(views)),
         "team_outlap_history": sel(team_outlap_features(views)),
         "race_summary": sel(race_summary_features(views)),
+        "telemetry_lap_features": telemetry_lap_features(
+            t["telemetry_raw"], t["laps"], t["telemetry_lap"]
+        ),
+        "outlap_features": sel(
+            outlap_features(
+                clean["laps"], clean["stints"], clean["pitstops"], clean["results"], clean["races"]
+            )
+        ),
     }
 
 
@@ -124,6 +135,12 @@ def run_build(
     else:
         raise BuildError(f"unknown source {source!r}")
     targets = set(wanted)
+    unknown = unknown_constructor_ids(clean["results"])
+    if unknown:
+        raise BuildError(
+            f"constructor ids {unknown} are neither in features.lineage.LINEAGE nor in "
+            "STABLE_CONSTRUCTORS; add the rename (or the stable id) before building team history"
+        )
 
     tables = compute_features(spark, clean, targets)
     expected_laps = select_races(clean["laps"], None, targets).count()

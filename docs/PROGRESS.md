@@ -146,13 +146,43 @@
 
     49 new tests, 344 unit tests in total. Docs: architecture.md (API rationale, timestamp limits, fallbacks) and
     data_dictionary.md.
+- Step 7 (W4): telemetry aggregates, out-lap pace and constructor lineage (rest of #12)
+  - `features/telemetry_agg.py`: the single per-lap aggregation definition (full throttle ≥ 98%). Samples are
+    assigned to `[lap_start, lap_end)` by session time; a boundary sample goes to the later lap. The clean FastF1 path
+    uses it too. Races with raw telemetry are aggregated; synthetic `telemetry_lap` passes through unchanged with
+    `is_synthetic`. Batch only: a test checks that `f1sa.streaming` never imports telemetry.
+  - Clean laps gain `lap_start_session_s` and `lap_end_session_s` (from FastF1, null otherwise). `make etl-sample`
+    was re-run; quality still PASS.
+  - `features/outlap.py`:
+    - clean lap (excludes lap 1, in-laps, out-laps, SC/VSC/red flag, and laps over 107% of the race median);
+    - `realised_outlap_delta_s` (ORACLE): same-stint median, falling back to the previous stint;
+    - `expected_outlap_delta_s`: the mean over strictly earlier races, with fallbacks
+      driver_team → team → circuit → global → none, plus a flag.
+  - `features/lineage.py`: alphatauri→rb and alfa→sauber, plus stable ids. It is applied to SQL
+    `team_outlap_history` (new `team_history_key`) and to `outlap_features`. The build fails on an unknown
+    constructor id.
+  - `docs/label_definition.md` (new): the "Out-lap pace features" section, with parameters and the ORACLE
+    vs decision-time rule. architecture.md and data_dictionary.md are updated.
+  - Verified on the sample: two builds, both exit 0, with identical checksums for all 9 tables × 2 partitions
+    (telemetry_lap_features 2168, outlap_features 100). In 2024, rb and sauber now use `team_prior`; out-lap
+    expected values are `driver_team` (58) or `team` (2).
+  - Tests (28 new, 372 unit tests in total):
+    - raw telemetry fixture: boundaries, a lap with no samples, exact values;
+    - synthetic pass-through and mixed sources;
+    - the clean-lap rule (including 108% vs 106%);
+    - realised fallbacks;
+    - 4-race ×100 leakage;
+    - history exclusions;
+    - lineage, including a check that the build fails on an unknown id.
 ## Next
 - After the user's bulk HDFS ingest finishes: verify hdfs mode with
   `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://namenode:8020/f1 python -m f1sa.etl.clean --source lake`.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
-- Step 7: out-lap pace (`features/outlap.py`) and telemetry aggregates (`telemetry_agg.py`) (rest of #12). Then S8
-  must join lap L−1 feature rows (a row describes the end of lap L).
+- User: verify `features/lineage.py` against the full 2021–2025 constructor ids once the ingest finishes.
+  `test_repo_clean_zone_has_only_known_constructors` and the build check fail on a missed rename.
+- Step 8: undercut label (`features/undercut.py`, extend `docs/label_definition.md`). It joins lap L−1 feature
+  rows and uses `expected_outlap_delta_s`, never `realised_outlap_delta_s`.
 ## Known issues
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
@@ -176,7 +206,7 @@
   see requests made later by other processes. Processes started now share the budget fully.
 - Without FastF1, `is_sc_lap` and `is_vsc_lap` are null and `is_neutralised_lap` comes from a lap-time heuristic.
   The heuristic misses lap-1 incidents and can flag laps run in heavy rain. It is exact once FastF1 data exists.
-- FastF1 per-lap telemetry aggregates are averages over samples, not time-weighted (sample spacing is roughly even).
+- Per-lap telemetry aggregates are averages over samples, not time-weighted (sample spacing is roughly even).
 - The FastF1 path is tested only on hand-made Parquet that mimics what the Step 4A writer produces, because real
   FastF1 data needs the user's login.
 - Sprint results are not yet a clean table (the raw zone has `sprint_results` on sprint weekends).
@@ -185,8 +215,10 @@
   as provided by the team and not re-verified online.
 - CI has not yet run on GitHub (validated locally against the GitHub workflow JSON schema only).
 
-- Team history breaks on constructor renames (alphatauri→rb, alfa→sauber): those teams fall back to circuit or global
-  priors. A rename map is still to be decided.
+- The lineage map is verified on the 2-race sample only (see Next).
+- The raw telemetry path is tested only on hand-built fixtures (real FastF1 data needs the F1 TV login).
+- Step 6 `team_outlap_history` (SQL, median, green-lap reference) and Step 7 `outlap_features` (mean, clean-lap
+  stint reference) are two different out-lap histories by design. S8 should use `outlap_features`.
 - Lap timestamps are estimates (a fixed 180 s formation offset, error of about ±1 min). Lap-time distribution
   medians still include slow laps that the neutralisation heuristic misses (2024 R5 max is 145 s).
 - The global prior window has no partition (single-partition sort). That is fine at about 100 races; check it in S10.
@@ -199,3 +231,5 @@ then `docker compose exec namenode hdfs dfs -du -h /f1/raw`.
 
 Features: `make etl-sample && uv run python -m f1sa.features.build --source sample`, then
 `uv run pytest tests/unit/test_rdd_jobs.py tests/unit/test_df_jobs.py tests/unit/test_sql_jobs.py tests/unit/test_features_build.py -q`.
+
+Step 7: `uv run pytest tests/unit/test_telemetry_agg.py tests/unit/test_outlap.py tests/unit/test_lineage.py -q`.

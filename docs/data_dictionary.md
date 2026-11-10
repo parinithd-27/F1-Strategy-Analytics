@@ -92,6 +92,7 @@ One row per driver per completed lap, from Jolpica lap timings. Laps split acros
 | is_red_flag_lap | boolean | red flag (TrackStatus 5, or the heuristic below) |
 | is_neutralised_lap | boolean | SC or VSC (exact with FastF1, heuristic otherwise) |
 | track_status_source | string | `fastf1` (exact) or `heuristic` |
+| lap_start_session_s, lap_end_session_s | double | FastF1 `LapStartTime` / `Time` (session seconds): the lap's telemetry window `[start, end)`. Null without FastF1 |
 
 **Jolpica-only track-status heuristic.** It is used when a race has no FastF1 laps.
 - Lap 1 and pit in/out laps are excluded.
@@ -120,7 +121,8 @@ One row per driver per lap.
 - `source = fastf1`: aggregated from the car-data samples within the lap's `[LapStartTime, Time)`. Each column is a
   sample average or extreme (samples are not time-weighted):
   - `mean_speed_kph`, `max_speed_kph`;
-  - `pct_full_throttle` (share of samples with throttle ≥ 99 %);
+  - `pct_full_throttle` (share of samples with throttle ≥ 98 %; one definition shared with the feature table,
+    `features/telemetry_agg.py`);
   - `brake_fraction` (share of samples braking);
   - `gear_changes` (changes between consecutive samples);
   - `mean_rpm`.
@@ -219,6 +221,7 @@ Green racing laps only: not lap 1, not a pit in or out lap, not neutralised or r
 ### team_outlap_history (key: season, round, constructor_id): history from strictly earlier races
 | column | type | meaning |
 |---|---|---|
+| team_history_key | string | lineage key used for the team window (`features/lineage.py`: alphatauri → rb, alfa → sauber) |
 | outlap_delta_prior_s | double | coalesce(team, circuit, global prior). Out-lap delta = out-lap − the driver's green median |
 | outlap_source | string | team_prior, circuit_prior, global_prior or none |
 | outlap_missing | bool | no history at any level |
@@ -228,6 +231,42 @@ Green racing laps only: not lap 1, not a pit in or out lap, not neutralised or r
 `circuit_id`, `race_name`, `race_laps`, `entrants`, `finishers`, `classified`, `pit_stops`, `long_stops`,
 `stops_per_driver`, `neutralised_laps`, `green_median_lap_s`, `fastest_lap_s`, `fastest_lap_driver_id`,
 `winner_driver_id`, `winner_constructor_id`, `winner_race_time_s`.
+
+### telemetry_lap_features (key: season, round, driver_id, lap; `features/telemetry_agg.py`)
+The source is chosen per race:
+- **`fastf1_raw`**, used when the race has clean `telemetry_raw` samples and lap windows.
+  - Samples are re-assigned by `session_time_s` to the half-open window `[lap_start_session_s, lap_end_session_s)`.
+    A boundary sample goes to the later lap; samples outside every window are dropped.
+  - Every windowed lap gets a row. A lap without samples has `n_samples = 0` and null aggregates.
+  - `is_synthetic = false`.
+- **Pass-through**, used otherwise. The clean `telemetry_lap` rows are copied unchanged (synthetic in sample mode,
+  `is_synthetic = true`), with `n_samples` null.
+
+| column | type | meaning |
+|---|---|---|
+| mean_speed_kph, max_speed_kph | double | over the lap's samples |
+| pct_full_throttle | double | share of samples with throttle ≥ 98 % |
+| brake_fraction | double | share of samples braking |
+| gear_changes | int | consecutive samples within the lap whose gear differs (not counted across laps) |
+| mean_rpm | double | sample mean |
+| n_samples | int | samples in the lap (null for pass-through rows) |
+| is_synthetic, source | bool/string | `fastf1_raw`, or the clean row's source (`synthetic`, `fastf1`) |
+
+### outlap_features (key: season, round, driver_id, stint; `features/outlap.py`)
+Definitions and parameters: `docs/label_definition.md`, "Out-lap pace features". There is one row per clean stint.
+`realised_*` is set only for stints > 1. `expected_*` is the same on every row of a (race, driver).
+
+| column | type | meaning |
+|---|---|---|
+| constructor_id, team_history_key, circuit_id, race_seq | string/string/string/int | entry and lineage key |
+| outlap, outlap_time_s | int/double | the stint's first lap (null for stint 1) |
+| reference_clean_lap_s, reference_source | double/string | the driver's median clean lap in this stint (`same_stint`), the previous stint (`previous_stint`), or `none` |
+| realised_outlap_delta_s | double | **ORACLE only, not known at decision time**: out-lap − reference |
+| outlap_neutralised, is_long_stop | bool | the out-lap is neutralised or red-flag / the in-lap stop was > 60 s (both excluded from history) |
+| expected_outlap_delta_s | double | **decision-time safe**: the mean realised delta from strictly earlier races |
+| expected_outlap_source | string | driver_team, team, circuit, global or none |
+| expected_outlap_missing | bool | no history at any level |
+| driver_team_prior_s/_n, team_prior_s/_n, circuit_prior_s/_n, global_prior_s/_n | double/int | the mean and support at each level |
 
 ## Sample bundle (`data/sample/`)
 `make sample-data` validates the bundle offline, or builds it if it is missing (`REBUILD=1` forces a rebuild). It is a

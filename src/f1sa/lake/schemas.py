@@ -256,6 +256,8 @@ LAPS = _s(
     ("is_red_flag_lap", BOOL),
     ("is_neutralised_lap", BOOL),
     ("track_status_source", STR),
+    ("lap_start_session_s", DBL),
+    ("lap_end_session_s", DBL),
 )
 PITSTOPS = _s(
     ("season", INT),

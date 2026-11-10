@@ -38,6 +38,7 @@ from pyspark.sql.types import StructType
 
 from f1sa.config import Settings, get_settings
 from f1sa.etl.spark import build_spark, configure_session
+from f1sa.features.telemetry_agg import aggregate_samples, assign_to_laps
 from f1sa.lake import schemas as S
 from f1sa.lake.paths import is_within, local_path
 from f1sa.lake.quality import QualityReport, run_checks
@@ -48,7 +49,6 @@ is neutralised (safety car or VSC; Jolpica cannot tell which)."""
 RED_FLAG_RATIO = 3.0
 """Heuristic: above this multiple the lap is treated as a red-flag lap (includes the stoppage)."""
 LONG_STOP_S = 60.0
-FULL_THROTTLE_PCT = 99.0
 CLEAN_TABLES = tuple(S.CLEAN_SCHEMAS)
 RaceKey = tuple[int, int]
 
@@ -463,6 +463,30 @@ def fastf1_track_flags(ff1_laps: DataFrame) -> DataFrame:
     )
 
 
+def fastf1_lap_windows(ff1_laps: DataFrame) -> DataFrame:
+    """(season, round, driver_id, lap, lap_start_session_s, lap_end_session_s) from FastF1 laps
+    (``LapStartTime`` and ``Time``, both session time)."""
+    return (
+        ff1_laps.where(F.col("LapNumber").isNotNull())
+        .select(
+            *_DRIVER_KEY,
+            F.col("LapNumber").cast("int").alias("lap"),
+            F.round(ns_to_seconds(F.col("LapStartTime")), 3).alias("lap_start_session_s"),
+            F.round(ns_to_seconds(F.col("Time")), 3).alias("lap_end_session_s"),
+        )
+        .dropDuplicates([*_DRIVER_KEY, "lap"])
+    )
+
+
+def _empty_windows(laps: DataFrame) -> DataFrame:
+    return laps.select(
+        *_DRIVER_KEY,
+        "lap",
+        F.lit(None).cast("double").alias("lap_start_session_s"),
+        F.lit(None).cast("double").alias("lap_end_session_s"),
+    ).limit(0)
+
+
 def build_laps(timings: DataFrame, pitstops: DataFrame, ff1_laps: DataFrame | None) -> DataFrame:
     """Clean laps: cumulative time, gaps at the timing line, pit and track-status flags."""
     laps = add_pit_flags(timings, pitstops)
@@ -484,6 +508,11 @@ def build_laps(timings: DataFrame, pitstops: DataFrame, ff1_laps: DataFrame | No
     laps = laps.withColumn(
         "gap_to_leader_s", F.round(F.col("cumulative_time_s") - leader, 3)
     ).withColumn("gap_ahead_s", F.round(F.col("cumulative_time_s") - ahead, 3))
+
+    windows = _empty_windows(laps)
+    if ff1_laps is not None:
+        windows = fastf1_lap_windows(ff1_laps)
+    laps = laps.join(windows, [*_DRIVER_KEY, "lap"], "left")
 
     flags = heuristic_track_flags(laps)
     if ff1_laps is not None:
@@ -628,49 +657,15 @@ def build_stints(
 
 
 def assign_laps(car: DataFrame, ff1_laps: DataFrame) -> DataFrame:
-    """Give every telemetry sample the lap whose [LapStartTime, Time) window contains it.
-
-    Done as one sorted stream per driver (lap-start markers + samples, forward-filled), which
-    scales linearly instead of a range join. Samples outside every lap get ``lap = null``.
-    """
+    """Give every telemetry sample the lap whose [LapStartTime, Time) window contains it
+    (``features.telemetry_agg.assign_to_laps``). Samples outside every lap get ``lap = null``."""
     windows = ff1_laps.where(F.col("LapNumber").isNotNull()).select(
         *_DRIVER_KEY,
         F.col("LapNumber").cast("int").alias("lap"),
-        ns_to_seconds(F.col("LapStartTime")).alias("t"),
-        ns_to_seconds(F.col("Time")).alias("lap_end"),
+        ns_to_seconds(F.col("LapStartTime")).alias("lap_start_s"),
+        ns_to_seconds(F.col("Time")).alias("lap_end_s"),
     )
-    sample_cols = [c for c in car.columns if c not in (*_DRIVER_KEY, "t")]
-    markers = windows.select(
-        *_DRIVER_KEY,
-        "t",
-        "lap",
-        "lap_end",
-        F.lit(1).alias("_marker"),
-        *[F.lit(None).cast(car.schema[c].dataType).alias(c) for c in sample_cols],
-    )
-    samples = car.select(
-        *_DRIVER_KEY,
-        "t",
-        F.lit(None).cast("int").alias("lap"),
-        F.lit(None).cast("double").alias("lap_end"),
-        F.lit(0).alias("_marker"),
-        *sample_cols,
-    )
-    w = (
-        Window.partitionBy(*_DRIVER_KEY)
-        .orderBy(F.col("t"), F.col("_marker").desc())
-        .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-    )
-    stream = markers.unionByName(samples).withColumns(
-        {
-            "_lap": F.last("lap", ignorenulls=True).over(w),
-            "_end": F.last("lap_end", ignorenulls=True).over(w),
-        }
-    )
-    out = stream.where(F.col("_marker") == 0).withColumn(
-        "lap", F.when(F.col("t") < F.col("_end"), F.col("_lap"))
-    )
-    return out.drop("_lap", "_end", "_marker", "lap_end")
+    return assign_to_laps(car, windows)
 
 
 def fastf1_samples(ff1_car: DataFrame, ff1_laps: DataFrame) -> DataFrame:
@@ -689,23 +684,8 @@ def fastf1_samples(ff1_car: DataFrame, ff1_laps: DataFrame) -> DataFrame:
 
 
 def fastf1_telemetry_lap(samples: DataFrame) -> DataFrame:
-    by_lap = samples.where(F.col("lap").isNotNull())
-    w = Window.partitionBy(*_DRIVER_KEY, "lap").orderBy("t")
-    changed = (F.col("n_gear") != F.lag("n_gear").over(w)).cast("int")
-    df = (
-        by_lap.withColumn("_chg", F.coalesce(changed, F.lit(0)))
-        .groupBy(*_DRIVER_KEY, "lap")
-        .agg(
-            F.round(F.avg("speed_kph"), 3).alias("mean_speed_kph"),
-            F.round(F.max("speed_kph"), 3).alias("max_speed_kph"),
-            F.round(F.avg((F.col("throttle_pct") >= FULL_THROTTLE_PCT).cast("double")), 4).alias(
-                "pct_full_throttle"
-            ),
-            F.round(F.avg(F.col("brake").cast("double")), 4).alias("brake_fraction"),
-            F.sum("_chg").cast("int").alias("gear_changes"),
-            F.round(F.avg("rpm"), 1).alias("mean_rpm"),
-        )
-    )
+    """Per-lap aggregates (single definition: ``features.telemetry_agg.aggregate_samples``)."""
+    df = aggregate_samples(samples).drop("n_samples")
     return df.withColumns({"is_synthetic": F.lit(False), "source": F.lit("fastf1")})
 
 

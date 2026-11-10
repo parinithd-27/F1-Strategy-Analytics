@@ -65,6 +65,8 @@ def test_build_writes_every_table_for_both_sample_races(built: dict[str, Any]) -
     assert result.counts["pit_loss"] == result.counts["race_summary"] == 2
     assert result.counts["lap_time_distribution"] == 2
     assert result.counts["team_outlap_history"] == 20
+    assert result.counts["telemetry_lap_features"] == 2168
+    assert result.counts["outlap_features"] == 100
     assert any("laps_enriched" in line and "season=2024/round=5" in line for line in built["lines"])
 
 

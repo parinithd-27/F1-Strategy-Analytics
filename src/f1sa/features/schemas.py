@@ -141,6 +141,7 @@ TEAM_OUTLAP_HISTORY = _s(
     ("season", INT),
     ("round", INT),
     ("constructor_id", STR),
+    ("team_history_key", STR),
     ("circuit_id", STR),
     ("race_seq", INT),
     ("outlap_delta_prior_s", DBL),
@@ -175,6 +176,54 @@ RACE_SUMMARY = _s(
     ("winner_race_time_s", DBL),
 )
 
+TELEMETRY_LAP_FEATURES = _s(
+    ("season", INT),
+    ("round", INT),
+    ("driver_id", STR),
+    ("lap", INT),
+    ("mean_speed_kph", DBL),
+    ("max_speed_kph", DBL),
+    ("pct_full_throttle", DBL),
+    ("brake_fraction", DBL),
+    ("gear_changes", INT),
+    ("mean_rpm", DBL),
+    ("n_samples", INT),
+    ("is_synthetic", BOOL),
+    ("source", STR),
+)
+
+OUTLAP_FEATURES = _s(
+    ("season", INT),
+    ("round", INT),
+    ("driver_id", STR),
+    ("stint", INT),
+    ("constructor_id", STR),
+    ("team_history_key", STR),
+    ("circuit_id", STR),
+    ("race_seq", INT),
+    ("outlap", INT),
+    ("outlap_time_s", DBL),
+    ("reference_clean_lap_s", DBL),
+    ("reference_source", STR),
+    ("realised_outlap_delta_s", DBL),
+    ("outlap_neutralised", BOOL),
+    ("is_long_stop", BOOL),
+    ("expected_outlap_delta_s", DBL),
+    ("expected_outlap_source", STR),
+    ("expected_outlap_missing", BOOL),
+    ("driver_team_prior_s", DBL),
+    ("driver_team_prior_n", INT),
+    ("team_prior_s", DBL),
+    ("team_prior_n", INT),
+    ("circuit_prior_s", DBL),
+    ("circuit_prior_n", INT),
+    ("global_prior_s", DBL),
+    ("global_prior_n", INT),
+)
+"""One row per (race, driver, stint). ``realised_*`` is ORACLE-only (uses laps after the stop);
+``expected_*`` comes from strictly earlier races and is decision-time safe
+(docs/label_definition.md)."""
+
 FEATURE_SCHEMAS: dict[str, StructType] = {
     "laps_enriched": LAPS_ENRICHED,
     "gaps": GAPS,
@@ -183,6 +232,8 @@ FEATURE_SCHEMAS: dict[str, StructType] = {
     "pit_loss": PIT_LOSS,
     "team_outlap_history": TEAM_OUTLAP_HISTORY,
     "race_summary": RACE_SUMMARY,
+    "telemetry_lap_features": TELEMETRY_LAP_FEATURES,
+    "outlap_features": OUTLAP_FEATURES,
 }
 FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "laps_enriched": ("season", "round", "driver_id", "lap"),
@@ -192,5 +243,7 @@ FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "pit_loss": ("season", "round"),
     "team_outlap_history": ("season", "round", "constructor_id"),
     "race_summary": ("season", "round"),
+    "telemetry_lap_features": ("season", "round", "driver_id", "lap"),
+    "outlap_features": ("season", "round", "driver_id", "stint"),
 }
 FEATURE_TABLES = tuple(FEATURE_SCHEMAS)

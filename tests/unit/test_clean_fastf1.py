@@ -221,3 +221,18 @@ def test_telemetry_raw_lap_assignment(
     assert first["session_time_s"] == pytest.approx(T0)
     assert first["driver_code"] == "VER" and first["date"] is not None
     assert raw.where(F.col("driver_code") == "ZZZ").count() == 0  # unmapped rows are dropped
+
+
+def test_laps_carry_fastf1_session_windows(
+    spark: SparkSession, result: tuple[CleanResult, Path]
+) -> None:
+    _, clean = result
+    laps = read_clean(spark, f"file://{clean}", "laps")
+    with_ff1 = laps.where(F.col("driver_id") == "max_verstappen").orderBy("lap").collect()
+    for row in with_ff1:
+        start, end = _lap_window(row["lap"])
+        assert row["lap_start_session_s"] == pytest.approx(start)
+        assert row["lap_end_session_s"] == pytest.approx(end)
+    # drivers without FastF1 laps keep null windows
+    others = laps.where(~F.col("driver_id").isin("max_verstappen", "perez", "sargeant"))
+    assert others.where(F.col("lap_start_session_s").isNotNull()).count() == 0

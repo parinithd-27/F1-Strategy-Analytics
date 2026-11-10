@@ -233,16 +233,15 @@ def test_sample_fallback_path_two_circuits(
     out = team_outlap_features(views).collect()
     assert {r["outlap_source"] for r in out if r["season"] == 2023} == {"none"}
     by_team = {r["constructor_id"]: r for r in out if r["season"] == 2024}
-    assert {r["outlap_source"] for r in by_team.values()} <= {"team_prior", "global_prior"}
+    # with lineage (Step 7) every 2024 team, including rb and sauber, has its own prior
+    assert {r["outlap_source"] for r in by_team.values()} == {"team_prior"}
     deltas_2023 = views["outlap_deltas"].where("season = 2023")
     rb = [r["outlap_delta_s"] for r in deltas_2023.where("constructor_id = 'red_bull'").collect()]
     assert by_team["red_bull"]["outlap_source"] == "team_prior"
     assert by_team["red_bull"]["team_prior_s"] == pytest.approx(statistics.median(rb), abs=1e-3)
-    for r in by_team.values():
-        if r["outlap_source"] == "global_prior":  # renamed team (e.g. alphatauri -> rb)
-            assert r["team_prior_n"] == 0 and r["circuit_prior_n"] == 0
-            all_2023 = [x["outlap_delta_s"] for x in deltas_2023.collect()]
-            assert r["outlap_delta_prior_s"] == pytest.approx(statistics.median(all_2023), abs=1e-3)
+    at = [x["outlap_delta_s"] for x in deltas_2023.where("constructor_id = 'alphatauri'").collect()]
+    assert by_team["rb"]["team_history_key"] == "rb"
+    assert by_team["rb"]["team_prior_s"] == pytest.approx(statistics.median(at), abs=1e-3)
 
 
 def test_sample_race_summary(spark: SparkSession, sample_clean_lake: SampleLake) -> None:

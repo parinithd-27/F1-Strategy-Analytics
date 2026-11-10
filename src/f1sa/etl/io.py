@@ -17,7 +17,17 @@ from f1sa.etl.clean import CleanError, check_output_root, read_clean, select_rac
 from f1sa.lake import schemas as S
 
 RaceKey = tuple[int, int]
-FEATURE_INPUTS = ("races", "drivers", "constructors", "results", "laps", "pitstops", "stints")
+FEATURE_INPUTS = (
+    "races",
+    "drivers",
+    "constructors",
+    "results",
+    "laps",
+    "pitstops",
+    "stints",
+    "telemetry_lap",
+    "telemetry_raw",
+)
 _SEASON_DIR = re.compile(r"^season=(\d+)$")
 _ROUND_DIR = re.compile(r"^round=(\d+)$")
 

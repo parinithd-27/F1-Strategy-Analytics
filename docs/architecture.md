@@ -331,3 +331,25 @@ A feature row for lap L describes the state **at the end of lap L**. The undercu
 available at the end of lap L − 1, so it joins the lap L − 1 row (gaps, tyre age, laps remaining). Pit-loss and
 out-lap history rows are known before the race starts. `race_summary` and `lap_time_distribution` describe the whole
 race, so they are reporting tables and must never be joined as features of the same race.
+
+## Telemetry, out-lap pace and team lineage (`features/telemetry_agg.py`, `outlap.py`, `lineage.py`, Step 7)
+- **Telemetry is batch only.** `telemetry_agg` is a DataFrame `groupBy(season, round, driver_id, lap)` job.
+  - There is one definition, at full throttle ≥ 98%. The clean zone's FastF1 path calls it too, so the clean and
+    feature tables cannot disagree.
+  - Samples are assigned to laps by session time in `[lap_start, lap_end)`. The windows come from the new nullable
+    clean-laps columns `lap_start_session_s` and `lap_end_session_s`, filled from FastF1.
+  - A race with real `telemetry_raw` is aggregated from raw. Any other race passes its clean `telemetry_lap` rows
+    through unchanged, keeping `is_synthetic`.
+  - Streaming code never imports telemetry, and a test enforces this.
+- **Out-lap pace** (definitions in `docs/label_definition.md`):
+  - `realised_outlap_delta_s` is an ORACLE value (it uses laps after the stop).
+  - `expected_outlap_delta_s` is the decision-time feature: the mean over strictly earlier races, computed with
+    `rangeBetween(unboundedPreceding, -1)` on `race_seq`.
+  - Fallback order: driver+team → team → circuit → global → null, with a flag column.
+  - Like Step 6, history is computed over all clean races and then filtered to the targets.
+- **Lineage:** `features/lineage.py` holds `LINEAGE` (alphatauri → rb, alfa → sauber) and `STABLE_CONSTRUCTORS`.
+  - Team history (the SQL `team_outlap_history` through a `constructor_lineage` view, and `outlap_features` through
+    `with_history_key`) is keyed by the lineage key.
+  - The build fails when a clean-zone constructor id is in neither set, so a missed rename cannot silently split a
+    team's history.
+  - The list is verified on the sample only. It is to be checked against the full 2021–2025 data.

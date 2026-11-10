@@ -1,8 +1,9 @@
 """Spark SQL jobs (commitment #11). The SQL lives in ``etl/sql/*.sql``, one SELECT per file.
 
 ``run_sql_views`` registers the clean tables as temp views (``races``, ``results``, ``laps``,
-``pitstops``). It then runs the files in ``SQL_VIEWS`` order, and each result becomes a temp view
-named after its file, so later files can query earlier ones. The leakage-safe history views
+``pitstops``) plus ``constructor_lineage`` (from ``features.lineage``). It then runs the files in
+``SQL_VIEWS`` order, and each result becomes a temp view named after its file, so later files can
+query earlier ones. The leakage-safe history views
 (``pit_loss_prior`` and ``team_outlap_prior``) use window frames
 ``RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING`` over the chronological ``race_seq``, which
 means only strictly earlier races are used.
@@ -16,6 +17,7 @@ from importlib.resources import files
 from pyspark.sql import DataFrame, SparkSession
 
 from f1sa.etl.clean import CleanError
+from f1sa.features.lineage import lineage_rows
 
 SQL_INPUTS = ("races", "results", "laps", "pitstops")
 SQL_VIEWS = (
@@ -57,6 +59,9 @@ def run_sql_views(spark: SparkSession, tables: Mapping[str, DataFrame]) -> dict[
         raise CleanError(f"round {max_round[0]} > {MAX_ROUND} breaks race_seq = season*100+round")
     for name in SQL_INPUTS:
         tables[name].createOrReplaceTempView(name)
+    spark.createDataFrame(
+        lineage_rows(), "constructor_id string, history_key string"
+    ).createOrReplaceTempView("constructor_lineage")
     views: dict[str, DataFrame] = {}
     for name in SQL_VIEWS:
         text = load_sql(name)

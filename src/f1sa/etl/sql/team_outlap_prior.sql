@@ -2,6 +2,8 @@
 -- Built the same way as pit_loss_prior: one row per (race, constructor) holding its values, then
 -- flatten(collect_list(...)) over `RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` on race_seq
 -- (only earlier races), then the median of the sorted array.
+-- Team history is keyed by the lineage key (constructor_lineage view, from features/lineage.py),
+-- so a renamed team (e.g. alphatauri -> rb) keeps its history.
 -- Fallback order: the team's prior median, then the circuit's prior median (all teams), then the
 -- global prior median, then null with outlap_missing = true and outlap_source = 'none'.
 WITH entries AS (
@@ -15,10 +17,12 @@ per_entry AS (
     e.season,
     e.round,
     e.constructor_id,
+    coalesce(l.history_key, e.constructor_id) AS team_history_key,
     e.circuit_id,
     e.race_seq,
     coalesce(d.vals, CAST(array() AS ARRAY<DOUBLE>)) AS vals
   FROM entries e
+  LEFT JOIN constructor_lineage l ON l.constructor_id = e.constructor_id
   LEFT JOIN (
     SELECT season, round, constructor_id, collect_list(outlap_delta_s) AS vals
     FROM outlap_deltas
@@ -31,6 +35,7 @@ prior AS (
     season,
     round,
     constructor_id,
+    team_history_key,
     circuit_id,
     race_seq,
     array_sort(coalesce(flatten(collect_list(vals) OVER team_w), array())) AS t,
@@ -38,7 +43,7 @@ prior AS (
     array_sort(coalesce(flatten(collect_list(vals) OVER global_w), array())) AS g
   FROM per_entry
   WINDOW
-    team_w AS (PARTITION BY constructor_id ORDER BY race_seq
+    team_w AS (PARTITION BY team_history_key ORDER BY race_seq
                RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
     circuit_w AS (PARTITION BY circuit_id ORDER BY race_seq
                   RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
@@ -49,6 +54,7 @@ medians AS (
     season,
     round,
     constructor_id,
+    team_history_key,
     circuit_id,
     race_seq,
     CASE
@@ -75,6 +81,7 @@ SELECT
   season,
   round,
   constructor_id,
+  team_history_key,
   circuit_id,
   race_seq,
   ROUND(coalesce(team_prior_s, circuit_prior_s, global_prior_s), 3) AS outlap_delta_prior_s,
