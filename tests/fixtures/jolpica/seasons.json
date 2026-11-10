@@ -1,0 +1,38 @@
+{
+ "MRData": {
+  "xmlns": "",
+  "series": "f1",
+  "url": "https://api.jolpi.ca/ergast/f1/seasons.json",
+  "limit": "100",
+  "offset": "0",
+  "total": "6",
+  "SeasonTable": {
+   "Seasons": [
+    {
+     "season": "1950",
+     "url": "https://en.wikipedia.org/wiki/1950_Formula_One_season"
+    },
+    {
+     "season": "2021",
+     "url": "https://en.wikipedia.org/wiki/2021_Formula_One_World_Championship"
+    },
+    {
+     "season": "2022",
+     "url": "https://en.wikipedia.org/wiki/2022_Formula_One_World_Championship"
+    },
+    {
+     "season": "2023",
+     "url": "https://en.wikipedia.org/wiki/2023_Formula_One_World_Championship"
+    },
+    {
+     "season": "2024",
+     "url": "https://en.wikipedia.org/wiki/2024_Formula_One_World_Championship"
+    },
+    {
+     "season": "2025",
+     "url": "https://en.wikipedia.org/wiki/2025_Formula_One_World_Championship"
+    }
+   ]
+  }
+ }
+}

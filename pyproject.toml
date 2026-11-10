@@ -29,6 +29,9 @@ dependencies = [
     "confluent-kafka>=2.6",
 ]
 
+[project.scripts]
+f1sa-ingest = "f1sa.ingest.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
@@ -60,6 +63,11 @@ strict = true
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
 files = ["src"]
+
+[[tool.mypy.overrides]]
+# fastf1 and pandas ship no type information (pandas-stubs is not a dependency).
+module = ["fastf1", "fastf1.*", "pandas", "pandas.*"]
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

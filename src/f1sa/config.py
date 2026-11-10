@@ -19,6 +19,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 JOLPICA_HARD_LIMIT_PER_HOUR = 500
 """Jolpica's published per-hour request limit; the configured budget may not exceed it."""
 
+DEFAULT_USER_AGENT = "F1-Strategy-Analytics/0.1.0 (IISc academic project; python-requests)"
+
 _LAKE_SCHEMES = frozenset({"file", "hdfs"})
 _REDIS_SCHEMES = frozenset({"redis", "rediss"})
 _HTTP_SCHEMES = frozenset({"http", "https"})
@@ -43,6 +45,8 @@ class Settings(BaseSettings):
     redis_ttl_after_session_s: int = Field(default=3600, gt=0)
     jolpica_base_url: str = "https://api.jolpi.ca/ergast/f1"
     jolpica_max_per_hour: int = Field(default=450, ge=1, le=JOLPICA_HARD_LIMIT_PER_HOUR)
+    jolpica_cache_dir: Path = Path("data/cache/jolpica")
+    jolpica_user_agent: str = DEFAULT_USER_AGENT
     fastf1_cache_dir: Path = Path("data/cache/fastf1")
     f1_username: SecretStr | None = None
     f1_password: SecretStr | None = None
@@ -98,6 +102,14 @@ class Settings(BaseSettings):
         if parsed.scheme not in _HTTP_SCHEMES or not parsed.netloc:
             raise ValueError(f"jolpica_base_url must be an http(s) URL, got {value!r}")
         return value.strip().rstrip("/")
+
+    @field_validator("jolpica_user_agent")
+    @classmethod
+    def _check_user_agent(cls, value: str) -> str:
+        value = value.strip()
+        if not value or any(c in value for c in "\r\n"):
+            raise ValueError("jolpica_user_agent must be a non-empty single line")
+        return value
 
     @field_validator("f1_username", "f1_password", mode="before")
     @classmethod

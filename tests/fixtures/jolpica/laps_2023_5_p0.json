@@ -1,0 +1,67 @@
+{
+ "MRData": {
+  "xmlns": "",
+  "series": "f1",
+  "url": "https://api.jolpi.ca/ergast/f1/2023/5/laps.json",
+  "limit": "4",
+  "offset": "0",
+  "total": "9",
+  "RaceTable": {
+   "season": "2023",
+   "round": "5",
+   "Races": [
+    {
+     "season": "2023",
+     "round": "5",
+     "url": "https://en.wikipedia.org/wiki/2023_Miami_Grand_Prix",
+     "raceName": "Miami Grand Prix",
+     "Circuit": {
+      "circuitId": "miami",
+      "url": "https://en.wikipedia.org/wiki/Miami_International_Autodrome",
+      "circuitName": "Miami International Autodrome",
+      "Location": {
+       "lat": "25.9581",
+       "long": "-80.2389",
+       "locality": "Miami",
+       "country": "USA"
+      }
+     },
+     "date": "2023-05-07",
+     "time": "19:30:00Z",
+     "Laps": [
+      {
+       "number": "1",
+       "Timings": [
+        {
+         "driverId": "perez",
+         "time": "1:36.191",
+         "position": "1"
+        },
+        {
+         "driverId": "max_verstappen",
+         "time": "1:41.724",
+         "position": "9"
+        },
+        {
+         "driverId": "sargeant",
+         "time": "1:46.841",
+         "position": "18"
+        }
+       ]
+      },
+      {
+       "number": "2",
+       "Timings": [
+        {
+         "driverId": "perez",
+         "time": "1:33.963",
+         "position": "1"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

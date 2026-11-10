@@ -73,3 +73,24 @@ The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserPro
 | **full total** | **≈ 7.6 GiB** (limits) | measured idle use is ≈ 1.6 GiB |
 
 These are ceilings, not reservations. If the full profile runs into memory pressure, lower `SPARK_WORKER_MEMORY` and `SPARK_WORKER_CONTAINER_MEM` in `.env`, or raise `memory=` in `.wslconfig` and run `wsl --shutdown`.
+
+## Ingestion (`src/f1sa/ingest/`, Step 3)
+- `f1sa-ingest race --season S --round R --sources jolpica,fastf1 --sink file` (or `python -m f1sa.ingest`) writes the raw
+  zone at `{DATA_LAKE_URI}/raw/{source}/season=S/round=R/`, plus a `_manifest.json` (files, rows, sha256, licence). Each
+  source is fetched and validated completely before anything is written, and files are written atomically.
+- **Jolpica** (`jolpica_client.py`, `ratelimit.py`):
+  - Base `https://api.jolpi.ca/ergast/f1`. Pages use `limit=100` (the server caps larger values) and advance by the
+    `MRData.limit` the server returns. For laps, `total` counts *timings*, so pages split laps and are merged by lap number.
+  - A dual token bucket enforces the 4 req/s burst and `JOLPICA_MAX_PER_HOUR` (default 450, Jolpica's limit is 500).
+    It sits in the transport adapter, so cache hits are free.
+  - SQLite HTTP cache at `JOLPICA_CACHE_DIR`, never expiring (`--refresh` bypasses it).
+  - Retries with exponential backoff and jitter on 429/5xx/connection errors, honouring `Retry-After`.
+  - Raw files hold the JSON pages exactly as received. The `parse_*` functions turn them into typed DataFrames.
+  - One race is about 18 requests: about 20 s cold, under 1 s from cache.
+- **FastF1** (`fastf1_loader.py`):
+  - `Cache.configure(cache_dir=FASTF1_CACHE_DIR)`, then `offline_mode`.
+  - Authentication is checked before loading: credentials from `Settings`, otherwise FastF1's stored token or
+    `python -m fastf1 auth f1tv --authenticate`.
+  - Empty laps raise `FastF1AuthError`. Missing telemetry or columns raise `FastF1DataError`.
+  - Writes `laps.parquet`, `car_data.parquet`, `pos_data.parquet` and `session.json`.
+- **HDFS sink:** Step 4, through an HttpFS gateway (see PROGRESS.md).
