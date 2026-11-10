@@ -1,0 +1,22 @@
+# secrets / local config
+.env
+.env.local
+CLAUDE.local.md
+.claude/settings.local.json
+# data (only data/sample is committed)
+data/*
+!data/sample/
+!data/sample/**
+# caches / build output
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+spark-warehouse/
+metastore_db/
+derby.log
+models/
+node_modules/
+.next/

@@ -1,0 +1,1 @@
+Read @CLAUDE.md, @docs/PROGRESS.md and @docs/traceability.md. Implement only the step I paste next. First produce a plan listing files to create or modify, tests, and acceptance criteria, then wait for my approval before editing anything.
