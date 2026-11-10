@@ -117,12 +117,42 @@
     - a FastF1 path with hand-made Parquet: nanosecond timedeltas, mapping and unmapped driver, exact TrackStatus,
       stints, per-lap aggregates, lap assignment of samples;
     - quality checks and helpers.
+- Step 6 (W3): Spark RDD / DataFrame / SQL feature jobs (#8–#11, S6 part of #7 and #12)
+  - `etl/rdd_jobs.py` (RDD API):
+    - stints: `keyBy` → `groupByKey` → sort the laps → split after pit-in laps;
+    - per-race/circuit green lap-time distribution: `aggregateByKey` with a Welford/Chan accumulator, a 1 s
+      histogram and a broadcast circuit map;
+    - each job has a DataFrame twin.
+  - `etl/df_jobs.py` (DataFrame API): `enrich_laps` joins laps, results, pit stops, drivers, constructors, stints and
+    races. Windows give gaps (lapped cars are compared with the leader at the same lap number), 1- and 3-lap gap
+    changes (null when the car ahead changes), tyre age, laps remaining and estimated lap timestamps (start + 180 s +
+    cumulative time).
+  - `etl/sql/*.sql` + `etl/sql_jobs.py` (Spark SQL): pit loss and team out-lap history from strictly earlier races
+    (`RANGE … 1 PRECEDING` over `race_seq`). Fallbacks: team (out-lap only) → circuit → global → null with source and
+    missing flags. Plus a race summary.
+  - `features/{schemas,gaps,stints,pitloss,build}.py`. Run `python -m f1sa.features.build --source sample|lake`
+    (also `make features-sample` or `f1sa-features`). It writes 7 tables to `data/lake/features`, partitioned by
+    season and round.
+  - Verified on the sample: exit 0, both partitions for every table (laps_enriched 2168, gaps 2168, stints 100,
+    distribution 2, pit_loss 2, team_outlap 20, summary 2), and identical checksums on rerun.
+    - RDD stints = DataFrame stints = clean stints (100/100). Recomputed gaps = clean gaps (2168/2168).
+    - Pit loss: 2023 R5 `none`, 2024 R5 `global_prior`.
+  - Tests:
+    - a 3-driver, 5-lap fixture with a lapped car and a pit lap;
+    - a 4-race leakage fixture (the target race and later races scaled ×100, the target's history unchanged);
+    - RDD vs DataFrame equality;
+    - pit-cycle exclusions;
+    - build, rerun and `_quality` junk.
+
+    49 new tests, 344 unit tests in total. Docs: architecture.md (API rationale, timestamp limits, fallbacks) and
+    data_dictionary.md.
 ## Next
 - After the user's bulk HDFS ingest finishes: verify hdfs mode with
   `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://namenode:8020/f1 python -m f1sa.etl.clean --source lake`.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
-- Step 6: Spark RDD/DataFrame/SQL feature jobs on the clean zone (#8–#12).
+- Step 7: out-lap pace (`features/outlap.py`) and telemetry aggregates (`telemetry_agg.py`) (rest of #12). Then S8
+  must join lap L−1 feature rows (a row describes the end of lap L).
 ## Known issues
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
@@ -155,8 +185,17 @@
   as provided by the team and not re-verified online.
 - CI has not yet run on GitHub (validated locally against the GitHub workflow JSON schema only).
 
+- Team history breaks on constructor renames (alphatauri→rb, alfa→sauber): those teams fall back to circuit or global
+  priors. A rename map is still to be decided.
+- Lap timestamps are estimates (a fixed 180 s formation offset, error of about ±1 min). Lap-time distribution
+  medians still include slow laps that the neutralisation heuristic misses (2024 R5 max is 145 s).
+- The global prior window has no partition (single-partition sort). That is fine at about 100 races; check it in S10.
+
 ## Verify
 `uv sync --all-extras && make lint && make typecheck && make test && make up-full && make test-int && make down`
 
 HDFS sink: `DATA_LAKE_URI=hdfs://namenode:8020/f1 uv run f1sa-ingest season-range --seasons 2021 --sources jolpica --sink hdfs`,
 then `docker compose exec namenode hdfs dfs -du -h /f1/raw`.
+
+Features: `make etl-sample && uv run python -m f1sa.features.build --source sample`, then
+`uv run pytest tests/unit/test_rdd_jobs.py tests/unit/test_df_jobs.py tests/unit/test_sql_jobs.py tests/unit/test_features_build.py -q`.

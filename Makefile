@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 UV ?= uv
 
-.PHONY: help setup lint typecheck test test-int sample-data etl-sample
+.PHONY: help setup lint typecheck test test-int sample-data etl-sample features-sample
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -25,6 +25,9 @@ sample-data: ## Validate data/sample offline, or build it if missing (REBUILD=1 
 
 etl-sample: ## Clean zone from data/sample into data/lake/clean (file mode, Spark local)
 	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python -m f1sa.etl.clean --source sample
+
+features-sample: ## Feature tables from data/lake/clean into data/lake/features (run etl-sample first)
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python -m f1sa.features.build --source sample
 
 test-int: ## Integration tests (needs infra); exit 5 = none collected is OK
 	$(UV) run pytest tests/integration -q -m integration; rc=$$?; \

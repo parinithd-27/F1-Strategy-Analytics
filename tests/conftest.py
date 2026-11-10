@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -45,3 +46,42 @@ def _isolate_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterat
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SAMPLE_DIR = REPO_ROOT / "data" / "sample"
+
+
+class SampleLake:
+    """A tmp lake whose clean zone was built from the real sample bundle (data/sample)."""
+
+    def __init__(self, base: Path) -> None:
+        self.base = base
+        self.lake = base / "data" / "lake"
+        self.clean_root = f"file://{self.lake}/clean"
+
+    def settings(self) -> Settings:
+        return Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            data_lake_uri=f"file://{self.lake}",
+            sample_dir=SAMPLE_DIR,
+        )
+
+
+@pytest.fixture(scope="session")
+def sample_clean_lake(
+    spark: SparkSession, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[SampleLake]:
+    """Clean zone of the 2-race sample, built once per session into a tmp dir (never data/lake)."""
+    if not (SAMPLE_DIR / "MANIFEST.json").exists():
+        pytest.skip("sample bundle missing (make sample-data)")
+    from f1sa.etl.clean import run_clean
+
+    lake = SampleLake(tmp_path_factory.mktemp("sample_lake"))
+    cwd = os.getcwd()
+    os.chdir(lake.base)  # the output guard resolves ./data/lake against the working directory
+    try:
+        run_clean(spark, lake.settings(), source="sample", out=lambda _m: None)
+    finally:
+        os.chdir(cwd)
+    yield lake

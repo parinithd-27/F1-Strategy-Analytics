@@ -32,6 +32,7 @@ dependencies = [
 [project.scripts]
 f1sa-ingest = "f1sa.ingest.cli:main"
 f1sa-clean = "f1sa.etl.clean:main"
+f1sa-features = "f1sa.features.build:main"
 
 [project.optional-dependencies]
 dev = [

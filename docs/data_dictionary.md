@@ -161,6 +161,74 @@ One row per driver per lap.
   - stints not tiling the laps.
 - Each check records a count and up to 5 examples.
 
+## Feature zone (`{DATA_LAKE_URI}/features/{table}/season=S/round=R/*.parquet`, Step 6)
+Schemas: `f1sa.features.schemas`. Every table has `season` and `round`. A row about lap L describes the state at the
+**end** of lap L, so the model joins lap L − 1 (see `docs/architecture.md`).
+
+### laps_enriched (key: season, round, driver_id, lap)
+| column | type | meaning |
+|---|---|---|
+| driver_code, constructor_id, constructor_name | string | entry in this race (drivers, results, constructors) |
+| grid, final_position, status, finished | int/int/string/bool | from results (the race outcome: not a pre-lap feature) |
+| lap_time_s, position | double/int | as in clean laps |
+| cumulative_time_s | double | recomputed sum of lap times; null from the first unknown lap time |
+| gap_leader_s | double | cumulative − P1's cumulative **at the same lap number** (lapped cars: true time behind, can exceed a lap) |
+| gap_ahead_s, ahead_driver_id | double/string | gap to and id of the car one position ahead at the same lap; null for P1 |
+| gap_ahead_change_1l / _3l | double | gap_ahead_s now − k laps earlier; null if that lap is missing or the car ahead is a different driver |
+| gap_leader_change_1l / _3l | double | gap_leader_s now − k laps earlier; null if that lap is missing |
+| is_pit_in_lap, is_pit_out_lap | bool | as in clean laps |
+| pit_stops_in_lap, pit_duration_s, is_long_stop | int/double/bool | stops whose in-lap is this lap (0 / null / false if none) |
+| stint, compound | int/string | the clean stint covering the lap (null if none) |
+| tyre_age_laps | int | tyre age at the end of the lap: tyre_age_at_start + lap − start_lap + 1 |
+| tyre_age_assumed_new | bool | the stint's starting age is unknown (jolpica_inferred stint) and assumed to be 0 |
+| race_laps, laps_remaining | int | the winner's lap count (fallback: max lap); race_laps − lap |
+| lap_start_utc, lap_end_utc | timestamp | **estimated**: race_start_utc + 180 s + cumulative time; null if the start time is unknown |
+| lap_time_estimated | bool | always true (Jolpica has no per-lap timestamps) |
+| is_sc_lap, is_vsc_lap, is_red_flag_lap, is_neutralised_lap | bool | as in clean laps |
+
+### gaps (key: season, round, driver_id, lap)
+`position`, `ahead_driver_id`, `cumulative_time_s`, `gap_leader_s`, `gap_ahead_s` and the four `*_change_*l` columns,
+the same as in laps_enriched.
+
+### stints (key: season, round, driver_id, stint)
+| column | type | meaning |
+|---|---|---|
+| stint, start_lap, end_lap, laps | int | reconstructed with the RDD job (split after every pit-in lap that is not the last lap) |
+| compound, tyre_age_at_start, is_synthetic | string/int/bool | from the clean stint with the same boundaries |
+| compound_source | string | that clean stint's `source` (fastf1, synthetic or jolpica_inferred) |
+| matches_clean | bool | a clean stint with identical boundaries exists |
+
+### lap_time_distribution (key: season, round, circuit_id; RDD `aggregateByKey`)
+Green racing laps only: not lap 1, not a pit in or out lap, not neutralised or red-flag, time known.
+| column | type | meaning |
+|---|---|---|
+| n_laps | long | number of green laps |
+| mean_s, std_s, min_s, max_s | double | std_s is the sample std (null if n_laps = 1) |
+| bins_1s | map<int,long> | floor(lap time in s) → count. Histograms merge across races (per-circuit view) |
+
+### pit_loss (key: season, round): history from strictly earlier races
+| column | type | meaning |
+|---|---|---|
+| circuit_id, race_seq | string/int | race_seq = season*100 + round |
+| pit_loss_prior_s | double | coalesce(circuit_prior_s, global_prior_s). Pit loss = in-lap + out-lap − 2 × the driver's green median |
+| pit_loss_source | string | circuit_prior, global_prior or none |
+| pit_loss_missing | bool | no earlier race has a usable stop |
+| circuit_prior_s, circuit_prior_stops, circuit_prior_races | double/int/int | median and support at this circuit, earlier races only |
+| global_prior_s, global_prior_stops, global_prior_races | double/int/int | median and support over all earlier races |
+
+### team_outlap_history (key: season, round, constructor_id): history from strictly earlier races
+| column | type | meaning |
+|---|---|---|
+| outlap_delta_prior_s | double | coalesce(team, circuit, global prior). Out-lap delta = out-lap − the driver's green median |
+| outlap_source | string | team_prior, circuit_prior, global_prior or none |
+| outlap_missing | bool | no history at any level |
+| team_prior_s/_n, circuit_prior_s/_n, global_prior_s/_n | double/int | median and number of out-laps at each level |
+
+### race_summary (key: season, round): reporting only (describes the race itself)
+`circuit_id`, `race_name`, `race_laps`, `entrants`, `finishers`, `classified`, `pit_stops`, `long_stops`,
+`stops_per_driver`, `neutralised_laps`, `green_median_lap_s`, `fastest_lap_s`, `fastest_lap_driver_id`,
+`winner_driver_id`, `winner_constructor_id`, `winner_race_time_s`.
+
 ## Sample bundle (`data/sample/`)
 `make sample-data` validates the bundle offline, or builds it if it is missing (`REBUILD=1` forces a rebuild). It is a
 read-only mini raw lake with the same table-first layout as the raw zone (`docs/architecture.md`), covering

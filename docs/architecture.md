@@ -223,3 +223,111 @@ clean/{races,drivers,constructors,results,qualifying,laps,pitstops,stints,teleme
     `PYTHONPATH` points at the mounted repo (`/workspace`, read-only), so the current code runs without rebuilding
     the image. Spark runs `local[2]` inside the 1.5 GiB app limit. `--master spark://spark-master:7077` switches to
     the standalone cluster (planned for S10). *Not verified yet: waiting for the bulk HDFS ingest to finish.*
+
+## Feature jobs (`etl/rdd_jobs.py`, `etl/df_jobs.py`, `etl/sql/*.sql`, `etl/sql_jobs.py`, `features/`, Step 6)
+```
+clean/{races,drivers,constructors,results,laps,pitstops,stints}   (one directory per table; _quality/ is never read)
+  --RDD / DataFrame / Spark SQL-->
+features/{laps_enriched,gaps,stints,lap_time_distribution,pit_loss,team_outlap_history,race_summary}/season=S/round=R/
+```
+`uv run python -m f1sa.features.build --source sample` (or `make features-sample`, or `f1sa-features`).
+
+- `--source sample` builds the races in `data/sample` and fails if one of them is missing from the clean zone
+  (run `make etl-sample` first). `--source lake` builds every race in the clean zone.
+- Output uses `partitionBy(season, round)` with dynamic overwrite, so a rerun gives identical checksums. In file mode
+  the job refuses to write outside `./data/lake`.
+- Every table is read back after writing, and the job checks that each target race has a partition and that
+  `laps_enriched` has exactly one row per clean lap.
+
+### Where each Spark API is used, and why
+| API | Job | Why this API |
+|---|---|---|
+| **RDD** | `rdd_stints`: `keyBy((season, round, driver))`, then `groupByKey`, then a Python sort of each driver's laps and a split after every pit-in lap that is not the last lap | Stint splitting is a sequential scan over one driver's ordered laps. With an RDD, that is ordinary Python code over a grouped iterator, with no window tricks. One driver has at most about 70 laps, so `groupByKey` is cheap here. |
+| **RDD** | `rdd_lap_time_distribution`: `aggregateByKey` over (season, round, circuit) with a custom accumulator (n, mean, M2, min, max, 1-s histogram), combined with Chan's parallel update | It shows a user-defined, mergeable aggregate: partial results are combined on each partition before the shuffle. Welford/Chan keeps the variance stable. The circuit lookup is a broadcast variable. |
+| **DataFrame** | `enrich_laps`: joins of laps, results, pit stops (aggregated per lap first), drivers, constructors, stints (a range join on `lap BETWEEN start_lap AND end_lap`) and races; windows for cumulative time, gaps, `lag` changes, tyre age and laps remaining | These are relational joins and window functions, which Catalyst optimises (column pruning, broadcast joins of the small dimension tables, a shared window sort). Every right side is deduplicated on its join key, so the output has exactly one row per lap. |
+| **Spark SQL** | `pit_loss_prior`, `team_outlap_prior`, `race_summary` (and the views they build on) | The rules against leakage sit in one readable window frame, `RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` over `race_seq = season*100 + round`. A reviewer can audit that in the `.sql` file without reading Python. |
+
+Each RDD job has a DataFrame implementation of the same logic (`df_stints`, `df_lap_time_distribution`). The tests
+assert that the two are equal row for row:
+- stints: exact equality, and both also equal the clean stints table on the sample (100/100 rows);
+- the distribution: counts, min, max and histograms are exact, and mean and std agree to 1e-9 relative, because
+  floating-point sums depend on the order of addition.
+
+### Gaps at the timing line
+- `gap_leader_s` = cumulative time − the cumulative time of the car in P1 **at the same lap number**.
+  - A lapped car is compared with the time when the leader completed that same lap, not with the leader's position
+    when the lapped car crossed the line.
+  - So the value is the true time behind and can be longer than a lap. For example, a car lapped at lap 4 is 106 s
+    behind in the test fixture, where a lap takes 90 s.
+- `gap_ahead_s` is the gap to the car one position ahead at the same lap number. `ahead_driver_id` names that car.
+- `gap_*_change_{1,3}l` is the value now minus the value k laps earlier.
+  - It is null when the earlier row is not exactly lap − k.
+  - For `gap_ahead_change_*`, it is also null when the car ahead is a different driver, so the change always means
+    "closing on, or dropping back from, the same car".
+- Cumulative time becomes null from the first lap with an unknown time, and every gap that depends on it is null
+  too.
+- The recomputed gaps equal the clean-zone gaps exactly on the sample (2168/2168 laps).
+
+### Estimated lap timestamps (an approximation)
+Jolpica has no per-lap timestamps. `df_jobs.lap_timestamps` estimates them:
+```
+lap_end_utc   = race_start_utc + START_OFFSET_S + cumulative_time_s      (START_OFFSET_S = 180 s)
+lap_start_utc = lap_end_utc - lap_time_s
+```
+`lap_time_estimated = true` on every row. `race_start_utc` is the scheduled start, which is when the formation lap
+begins. Lights out is usually about 2.5 to 4 minutes later, so 180 s is a fixed middle value. Limits:
+- **Error of about ±1 minute or more:**
+  - the formation lap takes longer or shorter than 180 s;
+  - extra formation laps, aborted starts and delayed starts are not modelled;
+  - a start behind the safety car changes the timing.
+- **Red flags:** Jolpica's lap time for the suspended lap includes the stoppage, so later timestamps stay roughly
+  consistent with the wall clock. The exact split inside that lap is unknown.
+- **Unknown start time:** Jolpica sometimes has no start time, and the clean zone then stores 00:00:00 UTC. Both
+  timestamps are null in that case, as they are when the cumulative time is unknown.
+- **Precision:** inherited from the 1 ms lap times. Errors from missing laps add up, which is why the cumulative time
+  is null after a missing lap.
+- **Intended use:** ordering and replay pacing (S12). They are not wall-clock truth. FastF1's `LapStartTime` is exact
+  when it is available.
+
+### Leakage-safe history (pit loss, team out-lap delta)
+- **Per stop** (`pit_cycles.sql`):
+  - Pit loss = in-lap + out-lap − 2 × the driver's green median lap. The green median comes from
+    `driver_green_pace.sql` and needs at least 5 green laps.
+  - Out-lap delta = out-lap − the driver's green median lap.
+  - Stops are skipped when:
+    - the stop is long (more than 60 s);
+    - it is on lap 1;
+    - there is no out-lap (a stop on the last lap, or a retirement);
+    - the in-lap or out-lap is neutralised or red-flag;
+    - the in-lap or out-lap overlaps another pit cycle;
+    - a lap time is unknown;
+    - the driver has no reference pace.
+- **Per race:**
+  1. Each race (or each race and constructor) gets one row with its own values in an array.
+  2. `flatten(collect_list(vals)) OVER (… ORDER BY race_seq RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)`
+     collects the values of strictly earlier races only.
+  3. The median of the sorted array is taken with the same linear interpolation as Spark's `median`.
+
+  Spark does not allow `median()` with a window frame, which is why the arrays are used.
+- **Fallbacks** use data from earlier races only, never from the current race or a later one:
+
+  | Table | Fallback order | Flag columns |
+  |---|---|---|
+  | `pit_loss` | circuit prior → global prior → null | `pit_loss_source ∈ {circuit_prior, global_prior, none}`, `pit_loss_missing` |
+  | `team_outlap_history` | team prior → circuit prior (all teams) → global prior → null | `outlap_source ∈ {team_prior, circuit_prior, global_prior, none}`, `outlap_missing` |
+
+- History is computed over **all** races in the clean zone and then filtered to the target races. A partial rebuild
+  therefore gives the same values as a full one.
+- On the sample:
+  - 2023 R5 (miami) → `none`.
+  - 2024 R5 (shanghai, a new circuit) → `global_prior`, from 2023 R5 only.
+  - Team out-laps for 2024 → `team_prior`. Renamed teams (alphatauri → rb, alfa → sauber) get `global_prior`,
+    because `constructor_id` changes on a rename.
+- Tests: a 4-race fixture with known medians. The data of the target race and every later race is scaled ×100, and
+  the target's history is asserted unchanged.
+
+### Time semantics for the model (S8)
+A feature row for lap L describes the state **at the end of lap L**. The undercut model must use the information
+available at the end of lap L − 1, so it joins the lap L − 1 row (gaps, tyre age, laps remaining). Pit-loss and
+out-lap history rows are known before the race starts. `race_summary` and `lap_time_distribution` describe the whole
+race, so they are reporting tables and must never be joined as features of the same race.
