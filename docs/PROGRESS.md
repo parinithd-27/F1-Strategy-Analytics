@@ -91,11 +91,38 @@
   - `docs/data_dictionary.md` (new): bundle tables, every synthetic assumption, and the NOT-real / smoke-test-only warning.
   - Tests: 251 unit tests (generator edge cases and determinism, builder order, offline validation, tamper/FastF1/size
     rejection, atomic swap, gitignore, two-process limiter).
+- Step 5 (W2): clean zone (#3, the clean half of #1, #7)
+  - `lake/schemas.py`:
+    - explicit raw schemas (Jolpica pages, FastF1 laps and car data, synthetic tables);
+    - 10 clean StructTypes: races, drivers, constructors, results, qualifying, laps, pitstops, stints, telemetry_lap,
+      telemetry_raw, each with primary keys.
+  - `etl/clean.py` (+ `etl/spark.py`, `f1sa-clean`, `make etl-sample`):
+    - Spark reads raw (file:// or hdfs://) with explicit schemas. Jolpica `driverId` is canonical; FastF1
+      abbreviations are mapped via the race entries, with car number as fallback.
+    - Times are converted to seconds. Laps carry cumulative time, gap to leader and gap ahead at the timing line, and
+      pit in/out flags.
+    - SC/VSC/red-flag flags: exact from FastF1 TrackStatus, otherwise a documented Jolpica heuristic (neutralised
+      > 1.25× median, red flag > 3×).
+    - Stints and telemetry prefer FastF1, then synthetic, then stints inferred from pit stops.
+    - Writes `partitionBy(season, round)` with dynamic overwrite. File mode refuses to write outside ./data/lake.
+  - `lake/quality.py`: hard checks (null/duplicate keys, races without results/laps, pit lap out of range) and soft
+    checks (lap contiguity, positions 1..N, pit lap in laps, results.laps, unparseable times, unmapped FastF1 drivers,
+    stint tiling). Writes the JSON report to `clean/_quality/report.json`.
+  - Verified on data/sample: exact counts (laps 2168, pitstops 60, stints 100, …), quality PASS (28 checks, 0 hard,
+    0 soft), and identical checksums on rerun. 2024 R5 neutralised laps are 22–24, 26 and 28–31.
+  - HDFS mode (your choice): `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://… python -m
+    f1sa.etl.clean --source lake`. Built and documented, **not yet run**.
+  - Tests:
+    - the whole pipeline on the real sample, with exact counts, schemas, gaps, flags, rerun and subset idempotency;
+    - a FastF1 path with hand-made Parquet: nanosecond timedeltas, mapping and unmapped driver, exact TrackStatus,
+      stints, per-lap aggregates, lap assignment of samples;
+    - quality checks and helpers.
 ## Next
-- User: full pass `f1sa-ingest season-range --seasons 2021-2025 --sources jolpica,fastf1` (dry-run first). Jolpica
-  is about 1,750 requests (about 4 h at 450/h). FastF1 needs the F1 TV login and about 115 races at 20/h (about 6 h).
-- Step 5: clean Parquet zone (`etl/clean.py`, `lake/schemas.py`) reading the table-first raw zone. Sample mode should
-  copy `data/sample/raw` to a scratch lake (`data/lake-sample`) so derived output never lands in tracked `data/sample/`.
+- After the user's bulk HDFS ingest finishes: verify hdfs mode with
+  `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://namenode:8020/f1 python -m f1sa.etl.clean --source lake`.
+- User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
+  already handles them (tested on hand-made FastF1 Parquet).
+- Step 6: Spark RDD/DataFrame/SQL feature jobs on the clean zone (#8–#12).
 ## Known issues
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
@@ -117,6 +144,12 @@
   in which case `make sample-data REBUILD=1` rebuilds the bundle.
 - A bulk-ingest process started with the Step 4A code reads the shared request log only at start-up, so it does not
   see requests made later by other processes. Processes started now share the budget fully.
+- Without FastF1, `is_sc_lap` and `is_vsc_lap` are null and `is_neutralised_lap` comes from a lap-time heuristic.
+  The heuristic misses lap-1 incidents and can flag laps run in heavy rain. It is exact once FastF1 data exists.
+- FastF1 per-lap telemetry aggregates are averages over samples, not time-weighted (sample spacing is roughly even).
+- The FastF1 path is tested only on hand-made Parquet that mimics what the Step 4A writer produces, because real
+  FastF1 data needs the user's login.
+- Sprint results are not yet a clean table (the raw zone has `sprint_results` on sprint weekends).
 - mypy treats `fastf1` and `pandas` as untyped (`ignore_missing_imports`). `pandas-stubs` could be added later.
 - DATA_LICENSES.md statements (Jolpica limits, FastF1 F1 TV login requirement since Oct 2026) were taken
   as provided by the team and not re-verified online.

@@ -188,5 +188,38 @@ same guarantees:
   in `data/sample.tmp-<pid>`, validated, then swapped in.
 - Validation checks sha256 and size, schemas, `is_synthetic`, no FastF1, unlisted files and the size limit, and that
   the synthetic tables regenerate byte-identically from the recorded seed.
-- Consumers (S5+) should copy `data/sample/raw` into a scratch lake (for example `DATA_LAKE_URI=file://./data/lake-sample`)
-  so derived output never lands in the tracked `data/sample/`.
+- Consumers read the bundle read-only and write elsewhere. For example, the clean job's `--source sample` writes to
+  `{DATA_LAKE_URI}/clean`, so derived output never lands in the tracked `data/sample/`.
+
+## Clean zone (`etl/clean.py`, `lake/schemas.py`, `lake/quality.py`, Step 5)
+```
+raw (Jolpica JSON pages, FastF1 Parquet, synthetic Parquet)
+  --Spark: explicit schemas, explode, normalise ids, times -> seconds, gaps, track flags-->
+clean/{races,drivers,constructors,results,qualifying,laps,pitstops,stints,telemetry_lap,telemetry_raw}/season=S/round=R/
+  + clean/_quality/report.json
+```
+- **Input**:
+  - `--source sample` reads `data/sample/raw` (read-only).
+  - `--source lake` reads `{DATA_LAKE_URI}/raw` (file:// or hdfs://).
+  - FastF1 data is optional and used per race when present (exact track status, real stints and telemetry).
+- **Output**: `{DATA_LAKE_URI}/clean/{table}/`, Parquet, `partitionBy("season","round")`, `mode=overwrite` with
+  `spark.sql.sources.partitionOverwriteMode=dynamic`.
+  - A rerun replaces only the partitions it writes, so it is **idempotent**: identical per-table content checksums
+    are printed and stored in the report.
+  - A run over a subset of races leaves the other partitions untouched.
+  - In file mode the job refuses to write outside `./data/lake` (gitignored), and Spark scratch goes to
+    `data/lake/.spark-tmp`.
+- **Reading pandas Parquet**: `spark.sql.legacy.parquet.nanosAsLong=true` lets Spark read FastF1's nanosecond
+  timestamps and durations as `long`; the job converts them explicitly.
+- **Quality**: hard checks fail the job (exit 1), and soft checks are reported. See `docs/data_dictionary.md`.
+- **Run modes**:
+  - **file, on the host**: `make etl-sample`, or
+    `DATA_LAKE_URI=file://$PWD/data/lake uv run python -m f1sa.etl.clean --source sample`. Spark runs `local[2]`.
+  - **hdfs, inside the app container**. The container can resolve `namenode` and `datanode`; the host cannot:
+    ```bash
+    docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://namenode:8020/f1 \
+        python -m f1sa.etl.clean --source lake
+    ```
+    `PYTHONPATH` points at the mounted repo (`/workspace`, read-only), so the current code runs without rebuilding
+    the image. Spark runs `local[2]` inside the 1.5 GiB app limit. `--master spark://spark-master:7077` switches to
+    the standalone cluster (planned for S10). *Not verified yet: waiting for the bulk HDFS ingest to finish.*
