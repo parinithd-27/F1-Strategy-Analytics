@@ -1,0 +1,21 @@
+# Keep secrets, data, caches and VCS out of the build context.
+.env
+.env.*
+!.env.example
+.git
+.github
+.venv
+data/
+results/
+models/
+web/
+node_modules/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+spark-warehouse/
+metastore_db/
+*.log
+.claude/

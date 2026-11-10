@@ -26,6 +26,7 @@ dependencies = [
     "numpy>=1.26",
     "matplotlib>=3.9",
     "psutil>=6.0",
+    "confluent-kafka>=2.6",
 ]
 
 [project.optional-dependencies]

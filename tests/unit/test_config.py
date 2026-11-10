@@ -14,6 +14,7 @@ def test_defaults() -> None:
     s = Settings()
     assert s.data_lake_uri == "file://./data/lake"
     assert s.kafka_bootstrap == "localhost:9092"
+    assert s.kafka_topic_events == "f1.race.events"
     assert s.redis_url == "redis://localhost:6379/0"
     assert s.redis_ttl_after_session_s == 3600
     assert s.jolpica_base_url == "https://api.jolpi.ca/ergast/f1"
@@ -28,6 +29,7 @@ def test_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATA_LAKE_URI", "hdfs://namenode:9000/f1/")
     monkeypatch.setenv("KAFKA_BOOTSTRAP", "kafka:9092, kafka2:9093")
     monkeypatch.setenv("REDIS_URL", "rediss://cache.example:6380/1")
+    monkeypatch.setenv("KAFKA_TOPIC_EVENTS", " f1.race.events-test ")
     monkeypatch.setenv("REDIS_TTL_AFTER_SESSION_S", "120")
     monkeypatch.setenv("JOLPICA_BASE_URL", "http://localhost:8000/ergast/f1/")
     monkeypatch.setenv("JOLPICA_MAX_PER_HOUR", "100")
@@ -36,6 +38,7 @@ def test_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.data_lake_uri == "hdfs://namenode:9000/f1"
     assert s.kafka_bootstrap == "kafka:9092,kafka2:9093"
     assert s.redis_url == "rediss://cache.example:6380/1"
+    assert s.kafka_topic_events == "f1.race.events-test"
     assert s.redis_ttl_after_session_s == 120
     assert s.jolpica_base_url == "http://localhost:8000/ergast/f1"
     assert s.jolpica_max_per_hour == 100
@@ -73,6 +76,10 @@ def test_env_var_beats_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         ("KAFKA_BOOTSTRAP", "localhost:9092,"),
         ("KAFKA_BOOTSTRAP", "localhost:99999"),
         ("JOLPICA_BASE_URL", "ftp://api.jolpi.ca"),
+        ("KAFKA_TOPIC_EVENTS", ""),
+        ("KAFKA_TOPIC_EVENTS", "bad topic"),
+        ("KAFKA_TOPIC_EVENTS", ".."),
+        ("KAFKA_TOPIC_EVENTS", "x" * 250),
     ],
 )
 def test_invalid_values_rejected(monkeypatch: pytest.MonkeyPatch, var: str, value: str) -> None:

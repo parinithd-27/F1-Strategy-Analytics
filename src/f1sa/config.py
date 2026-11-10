@@ -23,6 +23,7 @@ _LAKE_SCHEMES = frozenset({"file", "hdfs"})
 _REDIS_SCHEMES = frozenset({"redis", "rediss"})
 _HTTP_SCHEMES = frozenset({"http", "https"})
 _HOST_PORT = re.compile(r"^[A-Za-z0-9.\-]+:(\d{1,5})$")
+_KAFKA_TOPIC = re.compile(r"^[A-Za-z0-9._\-]{1,249}$")
 
 
 class Settings(BaseSettings):
@@ -37,6 +38,7 @@ class Settings(BaseSettings):
 
     data_lake_uri: str = "file://./data/lake"
     kafka_bootstrap: str = "localhost:9092"
+    kafka_topic_events: str = "f1.race.events"
     redis_url: str = "redis://localhost:6379/0"
     redis_ttl_after_session_s: int = Field(default=3600, gt=0)
     jolpica_base_url: str = "https://api.jolpi.ca/ergast/f1"
@@ -68,6 +70,16 @@ class Settings(BaseSettings):
             if match is None or not 1 <= int(match.group(1)) <= 65535:
                 raise ValueError(f"invalid kafka bootstrap server {server!r}; expected host:port")
         return ",".join(servers)
+
+    @field_validator("kafka_topic_events")
+    @classmethod
+    def _check_kafka_topic(cls, value: str) -> str:
+        value = value.strip()
+        if not _KAFKA_TOPIC.match(value) or value in {".", ".."}:
+            raise ValueError(
+                f"invalid Kafka topic name {value!r}; use 1-249 chars of [A-Za-z0-9._-]"
+            )
+        return value
 
     @field_validator("redis_url")
     @classmethod
