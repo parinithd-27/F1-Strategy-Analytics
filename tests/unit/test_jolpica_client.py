@@ -170,13 +170,13 @@ def test_cache_hit_uses_no_token_and_no_network(
     client: JolpicaClient, fixtures: FixtureAdapter
 ) -> None:
     client.results(2023, 5)
-    tokens_after_first = client.limiter.hourly.tokens
+    budget_after_first = client.limiter.available_this_hour
     assert client.stats.network == 1 and client.stats.cache_hits == 0
     client.results(2023, 5)
     assert client.stats.network == 1
     assert client.stats.cache_hits == 1
     assert len(fixtures.requests) == 1
-    assert client.limiter.hourly.tokens == pytest.approx(tokens_after_first, abs=1e-3)
+    assert client.limiter.available_this_hour == budget_after_first == 449
 
 
 def test_refresh_bypasses_cache(client: JolpicaClient, fixtures: FixtureAdapter) -> None:
@@ -185,9 +185,28 @@ def test_refresh_bypasses_cache(client: JolpicaClient, fixtures: FixtureAdapter)
     assert len(fixtures.requests) == 2 and client.stats.network == 2
 
 
-def test_network_requests_take_rate_limit_tokens(client: JolpicaClient) -> None:
-    client.laps(2023, 5)
-    assert client.limiter.burst.tokens == pytest.approx(1.0)  # 4 - 3 requests
+def test_network_requests_take_rate_limit_tokens(client: JolpicaClient, clock: FakeClock) -> None:
+    client.laps(2023, 5)  # 3 network pages
+    assert client.limiter.available_this_hour == 447
+    assert clock.sleeps == [pytest.approx(1 / 3)] * 2  # paced: at most 4 per rolling second
+
+
+def test_429_without_retry_after_backs_off_long(clock: FakeClock) -> None:
+    transport = ScriptedAdapter([(429, {}, b"{}"), (429, {}, b"{}"), (200, {}, OK_PAGE())])
+    client = make_client(clock, transport)
+    client.seasons()
+    assert [s for s in clock.sleeps if s >= 1] == [5.0, 10.0]
+    assert client.stats.throttled == 2 and client.stats.retries == 2
+
+
+def test_default_limiter_persists_request_log() -> None:
+    settings = Settings()
+    with JolpicaClient(settings, transport=FixtureAdapter(), cache_backend="memory") as client:
+        client.seasons()
+    log = settings.jolpica_cache_dir / "requests.log"
+    assert len(log.read_text().splitlines()) == 1
+    with JolpicaClient(settings, transport=FixtureAdapter(), cache_backend="memory") as again:
+        assert again.limiter.available_this_hour == settings.jolpica_max_per_hour - 1
 
 
 def test_user_agent_and_accept_headers(client: JolpicaClient, fixtures: FixtureAdapter) -> None:
@@ -332,3 +351,31 @@ def test_non_integer_field_raises() -> None:
     bad["MRData"]["RaceTable"]["Races"][0]["Results"][0]["grid"] = "pit"
     with pytest.raises(JolpicaResponseError, match="integer"):
         jc.parse_results([bad])
+
+
+# ---------------------------------------------------------------- sprint + cache probes
+def test_sprint_results_same_schema_as_results(client: JolpicaClient) -> None:
+    df = client.sprint_results(2023, 4)
+    assert _dtypes(df) == jc.RESULTS_SCHEMA
+    per = df.set_index("driver_id").loc["perez"]
+    assert per["position"] == 1 and per["points"] == 8.0
+    assert page_item_count(load_fixture("sprint_2023_4")) == 3
+
+
+def test_season_level_drivers_have_no_round(client: JolpicaClient) -> None:
+    df = client.drivers(2023)
+    assert (df["season"] == 2023).all() and df["round"].isna().all()
+    assert len(client.constructors(2023)) == 2
+
+
+def test_cached_page_and_requests_needed_never_touch_network(
+    client: JolpicaClient, fixtures: FixtureAdapter
+) -> None:
+    assert client.cached_page("2023/5/laps") is None
+    assert client.requests_needed("2023/5/laps", 12) == 12  # nothing cached: default estimate
+    assert fixtures.requests == [] and client.stats.network == 0
+    client.get_pages("2023/5/laps")  # 3 pages (server limit 4, total 9)
+    sent = len(fixtures.requests)
+    assert client.cached_page("2023/5/laps", 4) is not None
+    assert client.requests_needed("2023/5/laps", 12) == 0  # all pages cached
+    assert len(fixtures.requests) == sent  # probes were cache-only

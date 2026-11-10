@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- HttpFS gateway: WebHDFS-compatible REST that proxies file bytes itself (no datanode redirect).
+     Dev only: plain HTTP, "simple" (user.name) authentication. -->
+<configuration>
+  <property><name>httpfs.http.port</name><value>14000</value></property>
+  <property><name>httpfs.http.hostname</name><value>0.0.0.0</value></property>
+  <property><name>httpfs.authentication.type</name><value>simple</value></property>
+  <property><name>hadoop.http.authentication.type</name><value>simple</value></property>
+  <property><name>httpfs.hadoop.config.dir</name><value>/opt/hadoop/etc/hadoop</value></property>
+  <property><name>httpfs.proxyuser.hadoop.hosts</name><value>*</value></property>
+  <property><name>httpfs.proxyuser.hadoop.groups</name><value>*</value></property>
+</configuration>

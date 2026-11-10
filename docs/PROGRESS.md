@@ -44,11 +44,35 @@
     no network or credentials needed.
   - Verified: a real ingest of 2023 R5 into the file sink took 20 s cold (18 requests) and 0.7 s warm (0 requests).
     FastF1 without credentials gives exit 1 with a clear FastF1AuthError, and nothing is written.
+- Step 4A (W2): bulk, resumable raw-zone ingestion and the HDFS sink (#2, #6, bulk part of #1/#4/#5)
+  - HttpFS gateway (`httpfs` service in the hdfs/full profiles, f1sa-hadoop:3.4.3, user hadoop, port 14000, 384m, health
+    check). Proxyuser settings are in core-site.xml, and `docker/hadoop/httpfs-site.xml` is new.
+  - `HdfsSink`: uses the same interface as `FileSink`. CREATE `data=true` (no datanode redirect) to `_tmp.<uuid>`, length
+    check, then DELETE + RENAME, with the boolean checked. Verified live: HttpFS RENAME never overwrites and
+    `renameoptions` is ignored. Retries 5xx and connection errors; temp files are cleaned on failure or Ctrl+C.
+  - Table-first raw layout `raw/{source}/{table}/season=S[/round=R][/driver=DRV]/` with a `_manifest.json` per
+    partition. Season tables (schedule, drivers, constructors) are fetched once per season. `sprint_results` only on
+    sprint weekends.
+  - `data/manifest.json` (`ingest/manifest.py`): atomic save after every change (tested with a real SIGKILL), flock
+    against concurrent runs, stale `running` items retried, `--only-failed`.
+  - `ingest/planner.py`: plan, request and ETA estimate (cache-aware, no network), budget split when both sources run.
+    `--dry-run` writes nothing.
+  - `ingest/bulk.py` and `cli.py season-range` (plus `race` on the same code path):
+    - FastF1 sign-in is checked first; auth or hard rate-limit errors abort with exit 3.
+    - Other errors are recorded in the manifest and the run continues (exit 1).
+    - SIGINT/SIGTERM give exit 130 with the item `interrupted`.
+  - FastF1: per-driver telemetry and position partitions, one race in memory at a time, races paced (20/h), and the
+    cache dir enforced inside `./data`.
+  - **Rate limiter fix:** the real run got 63 HTTP 429s. Root cause: a token bucket admits capacity + rate·T, so the Step 3
+    buckets allowed 8 requests per second and about 900 in the first hour. The limiter is now a 1-token bucket at
+    3/s (≤ 4 in any second) plus a persisted sliding hourly window (≤ budget in any rolling hour, across runs).
+    A 429 without Retry-After now backs off 5–60 s.
+  - Tests: 218 unit tests (manifest, kill-safety, HdfsSink against a fake HttpFS with the real quirks, planner and
+    estimates, bulk runs incl. interrupt/abort/resume, window guarantees) and HttpFS integration tests from the host.
 ## Next
-- Step 4: multi-season ingest (`--seasons 2021-2025`, `data/manifest.json`, resumable) and the HDFS sink through an
-  **HttpFS gateway**, chosen in Step 3:
-  - New `httpfs` service in the hdfs profile (f1sa-hadoop:3.4.3, `hdfs httpfs`, port 14000, 384m).
-  - `HdfsSink` with requests: CREATE with `data=true` (no datanode redirect), write to a temp name and then RENAME.
+- User: full pass `f1sa-ingest season-range --seasons 2021-2025 --sources jolpica,fastf1` (dry-run first). Jolpica
+  is about 1,750 requests (about 4 h at 450/h). FastF1 needs the F1 TV login and about 115 races at 20/h (about 6 h).
+- Step 4B / 5: clean Parquet zone (`etl/clean.py`, `lake/schemas.py`) reading the table-first raw zone.
 ## Known issues
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
@@ -57,11 +81,14 @@
 - The first `make up` builds the app image, which needs network access (PyPI and Maven Central). Later runs are offline.
 - If the host UID is not 1000, set `APP_UID` in `.env` before building, so that files written to data/ and results/
   stay owned by the host user.
-- FastF1 makes its own Jolpica calls (its internal limit is 200/h) on the same IP as our client (450/h), and
-  Jolpica's limit is 500/h per IP. Lower JOLPICA_MAX_PER_HOUR for long runs that use both sources (Step 4).
-- The hourly token bucket is per process. Separate runs within one hour don't share a budget, but the cache
-  makes re-runs free.
-- The credentialed FastF1 path (a real download) has not been run yet. The user will run it with their own login.
+- Jolpica still throttles occasionally, even with the corrected limiter (strictly ≤ 4 in any second, ≤ 450 in any hour):
+  22 HTTP 429s in 184 requests on the resumed 2021 run, against 63 in about 170 before the fix. All recovered after
+  one 5–6 s backoff, and no item failed. Jolpica probably enforces an undocumented short window (its docs say limits
+  "will decrease"). If 429s rise on the full run, lower the burst to 2/s or lower `JOLPICA_MAX_PER_HOUR`.
+- The hourly request log only knows requests made since it was introduced (it was added in the middle of the
+  2021 run).
+- FastF1 request counts and load time per race in the estimate are approximations (12 calls, about 60 s). The
+  credentialed FastF1 path has still not been run (it needs the user's login).
 - mypy treats `fastf1` and `pandas` as untyped (`ignore_missing_imports`). `pandas-stubs` could be added later.
 - DATA_LICENSES.md statements (Jolpica limits, FastF1 F1 TV login requirement since Oct 2026) were taken
   as provided by the team and not re-verified online.
@@ -69,3 +96,6 @@
 
 ## Verify
 `uv sync --all-extras && make lint && make typecheck && make test && make up-full && make test-int && make down`
+
+HDFS sink: `DATA_LAKE_URI=hdfs://namenode:8020/f1 uv run f1sa-ingest season-range --seasons 2021 --sources jolpica --sink hdfs`,
+then `docker compose exec namenode hdfs dfs -du -h /f1/raw`.

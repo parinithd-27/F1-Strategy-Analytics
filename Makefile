@@ -27,7 +27,7 @@ test-int: ## Integration tests (needs infra); exit 5 = none collected is OK
 # ---------------------------------------------------------------- infrastructure (Docker Compose)
 COMPOSE := docker compose
 CORE_SERVICES := kafka redis app
-FULL_SERVICES := $(CORE_SERVICES) namenode datanode spark-master spark-worker-1 spark-worker-2
+FULL_SERVICES := $(CORE_SERVICES) namenode datanode httpfs spark-master spark-worker-1 spark-worker-2
 
 .PHONY: up up-full down ps logs nuke
 

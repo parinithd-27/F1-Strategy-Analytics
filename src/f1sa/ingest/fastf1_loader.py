@@ -16,20 +16,23 @@ import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import version
+from pathlib import Path
 from typing import Any
 
 import fastf1
 import pandas as pd
-from fastf1.exceptions import F1AuthError
+from fastf1.exceptions import F1AuthError, RateLimitExceededError
 from fastf1.internals import f1account
 from fastf1.internals.f1account.login import login as f1_login
 
 from f1sa.config import Settings
+from f1sa.lake.paths import is_within
 
 logger = logging.getLogger(__name__)
 
 LAP_COLUMNS = (
     "Driver",
+    "DriverNumber",
     "LapNumber",
     "LapTime",
     "Compound",
@@ -61,6 +64,10 @@ class FastF1DataError(RuntimeError):
     """The session loaded but required data or columns are missing."""
 
 
+class FastF1RateLimitError(RuntimeError):
+    """FastF1 hit one of its hard API rate limits; continuing would fail every later race."""
+
+
 @dataclass(frozen=True, eq=False)
 class RaceData:
     """Validated FastF1 race-session data."""
@@ -68,8 +75,10 @@ class RaceData:
     season: int
     round: int
     laps: pd.DataFrame
-    car_data: pd.DataFrame
-    pos_data: pd.DataFrame
+    car_data: dict[str, pd.DataFrame]
+    """Per driver abbreviation (e.g. ``"VER"``) -> car telemetry for the race."""
+    pos_data: dict[str, pd.DataFrame]
+    """Per driver abbreviation -> position data for the race."""
     session_info: dict[str, Any] = field(default_factory=dict)
 
 
@@ -79,6 +88,11 @@ def configure_cache(settings: Settings, offline: bool = False) -> None:
     ``Cache.configure`` requires an existing directory; offline mode must be set afterwards.
     """
     cache_dir = settings.fastf1_cache_dir
+    if not is_within(cache_dir, Path("data")):
+        raise ValueError(
+            f"FASTF1_CACHE_DIR must be inside ./data (gitignored); got {cache_dir}. "
+            "FastF1 data may never be written outside data/."
+        )
     cache_dir.mkdir(parents=True, exist_ok=True)
     fastf1.Cache.configure(cache_dir=str(cache_dir))
     fastf1.Cache.offline_mode(offline)
@@ -108,19 +122,28 @@ def _select(df: pd.DataFrame, columns: tuple[str, ...], what: str) -> pd.DataFra
     return pd.DataFrame(df.loc[:, list(columns)]).reset_index(drop=True)
 
 
-def _concat_by_driver(
-    per_driver: Mapping[str, pd.DataFrame], columns: tuple[str, ...], what: str
-) -> pd.DataFrame:
-    frames = []
-    for driver, tel in per_driver.items():
+def _by_abbreviation(
+    per_driver: Mapping[str, pd.DataFrame],
+    abbreviations: Mapping[str, str],
+    columns: tuple[str, ...],
+    what: str,
+) -> dict[str, pd.DataFrame]:
+    """Select ``columns`` per driver and key the result by abbreviation (e.g. ``VER``)."""
+    out: dict[str, pd.DataFrame] = {}
+    for number, tel in per_driver.items():
         if tel is None or len(tel) == 0:
             continue
-        frame = _select(tel, columns, f"{what} for driver {driver}")
-        frame.insert(0, "DriverNumber", str(driver))
-        frames.append(frame)
-    if not frames:
+        abbr = abbreviations.get(str(number))
+        if abbr is None:
+            logger.warning("%s: driver number %s has no laps; skipped", what, number)
+            continue
+        frame = _select(tel, columns, f"{what} for driver {abbr}")
+        frame.insert(0, "DriverNumber", str(number))
+        frame.insert(0, "Driver", abbr)
+        out[abbr] = frame
+    if not out:
         raise FastF1DataError(f"{what} is empty for every driver")
-    return pd.concat(frames, ignore_index=True)
+    return out
 
 
 def _session_info(session: Any, season: int, round_: int) -> dict[str, Any]:
@@ -153,6 +176,7 @@ def load_race(
     settings: Settings,
     *,
     offline: bool = False,
+    check_auth: bool = True,
     get_session: Callable[..., Any] | None = None,
 ) -> RaceData:
     """Load a race session's laps, car telemetry and position data, validated.
@@ -161,17 +185,21 @@ def load_race(
         FastF1AuthError: sign-in failed, or (online) the session has no laps.
         FastF1DataError: laps exist but telemetry/position data or columns are missing, or
             (offline) nothing is cached for this session.
+        FastF1RateLimitError: FastF1 refused to send more requests (its hard limits).
     """
     if season < 2018:
         raise ValueError(f"FastF1 timing data starts in 2018, got season {season}")
     if round_ < 1:
         raise ValueError(f"round must be >= 1, got {round_}")
     configure_cache(settings, offline=offline)
-    if not offline:
+    if not offline and check_auth:
         ensure_authenticated(settings)
 
-    session = (get_session or fastf1.get_session)(season, round_, "R")
-    session.load(laps=True, telemetry=True, weather=False, messages=True)
+    try:
+        session = (get_session or fastf1.get_session)(season, round_, "R")
+        session.load(laps=True, telemetry=True, weather=False, messages=True)
+    except RateLimitExceededError as exc:
+        raise FastF1RateLimitError(f"FastF1 rate limit reached: {exc}") from exc
 
     try:
         laps = session.laps
@@ -196,11 +224,17 @@ def load_race(
             f"telemetry not loaded for {season} round {round_}: {type(exc).__name__}"
         ) from exc
 
+    lap_table = _select(laps, LAP_COLUMNS, "laps")
+    abbreviations = {
+        str(num): str(abbr)
+        for num, abbr in zip(lap_table["DriverNumber"], lap_table["Driver"], strict=True)
+        if pd.notna(num) and pd.notna(abbr)
+    }
     return RaceData(
         season=season,
         round=round_,
-        laps=_select(laps, LAP_COLUMNS, "laps"),
-        car_data=_concat_by_driver(car_data, CAR_COLUMNS, "car telemetry"),
-        pos_data=_concat_by_driver(pos_data, POS_COLUMNS, "position data"),
+        laps=lap_table,
+        car_data=_by_abbreviation(car_data, abbreviations, CAR_COLUMNS, "car telemetry"),
+        pos_data=_by_abbreviation(pos_data, abbreviations, POS_COLUMNS, "position data"),
         session_info=_session_info(session, season, round_),
     )

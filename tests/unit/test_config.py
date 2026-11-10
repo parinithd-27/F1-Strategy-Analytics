@@ -22,6 +22,10 @@ def test_defaults() -> None:
     assert s.fastf1_cache_dir == Path("data/cache/fastf1")
     assert s.jolpica_cache_dir == Path("data/cache/jolpica")
     assert s.jolpica_user_agent.startswith("F1-Strategy-Analytics/")
+    assert s.hdfs_httpfs_url == "http://localhost:14000"
+    assert s.hdfs_user == "hadoop"
+    assert s.manifest_path == Path("data/manifest.json")
+    assert s.fastf1_max_races_per_hour == 20
     assert s.f1_username is None
     assert s.f1_password is None
     assert s.has_f1_credentials is False
@@ -79,6 +83,11 @@ def test_env_var_beats_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         ("KAFKA_BOOTSTRAP", "localhost:99999"),
         ("JOLPICA_BASE_URL", "ftp://api.jolpi.ca"),
         ("KAFKA_TOPIC_EVENTS", ""),
+        ("HDFS_HTTPFS_URL", "localhost:14000"),
+        ("HDFS_HTTPFS_URL", "http://localhost:14000/webhdfs/v1"),
+        ("HDFS_USER", "Root User"),
+        ("FASTF1_MAX_RACES_PER_HOUR", "0"),
+        ("FASTF1_MAX_RACES_PER_HOUR", "61"),
         ("JOLPICA_USER_AGENT", "   "),
         ("JOLPICA_USER_AGENT", "a\nb"),
         ("KAFKA_TOPIC_EVENTS", "bad topic"),

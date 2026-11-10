@@ -1,0 +1,58 @@
+{
+ "MRData": {
+  "xmlns": "",
+  "series": "f1",
+  "url": "https://api.jolpi.ca/ergast/f1/2023/4/pitstops.json",
+  "limit": "100",
+  "offset": "0",
+  "total": "3",
+  "RaceTable": {
+   "season": "2023",
+   "round": "4",
+   "Races": [
+    {
+     "season": "2023",
+     "round": "4",
+     "url": "https://en.wikipedia.org/wiki/2023_Azerbaijan_Grand_Prix",
+     "raceName": "Azerbaijan Grand Prix",
+     "Circuit": {
+      "circuitId": "baku",
+      "url": "https://en.wikipedia.org/wiki/Baku_City_Circuit",
+      "circuitName": "Baku City Circuit",
+      "Location": {
+       "lat": "40.3725",
+       "long": "49.8533",
+       "locality": "Baku",
+       "country": "Azerbaijan"
+      }
+     },
+     "date": "2023-04-30",
+     "time": "11:00:00Z",
+     "PitStops": [
+      {
+       "driverId": "sargeant",
+       "lap": "8",
+       "stop": "1",
+       "time": "15:18:50",
+       "duration": "21.015"
+      },
+      {
+       "driverId": "max_verstappen",
+       "lap": "10",
+       "stop": "1",
+       "time": "15:22:00",
+       "duration": "20.707"
+      },
+      {
+       "driverId": "perez",
+       "lap": "11",
+       "stop": "1",
+       "time": "15:24:20",
+       "duration": "20.389"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

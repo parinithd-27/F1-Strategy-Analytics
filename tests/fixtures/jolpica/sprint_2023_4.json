@@ -1,0 +1,132 @@
+{
+ "MRData": {
+  "xmlns": "",
+  "series": "f1",
+  "url": "https://api.jolpi.ca/ergast/f1/2023/4/sprint.json",
+  "limit": "100",
+  "offset": "0",
+  "total": "3",
+  "RaceTable": {
+   "season": "2023",
+   "round": "4",
+   "Races": [
+    {
+     "season": "2023",
+     "round": "4",
+     "url": "https://en.wikipedia.org/wiki/2023_Azerbaijan_Grand_Prix",
+     "raceName": "Azerbaijan Grand Prix",
+     "Circuit": {
+      "circuitId": "baku",
+      "url": "https://en.wikipedia.org/wiki/Baku_City_Circuit",
+      "circuitName": "Baku City Circuit",
+      "Location": {
+       "lat": "40.3725",
+       "long": "49.8533",
+       "locality": "Baku",
+       "country": "Azerbaijan"
+      }
+     },
+     "date": "2023-04-30",
+     "time": "11:00:00Z",
+     "SprintResults": [
+      {
+       "number": "11",
+       "position": "1",
+       "positionText": "1",
+       "points": "8",
+       "Driver": {
+        "driverId": "perez",
+        "permanentNumber": "11",
+        "code": "PER",
+        "url": "http://en.wikipedia.org/wiki/Sergio_P%C3%A9rez",
+        "givenName": "Sergio",
+        "familyName": "Pérez",
+        "dateOfBirth": "1990-01-26",
+        "nationality": "Mexican"
+       },
+       "Constructor": {
+        "constructorId": "red_bull",
+        "url": "https://en.wikipedia.org/wiki/Red_Bull_Racing",
+        "name": "Red Bull",
+        "nationality": "Austrian"
+       },
+       "grid": "2",
+       "laps": "17",
+       "status": "Finished",
+       "Time": {
+        "millis": "1997667",
+        "time": "33:17.667"
+       },
+       "FastestLap": {
+        "lap": "11",
+        "Time": {
+         "time": "1:43.616"
+        }
+       }
+      },
+      {
+       "number": "1",
+       "position": "3",
+       "positionText": "3",
+       "points": "6",
+       "Driver": {
+        "driverId": "max_verstappen",
+        "permanentNumber": "3",
+        "code": "VER",
+        "url": "http://en.wikipedia.org/wiki/Max_Verstappen",
+        "givenName": "Max",
+        "familyName": "Verstappen",
+        "dateOfBirth": "1997-09-30",
+        "nationality": "Dutch"
+       },
+       "Constructor": {
+        "constructorId": "red_bull",
+        "url": "https://en.wikipedia.org/wiki/Red_Bull_Racing",
+        "name": "Red Bull",
+        "nationality": "Austrian"
+       },
+       "grid": "3",
+       "laps": "17",
+       "status": "Finished",
+       "Time": {
+        "millis": "2002732",
+        "time": "+5.065"
+       },
+       "FastestLap": {
+        "lap": "10",
+        "Time": {
+         "time": "1:43.723"
+        }
+       }
+      },
+      {
+       "number": "2",
+       "position": "20",
+       "positionText": "R",
+       "points": "0",
+       "Driver": {
+        "driverId": "sargeant",
+        "permanentNumber": "2",
+        "code": "SAR",
+        "url": "http://en.wikipedia.org/wiki/Logan_Sargeant",
+        "givenName": "Logan",
+        "familyName": "Sargeant",
+        "dateOfBirth": "2000-12-31",
+        "nationality": "American"
+       },
+       "Constructor": {
+        "constructorId": "williams",
+        "url": "https://en.wikipedia.org/wiki/Williams_Racing",
+        "name": "Williams",
+        "nationality": "British"
+       },
+       "grid": "0",
+       "laps": "0",
+       "status": "Accident"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

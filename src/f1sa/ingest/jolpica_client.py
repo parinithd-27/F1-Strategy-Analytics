@@ -39,6 +39,9 @@ PAGE_LIMIT = 100
 """Largest page size Jolpica serves (larger requests are silently capped to this)."""
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 MAX_RETRY_AFTER_S = 600.0
+THROTTLE_BACKOFF_BASE_S = 5.0
+"""First wait after a 429 without Retry-After (then 10, 20, 40, capped at 60 s)."""
+REQUEST_LOG_NAME = "requests.log"
 REQUEST_TIMEOUT_S = 30.0
 _MAX_PAGES = 1000
 
@@ -70,6 +73,7 @@ class RequestStats:
     network: int = 0
     cache_hits: int = 0
     retries: int = 0
+    throttled: int = 0
     waited_s: float = 0.0
 
 
@@ -120,7 +124,7 @@ class JolpicaClient:
             raise ValueError("need 0 < backoff_base_s <= backoff_max_s")
         self.base_url = settings.jolpica_base_url
         self.stats = RequestStats()
-        self.limiter = limiter or DualRateLimiter(per_hour=settings.jolpica_max_per_hour)
+        self.limiter = limiter or default_limiter(settings, settings.jolpica_max_per_hour)
         self._sleep = sleep
         self._rng = rng
         self._max_retries = max_retries
@@ -163,8 +167,9 @@ class JolpicaClient:
             raise ValueError(f"invalid Jolpica path {path!r}")
         return f"{self.base_url}/{path}.json"
 
-    def _backoff(self, attempt: int) -> float:
-        delay = min(self._backoff_max_s, self._backoff_base_s * (2.0**attempt))
+    def _backoff(self, attempt: int, base_s: float | None = None) -> float:
+        base = self._backoff_base_s if base_s is None else base_s
+        delay = min(self._backoff_max_s, base * (2.0**attempt))
         return delay * (1.0 + self._jitter * self._rng())
 
     @staticmethod
@@ -209,7 +214,13 @@ class JolpicaClient:
                 return self._decode(resp, url)
             if resp.status_code in RETRY_STATUSES and not last:
                 retry_after = self._retry_after(resp)
-                delay = retry_after if retry_after is not None else self._backoff(attempt)
+                if resp.status_code == 429:
+                    # throttled: back off much longer than for 5xx so we stop adding load
+                    self.stats.throttled += 1
+                    fallback = self._backoff(attempt, THROTTLE_BACKOFF_BASE_S)
+                else:
+                    fallback = self._backoff(attempt)
+                delay = retry_after if retry_after is not None else fallback
                 logger.warning(
                     "Jolpica HTTP %s on %s; retry %d/%d in %.1fs",
                     resp.status_code,
@@ -261,6 +272,33 @@ class JolpicaClient:
             if len(pages) >= _MAX_PAGES:
                 raise JolpicaResponseError(f"more than {_MAX_PAGES} pages for {url}")
 
+    def cached_page(self, path: str, offset: int = 0) -> JsonPage | None:
+        """The cached page at ``offset`` without any network access (None if not cached)."""
+        url = self.url_for(path)
+        resp = self.session.get(
+            url,
+            params={"limit": PAGE_LIMIT, "offset": offset},
+            only_if_cached=True,
+            timeout=REQUEST_TIMEOUT_S,
+        )
+        if resp.status_code != 200 or not getattr(resp, "from_cache", False):
+            return None
+        return self._decode(resp, url)
+
+    def requests_needed(self, path: str, default_pages: int) -> int:
+        """Network requests ``get_pages(path)`` would make now (cached pages are free).
+
+        Exact once the first page is cached (its ``total``/``limit`` give the page count);
+        otherwise ``default_pages`` is the estimate.
+        """
+        first = self.cached_page(path)
+        if first is None:
+            return default_pages
+        total, limit = int(first["MRData"]["total"]), int(first["MRData"]["limit"])
+        if limit <= 0:
+            return default_pages
+        return sum(1 for off in range(limit, total, limit) if self.cached_page(path, off) is None)
+
     # ------------------------------------------------------------------ typed endpoints
     def seasons(self, *, refresh: bool = False) -> pd.DataFrame:
         return parse_seasons(self.get_pages("seasons", refresh=refresh))
@@ -273,6 +311,9 @@ class JolpicaClient:
 
     def results(self, season: int, round_: int, *, refresh: bool = False) -> pd.DataFrame:
         return parse_results(self.get_pages(f"{season}/{round_}/results", refresh=refresh))
+
+    def sprint_results(self, season: int, round_: int, *, refresh: bool = False) -> pd.DataFrame:
+        return parse_sprint_results(self.get_pages(f"{season}/{round_}/sprint", refresh=refresh))
 
     def qualifying(self, season: int, round_: int, *, refresh: bool = False) -> pd.DataFrame:
         return parse_qualifying(self.get_pages(f"{season}/{round_}/qualifying", refresh=refresh))
@@ -293,6 +334,15 @@ class JolpicaClient:
 
     def laps(self, season: int, round_: int, *, refresh: bool = False) -> pd.DataFrame:
         return parse_laps(self.get_pages(f"{season}/{round_}/laps", refresh=refresh))
+
+
+def default_limiter(settings: Settings, per_hour: int) -> DualRateLimiter:
+    """Limiter whose hourly window is persisted next to the HTTP cache, so separate runs
+    (resumes, back-to-back commands) share one hourly budget."""
+    settings.jolpica_cache_dir.mkdir(parents=True, exist_ok=True)
+    return DualRateLimiter(
+        per_hour=per_hour, log_path=settings.jolpica_cache_dir / REQUEST_LOG_NAME
+    )
 
 
 def _scoped(season: int, round_: int | None, endpoint: str) -> str:
@@ -363,6 +413,9 @@ def _races(pages: Iterable[JsonPage]) -> Iterable[dict[str, Any]]:
         yield from _table(page, "RaceTable").get("Races", [])
 
 
+_COUNTED_KEYS = ("Results", "SprintResults", "QualifyingResults", "PitStops")
+
+
 def page_item_count(page: JsonPage) -> int:
     """Number of items Jolpica counted on this page (laps count timings, like the API does)."""
     mr = page["MRData"]
@@ -371,8 +424,8 @@ def page_item_count(page: JsonPage) -> int:
         for race in mr["RaceTable"].get("Races", []):
             if "Laps" in race:
                 count += sum(len(lap.get("Timings", [])) for lap in race["Laps"])
-            elif any(k in race for k in ("Results", "QualifyingResults", "PitStops")):
-                for key in ("Results", "QualifyingResults", "PitStops"):
+            elif any(k in race for k in _COUNTED_KEYS):
+                for key in _COUNTED_KEYS:
                     count += len(race.get(key, []))
             else:
                 count += 1
@@ -502,9 +555,19 @@ def parse_races(pages: Iterable[JsonPage]) -> pd.DataFrame:
 
 
 def parse_results(pages: Iterable[JsonPage]) -> pd.DataFrame:
+    """Race classification (``Results``)."""
+    return _parse_classification(pages, "Results")
+
+
+def parse_sprint_results(pages: Iterable[JsonPage]) -> pd.DataFrame:
+    """Sprint classification (``SprintResults``); same columns and dtypes as race results."""
+    return _parse_classification(pages, "SprintResults")
+
+
+def _parse_classification(pages: Iterable[JsonPage], key: str) -> pd.DataFrame:
     rows = []
     for race in _races(pages):
-        for res in race.get("Results", []):
+        for res in race.get(key, []):
             fastest = res.get("FastestLap", {})
             rows.append(
                 {

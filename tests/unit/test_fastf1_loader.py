@@ -25,6 +25,7 @@ FAKE_PASSWORD = "not-a-real-password-123"
 def _laps(n: int = 2) -> pd.DataFrame:
     data: dict[str, list[Any]] = {c: [None] * n for c in LAP_COLUMNS}
     data["Driver"] = ["VER", "PER"][:n]
+    data["DriverNumber"] = ["1", "11"][:n]
     data["LapNumber"] = [1.0, 1.0][:n]
     data["Compound"] = ["MEDIUM", "HARD"][:n]
     data["LapTime"] = list(pd.to_timedelta([96.1, 96.4][:n], unit="s"))
@@ -180,9 +181,11 @@ def test_successful_load_selects_columns(
         "messages": True,
     }
     assert tuple(data.laps.columns) == LAP_COLUMNS
-    assert tuple(data.car_data.columns) == ("DriverNumber", *CAR_COLUMNS)
-    assert tuple(data.pos_data.columns) == ("DriverNumber", *POS_COLUMNS)
-    assert len(data.car_data) == 6 and set(data.car_data["DriverNumber"]) == {"1", "11"}
+    assert sorted(data.car_data) == ["PER", "VER"] and sorted(data.pos_data) == ["PER", "VER"]
+    ver = data.car_data["VER"]
+    assert tuple(ver.columns) == ("Driver", "DriverNumber", *CAR_COLUMNS)
+    assert set(ver["Driver"]) == {"VER"} and set(ver["DriverNumber"]) == {"1"} and len(ver) == 3
+    assert tuple(data.pos_data["PER"].columns) == ("Driver", "DriverNumber", *POS_COLUMNS)
     assert data.session_info["event_name"] == "Miami Grand Prix"
     assert data.session_info["event_date"].startswith("2023-05-07")
     assert data.session_info["is_synthetic"] is False
@@ -213,3 +216,39 @@ def test_missing_telemetry_column_raises(
 def test_invalid_race_args(season: int, round_: int) -> None:
     with pytest.raises(ValueError):
         load_race(season, round_, Settings(), get_session=lambda *a: None)
+
+
+def test_telemetry_for_driver_without_laps_is_skipped(
+    cache_calls: list[tuple[str, Any]], token_ok: list[str]
+) -> None:
+    car = {"1": _tel(CAR_COLUMNS), "99": _tel(CAR_COLUMNS)}  # 99 has no laps (e.g. DNS)
+    data = load_race(2023, 5, Settings(), get_session=lambda *a: FakeSession(car=car))
+    assert sorted(data.car_data) == ["VER"]
+
+
+def test_check_auth_false_skips_token_check(
+    monkeypatch: pytest.MonkeyPatch, cache_calls: list[tuple[str, Any]]
+) -> None:
+    monkeypatch.setattr(fl.f1account, "get_token", _no_auth)  # would raise if called
+    data = load_race(2023, 5, Settings(), check_auth=False, get_session=lambda *a: FakeSession())
+    assert len(data.laps) == 2
+
+
+def test_rate_limit_is_wrapped(cache_calls: list[tuple[str, Any]], token_ok: list[str]) -> None:
+    from fastf1.exceptions import RateLimitExceededError
+
+    class Limited(FakeSession):
+        def load(self, **kwargs: Any) -> None:
+            raise RateLimitExceededError("any API: 500 calls/h")
+
+    with pytest.raises(fl.FastF1RateLimitError, match="500 calls/h"):
+        load_race(2023, 5, Settings(), get_session=lambda *a: Limited())
+
+
+def test_cache_dir_must_be_inside_data(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, cache_calls: list[tuple[str, Any]]
+) -> None:
+    monkeypatch.setenv("FASTF1_CACHE_DIR", str(tmp_path.parent / "ff1-outside"))
+    with pytest.raises(ValueError, match=r"inside \./data"):
+        fl.configure_cache(Settings())
+    assert cache_calls == []  # FastF1 was never pointed at the outside dir

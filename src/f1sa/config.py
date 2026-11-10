@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     jolpica_cache_dir: Path = Path("data/cache/jolpica")
     jolpica_user_agent: str = DEFAULT_USER_AGENT
     fastf1_cache_dir: Path = Path("data/cache/fastf1")
+    hdfs_httpfs_url: str = "http://localhost:14000"
+    hdfs_user: str = "hadoop"
+    manifest_path: Path = Path("data/manifest.json")
+    fastf1_max_races_per_hour: int = Field(default=20, ge=1, le=60)
     f1_username: SecretStr | None = None
     f1_password: SecretStr | None = None
 
@@ -102,6 +106,21 @@ class Settings(BaseSettings):
         if parsed.scheme not in _HTTP_SCHEMES or not parsed.netloc:
             raise ValueError(f"jolpica_base_url must be an http(s) URL, got {value!r}")
         return value.strip().rstrip("/")
+
+    @field_validator("hdfs_httpfs_url")
+    @classmethod
+    def _check_httpfs_url(cls, value: str) -> str:
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in _HTTP_SCHEMES or not parsed.netloc or parsed.path not in ("", "/"):
+            raise ValueError(f"hdfs_httpfs_url must be http(s)://host:port, got {value!r}")
+        return value.strip().rstrip("/")
+
+    @field_validator("hdfs_user")
+    @classmethod
+    def _check_hdfs_user(cls, value: str) -> str:
+        if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", value.strip()):
+            raise ValueError(f"invalid hdfs_user {value!r}")
+        return value.strip()
 
     @field_validator("jolpica_user_agent")
     @classmethod

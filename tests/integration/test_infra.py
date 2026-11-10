@@ -137,3 +137,9 @@ def test_hdfs_write_read() -> None:
         assert cat.stdout == payload
     finally:
         _compose("exec", "-T", "namenode", "hdfs", "dfs", "-rm", "-f", "-skipTrash", path)
+
+
+def test_httpfs_healthy_when_hdfs_profile_up() -> None:
+    if not _service_healthy("namenode"):
+        pytest.skip("hdfs profile not running (start it with `make up-full`)")
+    assert _service_healthy("httpfs"), "httpfs must be healthy whenever the hdfs profile is up"

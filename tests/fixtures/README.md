@@ -17,5 +17,9 @@
   happens in real data once retirements change the timings-per-lap count. It exercises page merging and the
   "server caps `limit`" path. Each timing value is real and unchanged.
 - `race_2023_5`: unmodified.
+- Added in Step 4A (recorded on 2026-11-10): the 2023 Azerbaijan GP (round 4, a sprint weekend).
+  `sprint_2023_4`, `results_2023_4`, `qualifying_2023_4` and `pitstops_2023_4` are trimmed to the same three
+  drivers. `laps_2023_4_p0` holds laps 1–2 for those drivers (6 timings, one page).
+  `drivers_2023` and `constructors_2023` are season-level and trimmed the same way.
 
 No other values were edited. Do not add data beyond what the tests need (see `DATA_LICENSES.md`).
