@@ -25,6 +25,7 @@ def test_defaults() -> None:
     assert s.hdfs_httpfs_url == "http://localhost:14000"
     assert s.hdfs_user == "hadoop"
     assert s.manifest_path == Path("data/manifest.json")
+    assert s.sample_dir == Path("data/sample")
     assert s.fastf1_max_races_per_hour == 20
     assert s.f1_username is None
     assert s.f1_password is None

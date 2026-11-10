@@ -1,0 +1,163 @@
+{
+ "version": 1,
+ "built_at": "2026-11-10T13:03:49.141805+00:00",
+ "f1sa_version": "0.1.0",
+ "seed": 4242,
+ "generator_version": "synthetic-v1",
+ "races": [
+  {
+   "season": 2023,
+   "round": 5
+  },
+  {
+   "season": 2024,
+   "round": 5
+  }
+ ],
+ "files": [
+  {
+   "path": "raw/jolpica/schedule/season=2023/schedule.json",
+   "bytes": 20169,
+   "sha256": "c5e58bf0f9c7a5aff1ec3fd52af5835d4ea4d2e0810898ed1c687cda844aaa05",
+   "rows": 22,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/drivers/season=2023/drivers.json",
+   "bytes": 6464,
+   "sha256": "9efa042f8b5d5c8182f7cb27a698af9f681598089c4f36c30c41b2fcaebf6d8f",
+   "rows": 22,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/constructors/season=2023/constructors.json",
+   "bytes": 1990,
+   "sha256": "0dd4eb2a15e243b492bfa4a105eb265bf9104cbaacb10cb8754ff3087a4a1acc",
+   "rows": 10,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/schedule/season=2024/schedule.json",
+   "bytes": 22006,
+   "sha256": "98caaa6f08de34cc0fbd3a376542cf087f8a8d06b8e53e9ce96684c2327aad81",
+   "rows": 24,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/drivers/season=2024/drivers.json",
+   "bytes": 7333,
+   "sha256": "49ee32862dbb4c2e2775dcf6502be83fd4120a0db30e0f7bc1983ece74e56562",
+   "rows": 25,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/constructors/season=2024/constructors.json",
+   "bytes": 1965,
+   "sha256": "9e5169ce9e42e712dcfba8e5552680ef735089b29830282f6e1cdcede0684a3f",
+   "rows": 10,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/results/season=2023/round=5/results.json",
+   "bytes": 21657,
+   "sha256": "a18c400cf9c5f8dfe15ffcf2f35f52a00455c82629a8b970a736c059375081ab",
+   "rows": 20,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/qualifying/season=2023/round=5/qualifying.json",
+   "bytes": 13909,
+   "sha256": "beaef5729c44be2cf740e7594aaec1ea4502f56641f8b0a8b79379874bc096b6",
+   "rows": 20,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/pitstops/season=2023/round=5/pitstops.json",
+   "bytes": 3820,
+   "sha256": "42bf7d9ec80fb95c13ffc54f466b6cf7660b3847b380013348828ce782ab2f2e",
+   "rows": 20,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/laps/season=2023/round=5/laps.json",
+   "bytes": 142402,
+   "sha256": "aed00a9a3d08b0dcd5d710a8084eab5d466d5e8f56c538accaeeb6946e8816e5",
+   "rows": 1138,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/synthetic/tyre_stints/season=2023/round=5/tyre_stints.parquet",
+   "bytes": 7672,
+   "sha256": "0aff4413bbc21e630e5f2b119db0f565e09c44ff6adf753e6d133d63f253059d",
+   "rows": 40,
+   "kind": "synthetic",
+   "origin": "generated"
+  },
+  {
+   "path": "raw/synthetic/lap_telemetry/season=2023/round=5/lap_telemetry.parquet",
+   "bytes": 38503,
+   "sha256": "c915d3e3a5739116d2cf5a07bca6f361be57a4c2dadd808162b3848b4695ad02",
+   "rows": 1138,
+   "kind": "synthetic",
+   "origin": "generated"
+  },
+  {
+   "path": "raw/jolpica/results/season=2024/round=5/results.json",
+   "bytes": 21180,
+   "sha256": "fac531cbd392af813b2fc13f5c7d1722c00dd377ae9ba3714597295b46681c60",
+   "rows": 20,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/qualifying/season=2024/round=5/qualifying.json",
+   "bytes": 13897,
+   "sha256": "59e95108f2d60da7ab1170ff33afee52aee7987ca38437d6af25d63915b43966",
+   "rows": 20,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/pitstops/season=2024/round=5/pitstops.json",
+   "bytes": 6808,
+   "sha256": "5f1db415c7606ee0d090a25af57b2cc0caebb943c5a2cdbafb04d187b5faa9a4",
+   "rows": 40,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/jolpica/laps/season=2024/round=5/laps.json",
+   "bytes": 129988,
+   "sha256": "4dd2172fb72d54b1ff2a4870e9ef9b6ecf3f8484eafe6cd3e906d0276a2fcf8b",
+   "rows": 1030,
+   "kind": "real",
+   "origin": "cache"
+  },
+  {
+   "path": "raw/synthetic/tyre_stints/season=2024/round=5/tyre_stints.parquet",
+   "bytes": 7785,
+   "sha256": "7dd3f21cc0300c3598bdca0e9ef63cd7141e5241b9a17b61e76b0765ef51b2f7",
+   "rows": 60,
+   "kind": "synthetic",
+   "origin": "generated"
+  },
+  {
+   "path": "raw/synthetic/lap_telemetry/season=2024/round=5/lap_telemetry.parquet",
+   "bytes": 39208,
+   "sha256": "7aff4ad1e913d13b4eb24d4f384c836e52b3c7532bae3b2b3b20cb4511a92a5e",
+   "rows": 1030,
+   "kind": "synthetic",
+   "origin": "generated"
+  }
+ ]
+}

@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 UV ?= uv
 
-.PHONY: help setup lint typecheck test test-int
+.PHONY: help setup lint typecheck test test-int sample-data
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -19,6 +19,9 @@ typecheck: ## mypy (strict) on src
 
 test: ## Unit tests
 	$(UV) run pytest tests/unit -q
+
+sample-data: ## Validate data/sample offline, or build it if missing (REBUILD=1 forces a rebuild)
+	$(UV) run python -m f1sa.ingest.sample_builder $(if $(REBUILD),--rebuild,)
 
 test-int: ## Integration tests (needs infra); exit 5 = none collected is OK
 	$(UV) run pytest tests/integration -q -m integration; rc=$$?; \

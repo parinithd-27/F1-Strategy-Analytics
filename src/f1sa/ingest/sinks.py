@@ -82,6 +82,8 @@ class RawSink(Protocol):
 
     def exists(self, name: str) -> bool: ...
 
+    def read_bytes(self, name: str) -> bytes: ...
+
     def cleanup_temp(self) -> int: ...
 
     def write_json(self, name: str, obj: Any, rows: int | None = None) -> WrittenFile: ...
@@ -149,6 +151,10 @@ class FileSink(_SinkHelpers):
 
     def exists(self, name: str) -> bool:
         return (self.directory / name).is_file()
+
+    def read_bytes(self, name: str) -> bytes:
+        """Read a file of this partition (FileNotFoundError if missing)."""
+        return (self.directory / name).read_bytes()
 
     def cleanup_temp(self) -> int:
         """Remove temp files left behind by a killed process. Returns how many were removed."""

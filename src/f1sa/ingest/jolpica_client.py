@@ -42,6 +42,7 @@ MAX_RETRY_AFTER_S = 600.0
 THROTTLE_BACKOFF_BASE_S = 5.0
 """First wait after a 429 without Retry-After (then 10, 20, 40, capped at 60 s)."""
 REQUEST_LOG_NAME = "requests.log"
+SQLITE_BUSY_TIMEOUT_MS = 30_000
 REQUEST_TIMEOUT_S = 30.0
 _MAX_PAGES = 1000
 
@@ -131,9 +132,12 @@ class JolpicaClient:
         self._backoff_base_s = backoff_base_s
         self._backoff_max_s = backoff_max_s
         self._jitter = jitter
+        backend_kwargs: dict[str, Any] = {}
         if cache_backend == "sqlite":
             settings.jolpica_cache_dir.mkdir(parents=True, exist_ok=True)
             cache_name = str(settings.jolpica_cache_dir / "http_cache")
+            # another ingest process may be writing the same cache: wait, don't fail
+            backend_kwargs["busy_timeout"] = SQLITE_BUSY_TIMEOUT_MS
         else:
             cache_name = "f1sa-jolpica"
         self.session = CachedSession(
@@ -142,6 +146,7 @@ class JolpicaClient:
             expire_after=NEVER_EXPIRE,
             allowable_codes=(200,),
             cache_control=False,
+            **backend_kwargs,
         )
         self.session.headers.update(
             {"User-Agent": settings.jolpica_user_agent, "Accept": "application/json"}

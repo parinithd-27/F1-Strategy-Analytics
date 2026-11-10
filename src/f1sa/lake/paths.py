@@ -20,10 +20,12 @@ JOLPICA_SEASON_TABLES = ("schedule", "drivers", "constructors")
 JOLPICA_RACE_TABLES = ("results", "qualifying", "pitstops", "laps", "sprint_results")
 FASTF1_RACE_TABLES = ("laps", "session")
 FASTF1_DRIVER_TABLES = ("telemetry", "position")
+SYNTHETIC_RACE_TABLES = ("tyre_stints", "lap_telemetry")
 
 RAW_TABLES: dict[str, frozenset[str]] = {
     "jolpica": frozenset(JOLPICA_SEASON_TABLES + JOLPICA_RACE_TABLES),
     "fastf1": frozenset(FASTF1_RACE_TABLES + FASTF1_DRIVER_TABLES),
+    "synthetic": frozenset(SYNTHETIC_RACE_TABLES),
 }
 _DRIVER = re.compile(r"^[A-Z0-9]{2,4}$")
 

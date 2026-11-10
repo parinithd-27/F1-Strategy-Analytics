@@ -17,6 +17,8 @@ The **code** in this repository is MIT-licensed (see [LICENSE](LICENSE)). The **
 - F1 data is used for private academic study only. Raw or cleaned F1 timing data is not redistributed.
 
 ## Sample data (`data/sample/`)
+- Licence and attribution: `data/sample/LICENSE`. Contents and generator: `data/sample/README.md` and
+  `docs/data_dictionary.md`.
 - The sample combines a subset of **Jolpica-F1** data (CC BY-NC-SA 4.0, with attribution) with **SYNTHETIC** tyre and telemetry values, so the pipeline can run without F1 TV credentials.
 - Every synthetic record is marked `is_synthetic=true`. Synthetic values are **not** real Formula 1 data and must not be presented as real.
 - No other data is committed to this repository.

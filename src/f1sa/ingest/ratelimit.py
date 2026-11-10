@@ -17,12 +17,14 @@ Clocks and sleep are injectable so all behaviour is testable without real waitin
 
 from __future__ import annotations
 
+import fcntl
 import logging
 import os
 import threading
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from f1sa.config import JOLPICA_HARD_LIMIT_PER_HOUR
@@ -35,6 +37,9 @@ Sleep = Callable[[float], None]
 JOLPICA_BURST_PER_S = 4
 """Jolpica's documented burst limit (requests per second)."""
 HOUR_S = 3600.0
+WINDOW_MARGIN_S = 0.05
+"""Safety margin on the shared per-second window, so requests exactly 1.000 s apart (or on
+another process's clock tick) are never counted as being in different seconds."""
 
 
 class TokenBucket:
@@ -82,12 +87,16 @@ class TokenBucket:
 
 
 class SlidingWindowLog:
-    """At most ``limit`` events in any rolling ``window_s``; optionally persisted to a file.
+    """At most ``limit`` events in any rolling ``window_s``; optionally shared through a file.
 
-    The file holds one wall-clock timestamp per line, appended per event. On load, entries
-    older than the window and unparseable lines (e.g. a torn last line after a kill) are dropped,
-    and the file is compacted atomically. Not thread-safe on its own.
+    Persisted mode keeps one wall-clock timestamp per line in ``log_path``. Every check and every
+    append happens under an exclusive ``flock`` (see :meth:`locked`) after re-reading the file, so
+    several processes using the same log share one budget. Expired and unparseable lines (e.g. a
+    torn last line after a kill) are ignored, and the file is compacted when it grows.
+    Not thread-safe on its own; :class:`DualRateLimiter` adds a thread lock.
     """
+
+    _COMPACT_AFTER = 2000
 
     def __init__(
         self,
@@ -105,27 +114,53 @@ class SlidingWindowLog:
         self._clock = clock
         self._events: deque[float] = deque()
         self._log_path = log_path
+        self._lock_path = None if log_path is None else log_path.with_name(log_path.name + ".lock")
+        self._lines_in_file = 0
         if log_path is not None:
-            self._load(log_path)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.locked():
+                self._compact()
+            if self._events:
+                logger.info("rate limiter: %d request(s) already used this hour", len(self._events))
 
-    def _load(self, path: Path) -> None:
+    @contextmanager
+    def locked(self) -> Iterator[None]:
+        """Exclusive cross-process lock around a check-and-record (no-op when not persisted)."""
+        if self._lock_path is None:
+            yield
+            return
+        with open(self._lock_path, "a") as fh:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            try:
+                self._reload()
+                yield
+            finally:
+                fcntl.flock(fh, fcntl.LOCK_UN)
+
+    def _reload(self) -> None:
+        assert self._log_path is not None
         now = self._clock()
-        if path.exists():
-            kept: list[float] = []
-            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        kept: list[float] = []
+        lines = 0
+        if self._log_path.exists():
+            for line in self._log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                lines += 1
                 try:
                     ts = float(line)
                 except ValueError:
                     continue
                 if now - self.window_s < ts <= now + 1.0:
                     kept.append(ts)
-            self._events.extend(sorted(kept))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + ".tmp")
+        self._events = deque(sorted(kept))
+        self._lines_in_file = lines
+
+    def _compact(self) -> None:
+        """Rewrite the file with only in-window entries (caller holds the lock)."""
+        assert self._log_path is not None
+        tmp = self._log_path.with_name(self._log_path.name + ".tmp")
         tmp.write_text("".join(f"{ts:.3f}\n" for ts in self._events), encoding="utf-8")
-        os.replace(tmp, path)
-        if self._events:
-            logger.info("rate limiter: %d request(s) already used this hour", len(self._events))
+        os.replace(tmp, self._log_path)
+        self._lines_in_file = len(self._events)
 
     def _expire(self) -> None:
         cutoff = self._clock() - self.window_s
@@ -134,9 +169,15 @@ class SlidingWindowLog:
 
     @property
     def used(self) -> int:
-        """Events inside the current window."""
-        self._expire()
-        return len(self._events)
+        """Events inside the current window (all processes, when persisted)."""
+        with self.locked():
+            self._expire()
+            return len(self._events)
+
+    def recent(self, seconds: float) -> list[float]:
+        """Event timestamps within the last ``seconds`` (caller should hold :meth:`locked`)."""
+        cutoff = self._clock() - seconds
+        return [ts for ts in self._events if ts > cutoff]
 
     def time_until_available(self) -> float:
         self._expire()
@@ -145,15 +186,25 @@ class SlidingWindowLog:
         return max(0.0, self._events[0] + self.window_s - self._clock())
 
     def record(self) -> None:
+        """Record one event (caller should hold :meth:`locked` when persisted)."""
         now = self._clock()
         self._events.append(now)
         if self._log_path is not None:
             with open(self._log_path, "a", encoding="utf-8") as fh:
                 fh.write(f"{now:.3f}\n")
+            self._lines_in_file += 1
+            if self._lines_in_file > self._COMPACT_AFTER:
+                self._expire()
+                self._compact()
 
 
 class DualRateLimiter:
-    """Per-second + per-hour limiter shared safely between threads (see module docstring)."""
+    """Per-second + per-hour limiter shared safely between threads (see module docstring).
+
+    With ``log_path`` set, both limits also hold across processes sharing that log: before each
+    admission the log is re-read under a file lock, and at most ``burst_per_s`` logged requests
+    may fall inside the last second.
+    """
 
     def __init__(
         self,
@@ -176,46 +227,50 @@ class DualRateLimiter:
         self.burst_per_s = burst_per_s
         self.per_hour = per_hour
         self.burst = TokenBucket(1, burst_per_s - 1, clock)
-        # the persisted hourly log needs wall-clock time (monotonic clocks reset on reboot)
-        hourly_clock = wall_clock or (time.time if log_path is not None else clock)
-        self.hourly = SlidingWindowLog(per_hour, HOUR_S, hourly_clock, log_path)
+        # the persisted log needs wall-clock time (monotonic clocks differ between processes)
+        self._hourly_clock = wall_clock or (time.time if log_path is not None else clock)
+        self.hourly = SlidingWindowLog(per_hour, HOUR_S, self._hourly_clock, log_path)
 
     @property
     def available_this_hour(self) -> int:
         with self._lock:
             return self.per_hour - self.hourly.used
 
+    def _wait_locked(self) -> float:
+        """Seconds to wait; the caller holds the thread lock and ``hourly.locked()``."""
+        wait = max(self.burst.time_until_available(), self.hourly.time_until_available())
+        last_second = self.hourly.recent(1.0 + WINDOW_MARGIN_S)
+        if len(last_second) >= self.burst_per_s:  # other processes' requests count too
+            oldest_counted = last_second[-self.burst_per_s]
+            wait = max(wait, oldest_counted + 1.0 + WINDOW_MARGIN_S - self._hourly_clock())
+        return wait
+
     def wait_time(self) -> float:
         """Seconds until one request would be allowed (0 if allowed now)."""
-        with self._lock:
-            return self._wait_time_locked()
+        with self._lock, self.hourly.locked():
+            return self._wait_locked()
 
-    def _wait_time_locked(self) -> float:
-        return max(self.burst.time_until_available(), self.hourly.time_until_available())
-
-    def _take_locked(self) -> None:
-        self.burst.take()
-        self.hourly.record()
+    def _admit(self) -> float:
+        with self._lock, self.hourly.locked():
+            wait = self._wait_locked()
+            if wait <= 0:
+                self.burst.take()
+                self.hourly.record()
+            return wait
 
     def try_acquire(self) -> bool:
         """Admit one request if possible, without blocking."""
-        with self._lock:
-            if self._wait_time_locked() > 0:
-                return False
-            self._take_locked()
-            return True
+        return self._admit() <= 0
 
     def acquire(self) -> float:
         """Block until a request is allowed, admit it, and return the seconds spent waiting."""
         waited = 0.0
         while True:
-            with self._lock:
-                wait = self._wait_time_locked()
-                if wait <= 0:
-                    self._take_locked()
-                    return waited
+            wait = self._admit()
+            if wait <= 0:
+                return waited
             if wait > 60:
                 logger.warning("hourly Jolpica budget used up; waiting %.0fs", wait)
-            # sleep outside the lock so other threads can make progress / observe state
+            # sleep outside the locks so other threads/processes can make progress
             self._sleep(wait)
             waited += wait

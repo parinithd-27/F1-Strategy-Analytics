@@ -177,3 +177,16 @@ same guarantees:
 - Empty laps raise `FastF1AuthError`. Missing telemetry or columns raise `FastF1DataError`.
 - Races are loaded and written one at a time, one driver partition after another. The session is dropped and
   `gc.collect()` runs before the next race, so at most one race is in memory.
+
+## Sample mode (`data/sample/`, Step 4B)
+- `make sample-data` validates the bundle **offline**, or builds it if it is missing (`REBUILD=1` to force).
+- The bundle is a mini raw lake with the raw-zone layout: real Jolpica pages for 2023 R5 and 2024 R5 plus
+  **SYNTHETIC** `raw/synthetic/{tyre_stints,lap_telemetry}` (`is_synthetic=true`, seeded, deterministic). It contains
+  no FastF1 data and is under 5 MB (about 0.5 MB). See `docs/data_dictionary.md`.
+- Building reads each page from the raw zone, then the HTTP cache, then the network. The network path goes through
+  the shared, flock-protected rate-limit log, so it is safe next to a running bulk ingestion. The bundle is assembled
+  in `data/sample.tmp-<pid>`, validated, then swapped in.
+- Validation checks sha256 and size, schemas, `is_synthetic`, no FastF1, unlisted files and the size limit, and that
+  the synthetic tables regenerate byte-identically from the recorded seed.
+- Consumers (S5+) should copy `data/sample/raw` into a scratch lake (for example `DATA_LAKE_URI=file://./data/lake-sample`)
+  so derived output never lands in the tracked `data/sample/`.

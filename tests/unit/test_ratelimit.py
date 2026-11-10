@@ -201,3 +201,32 @@ def test_concurrent_acquire_respects_hourly_total(clock: FakeClock) -> None:
     for t in threads:
         t.join()
     assert count == 20 and limiter.available_this_hour == 0
+
+
+def test_two_processes_sharing_a_log_stay_within_both_limits(
+    clock: FakeClock, tmp_path: Path
+) -> None:
+    """Two limiters (as two processes) on one log never exceed the limits combined."""
+    log = tmp_path / "requests.log"
+    a = make(clock, per_hour=30, log_path=log)
+    b = make(clock, per_hour=30, log_path=log)
+    times: list[float] = []
+    for i in range(90):  # interleave the two "processes"
+        limiter = a if i % 2 == 0 else b
+        limiter.acquire()
+        times.append(clock.now)
+    assert max_in_window(times, 1.0) <= 4
+    assert max_in_window(times, 3600.0 - 1e-6) <= 30
+    assert len(log.read_text().splitlines()) <= 90  # one line per request (expired ones compacted)
+    assert a.available_this_hour == b.available_this_hour  # both see the shared state
+
+
+def test_shared_log_blocks_second_process_burst(clock: FakeClock, tmp_path: Path) -> None:
+    log = tmp_path / "requests.log"
+    a = make(clock, per_hour=100, log_path=log)
+    b = make(clock, per_hour=100, log_path=log)
+    for _ in range(4):  # a sends 4 within one second (its own bucket paces 1/3 s)
+        a.acquire()
+    assert clock.now - 1000.0 < 1.01
+    assert b.try_acquire() is False  # b sees a's 4 requests in the last second
+    assert b.wait_time() > 0

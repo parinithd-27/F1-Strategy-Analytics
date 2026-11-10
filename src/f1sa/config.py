@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     hdfs_httpfs_url: str = "http://localhost:14000"
     hdfs_user: str = "hadoop"
     manifest_path: Path = Path("data/manifest.json")
+    sample_dir: Path = Path("data/sample")
     fastf1_max_races_per_hour: int = Field(default=20, ge=1, le=60)
     f1_username: SecretStr | None = None
     f1_password: SecretStr | None = None

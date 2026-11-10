@@ -69,10 +69,33 @@
     A 429 without Retry-After now backs off 5–60 s.
   - Tests: 218 unit tests (manifest, kill-safety, HdfsSink against a fake HttpFS with the real quirks, planner and
     estimates, bulk runs incl. interrupt/abort/resume, window guarantees) and HttpFS integration tests from the host.
+- Step 4B (W2): synthetic generator and offline sample bundle
+  - `ingest/synthetic.py` (generator `synthetic-v1`):
+    - Stints are inferred from real Jolpica laps and pit stops (DNF, stop on the last lap, duplicates, DNS handled).
+    - Synthetic dry compounds (≥ 2 per driver who stopped) and starting tyre age.
+    - Synthetic per-lap telemetry aggregates (mean/max speed, full throttle, brake, gear changes, RPM) scaled by real
+      lap pace.
+    - Seeded per driver with a SeedSequence, byte-deterministic; `is_synthetic=true` on every row; no FastF1.
+  - `ingest/sample_builder.py` + `make sample-data` (`REBUILD=1`):
+    - Builds `data/sample/` for 2023 R5 and 2024 R5 in the raw-zone layout. Pages come from the raw zone, then the
+      cache, then the network. The bundle is built in a temp dir, validated, then swapped in atomically.
+    - When the bundle exists it is validated offline: sha256 and size, schemas, `is_synthetic`, no FastF1 data, no
+      unlisted files, < 5 MB, and byte-identical regeneration of the synthetic tables.
+    - It generates `data/sample/LICENSE` (CC BY-NC-SA 4.0, attribution and link to Jolpica-F1) and `README.md`
+      (real vs synthetic, how built, smoke-test-only warning).
+  - Verified: first build gave 18 data files and 502 KiB (2023 R5 and the schedules from cache; 18 network requests for
+    2024 R5 and the season tables). The rebuild and offline validation used 0 network.
+  - Rate limiter is now cross-process: before every admission the shared `requests.log` is re-read under `flock`, the
+    hourly and per-second (≤ 4 in any second, 50 ms margin) checks count every process, and SQLite gets
+    `busy_timeout`. The new two-process test found and fixed a window-boundary bug (6 in one closed second).
+  - `docs/data_dictionary.md` (new): bundle tables, every synthetic assumption, and the NOT-real / smoke-test-only warning.
+  - Tests: 251 unit tests (generator edge cases and determinism, builder order, offline validation, tamper/FastF1/size
+    rejection, atomic swap, gitignore, two-process limiter).
 ## Next
 - User: full pass `f1sa-ingest season-range --seasons 2021-2025 --sources jolpica,fastf1` (dry-run first). Jolpica
   is about 1,750 requests (about 4 h at 450/h). FastF1 needs the F1 TV login and about 115 races at 20/h (about 6 h).
-- Step 4B / 5: clean Parquet zone (`etl/clean.py`, `lake/schemas.py`) reading the table-first raw zone.
+- Step 5: clean Parquet zone (`etl/clean.py`, `lake/schemas.py`) reading the table-first raw zone. Sample mode should
+  copy `data/sample/raw` to a scratch lake (`data/lake-sample`) so derived output never lands in tracked `data/sample/`.
 ## Known issues
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
@@ -89,6 +112,11 @@
   2021 run).
 - FastF1 request counts and load time per race in the estimate are approximations (12 calls, about 60 s). The
   credentialed FastF1 path has still not been run (it needs the user's login).
+- Synthetic data is plausible in distribution, not per race (e.g. 2024 R5 VER has a 33-lap SOFT stint, a 5% draw).
+  Regeneration is byte-identical with the locked NumPy/pyarrow versions; a different version may change the bytes,
+  in which case `make sample-data REBUILD=1` rebuilds the bundle.
+- A bulk-ingest process started with the Step 4A code reads the shared request log only at start-up, so it does not
+  see requests made later by other processes. Processes started now share the budget fully.
 - mypy treats `fastf1` and `pandas` as untyped (`ignore_missing_imports`). `pandas-stubs` could be added later.
 - DATA_LICENSES.md statements (Jolpica limits, FastF1 F1 TV login requirement since Oct 2026) were taken
   as provided by the team and not re-verified online.
