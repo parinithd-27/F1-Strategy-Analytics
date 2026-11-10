@@ -1,1 +1,5 @@
 * text=auto eol=lf
+*.parquet binary
+*.png binary
+Makefile text eol=lf
+*.sh text eol=lf

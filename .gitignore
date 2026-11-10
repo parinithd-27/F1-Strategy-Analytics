@@ -20,3 +20,15 @@ derby.log
 models/
 node_modules/
 .next/
+# coverage / packaging
+.coverage
+htmlcov/
+coverage.xml
+dist/
+build/
+*.egg-info/
+# misc caches / logs
+data/cache/
+.ipynb_checkpoints/
+*.log
+spark-events/
