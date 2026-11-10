@@ -67,7 +67,53 @@ def test_build_writes_every_table_for_both_sample_races(built: dict[str, Any]) -
     assert result.counts["team_outlap_history"] == 20
     assert result.counts["telemetry_lap_features"] == 2168
     assert result.counts["outlap_features"] == 100
+    assert result.counts["undercut_attempts"] == 303  # 9 (G, k) combinations per attempt
     assert any("laps_enriched" in line and "season=2024/round=5" in line for line in built["lines"])
+    assert any("SMOKE TEST ONLY" in line for line in built["lines"])
+
+
+def test_sample_build_writes_smoke_test_counts(built: dict[str, Any]) -> None:
+    path = built["first"].counts_csv
+    assert path is not None and path.name == "undercut_counts_sample.csv"
+    assert built["second"].counts_csv is None  # --source lake writes no sample counts
+    lines = path.read_text().splitlines()
+    assert lines[0].startswith("# SMOKE TEST ONLY")
+    assert len(lines) == 2 + 2 * 9  # header line, column names, 2 seasons x 9 (G, k)
+    assert all(",true," in line for line in lines[2:])
+
+
+def test_results_dir_outside_results_is_refused(
+    spark: SparkSession, sample_clean_lake: SampleLake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_clean_lake.base)
+    with pytest.raises(BuildError, match="outside"):
+        run_build(
+            spark,
+            sample_clean_lake.settings(),
+            source="sample",
+            results_dir=sample_clean_lake.base / "elsewhere",
+        )
+    build.check_results_dir(Path("results"))
+    build.check_results_dir(Path("results") / "sub")
+
+
+def test_main_rejects_results_dir_outside_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DATA_LAKE_URI", f"file://{tmp_path}/data/lake")
+    monkeypatch.setenv("SAMPLE_DIR", str(SAMPLE_DIR))
+    assert build.main(["--source", "sample", "--results-dir", "/tmp"]) == 2
+    assert "outside" in capsys.readouterr().err
+
+
+def test_sparse_table_partitions_are_deleted(spark: SparkSession, tmp_path: Path) -> None:
+    root = f"file://{tmp_path}/features"
+    part = tmp_path / "features" / "undercut_attempts" / "season=2023" / "round=5"
+    part.mkdir(parents=True)
+    (part / "x.parquet").write_bytes(b"stale")
+    build.delete_partitions(spark, root, "undercut_attempts", [(2023, 5), (2024, 5)])
+    assert not part.exists()
 
 
 def test_rebuild_is_idempotent(built: dict[str, Any]) -> None:

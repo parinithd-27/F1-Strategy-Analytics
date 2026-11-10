@@ -97,11 +97,14 @@ One row per driver per completed lap, from Jolpica lap timings. Laps split acros
 **Jolpica-only track-status heuristic.** It is used when a race has no FastF1 laps.
 - Lap 1 and pit in/out laps are excluded.
 - `ratio` = median lap time of the field on that lap / the race's median lap time over all such laps.
-- `ratio > 1.25` means **neutralised** (SC or VSC; lap times alone cannot tell them apart, so `is_sc_lap` and
-  `is_vsc_lap` stay null).
+- `slow_share` = the share of those cars on that lap that are slower than 1.07 × the race median.
+- `ratio > 1.10` **or** `slow_share ≥ 0.5` means **neutralised** (SC or VSC; lap times alone cannot tell them apart,
+  so `is_sc_lap` and `is_vsc_lap` stay null). Step 8 tightened this from `ratio > 1.25`, which missed SC deployment
+  and restart laps whose field median stays low. Green laps in the sample peak at ratio 1.026 and share 0.056.
 - `ratio > 3.0` means **red flag** (the stoppage is included in that lap's time).
 - Lap 1 is never flagged, so incidents on lap 1 are missed.
-- Example: 2024 R5 (China) gives laps 22–24, 26 and 28–31.
+- Example: 2024 R5 (China) gives laps 21–31 (the old rule gave 22–24, 26 and 28–31).
+- FastF1 TrackStatus (codes 4 SC, 6/7 VSC, 5 red) replaces the heuristic per lap when FastF1 has that lap.
 
 ### pitstops
 `stop` (int, per driver), `lap` (int; the in-lap), `time_of_day` (string, local time of day), `duration_s` (double; pit
@@ -267,6 +270,32 @@ Definitions and parameters: `docs/label_definition.md`, "Out-lap pace features".
 | expected_outlap_source | string | driver_team, team, circuit, global or none |
 | expected_outlap_missing | bool | no history at any level |
 | driver_team_prior_s/_n, team_prior_s/_n, circuit_prior_s/_n, global_prior_s/_n | double/int | the mean and support at each level |
+| stop_duration_s | double | the in-lap's total Jolpica pit-lane time (Step 8) |
+| race_median_stop_s, race_median_outlap_delta_s | double | medians over the race's history-eligible stops: typical lane time, and the circuit's stop share on the out-lap |
+| stop_delta_s | double | **ORACLE**: stop_duration_s − race_median_stop_s (pit-crew execution; null for long stops) |
+| outlap_pace_residual_s | double | **ORACLE**: realised − race_median_outlap_delta_s − stop_delta_s (warm-up and tyre effect; eligible stops only) |
+| expected_outlap_pace_residual_s, expected_outlap_pace_source, expected_outlap_pace_missing | double/string/bool | **decision-time safe**: the shrunk prior of the residual. Source: driver_team (n ≥ 5), driver_team_shrunk, team, global or none |
+| pace_driver_team_n, pace_team_n, pace_global_n | int | support of the residual prior at each level |
+| expected_stop_delta_s, expected_stop_source, stop_team_n, stop_global_n | double/string/int | **decision-time safe**: the shrunk team prior of stop_delta_s (team, global or none), with its support |
+
+`expected_outlap_delta_s` is legacy: it is mostly stop time, so it is collinear with `pit_loss`. The model uses the
+decomposed priors. See `docs/label_definition.md`.
+
+### undercut_attempts (key: season, round, attacker_id, lap, gap_threshold_s, response_window_laps; `features/undercut.py`)
+There is one row per (race, attacker, attempt lap L, G, k). The definition, edge cases and leakage rules are in
+`docs/label_definition.md`, "Undercut attempts". A race with no attempt has no partition.
+
+| Column group | Columns | Use |
+|---|---|---|
+| identity | season, round, attacker_id, defender_id, lap (L, A's in-lap), decision_lap (L − 1), gap_threshold_s (G), response_window_laps (k), is_default_params (G = 3.5, k = 2) | |
+| label | detector_eligible (passed the shared rule at L − 1), outcome_category (success, fail, defender_stayed_out, excluded_<reason>), label (1/0 for success/fail, else null), exclusion_reasons (array, priority order) | target |
+| decision-time | gap_s, gap_ahead_change_1l/3l, attacker_position, attacker/defender tyre age and compound, tyre_age_delta_laps, compound_is_synthetic, attacker/defender pace_last3_s and deg_slope_s_per_lap and their deltas, laps_remaining, pit_loss_prior_s/_source, rejoin_traffic_cars, rejoin_nearest_ahead_s, attacker/defender expected out-lap pace residual (+ source), attacker/defender expected stop delta | model inputs (`undercut.DECISION_FEATURES`) |
+| legacy | attacker_expected_outlap_delta_s_legacy | S16 comparison only |
+| ORACLE | oracle_attacker_realised_outlap_delta_s, oracle_attacker_outlap_pace_residual_s, oracle_attacker_stop_delta_s | ORACLE ablation only |
+| outcome | outcome_defender_pit_lap, outcome_label_lap, outcome_attacker/defender_position, outcome_gap_s (cum_D − cum_A on the label lap), outcome_attacker/defender_stop_s, outcome_*_slow_stop, outcome_*_double_stack | analysis only, never features |
+
+`results/undercut_counts_sample.csv` (written by `--source sample`) contains **smoke-test counts only**: 2 races and
+synthetic compounds.
 
 ## Sample bundle (`data/sample/`)
 `make sample-data` validates the bundle offline, or builds it if it is missing (`REBUILD=1` forces a rebuild). It is a

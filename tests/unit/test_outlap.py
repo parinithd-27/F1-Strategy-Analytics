@@ -323,3 +323,188 @@ def test_sample_outlap_features(spark: SparkSession, sample_clean_lake: SampleLa
     assert tsunoda[0]["expected_outlap_source"] == "driver_team"  # alphatauri 2023 -> rb 2024
     with_out = [r for r in rows if r["stint"] > 1]
     assert len(with_out) == 60 and all(r["outlap"] is not None for r in with_out)
+    # one prior race: every 2024 driver_team level has n <= 2 stops, so it is shrunk to the team
+    pace = {r["expected_outlap_pace_source"] for r in rows if r["season"] == 2024}
+    assert pace <= {"driver_team_shrunk", "team"} and "driver_team_shrunk" in pace
+    assert {r["expected_outlap_pace_source"] for r in rows if r["season"] == 2023} == {"none"}
+    eligible = [r for r in with_out if r["outlap_pace_residual_s"] is not None]
+    assert eligible and all(r["stop_delta_s"] is not None for r in eligible)
+
+
+# ------------------------------------------------------------------ decomposition and shrinkage
+def _race_tables(
+    spark: SparkSession,
+    entries: dict[tuple[int, int], list[tuple[str, str, float, float]]],
+    scale_from: int | None = None,
+) -> dict[str, DataFrame]:
+    """8-lap races; every stop on lap 4 with the given duration; out-lap 5 = 90 + delta, so the
+    realised delta is ``delta``. ``scale_from`` (race_seq) multiplies deltas and durations x100
+    for that race and every later one."""
+    laps, stints, stops, results, races = [], [], [], [], []
+    for (season, round_), rows in sorted(entries.items()):
+        races.append(race(season, round_, f"c{round_}"))
+        f = 100.0 if scale_from is not None and season * 100 + round_ >= scale_from else 1.0
+        for pos, (driver, team, delta, duration) in enumerate(rows, start=1):
+            results.append(result(season, round_, driver, team, pos, 8))
+            for n in range(1, 9):
+                t = {1: 95.0, 4: 100.0, 5: 90.0 + delta * f}.get(n, 90.0)
+                laps.append(lap(season, round_, driver, n, pos, t, pit_in=n == 4, pit_out=n == 5))
+            stops.append(pitstop(season, round_, driver, 1, 4, duration * f))
+            stints += [
+                _stint(season, round_, driver, 1, 1, 4),
+                _stint(season, round_, driver, 2, 5, 8),
+            ]
+    return {
+        "laps": frame(spark, "laps", laps),
+        "stints": frame(spark, "stints", stints),
+        "pitstops": frame(spark, "pitstops", stops),
+        "results": frame(spark, "results", results),
+        "races": frame(spark, "races", races),
+    }
+
+
+def test_decomposition_residual_and_stop_delta(spark: SparkSession) -> None:
+    t = _race_tables(
+        spark,
+        {
+            (2023, 1): [
+                ("a", "ferrari", 15.0, 22.0),
+                ("b", "haas", 16.0, 22.5),
+                ("c", "rb", 20.0, 25.0),
+            ]
+        },
+    )
+    rows = {r["driver_id"]: r for r in _features(t).where(F.col("stint") == 2).collect()}
+    assert {r["race_median_outlap_delta_s"] for r in rows.values()} == {16.0}
+    assert {r["race_median_stop_s"] for r in rows.values()} == {22.5}
+    assert {d: r["stop_delta_s"] for d, r in rows.items()} == {"a": -0.5, "b": 0.0, "c": 2.5}
+    assert {d: r["outlap_pace_residual_s"] for d, r in rows.items()} == {
+        "a": -0.5,
+        "b": 0.0,
+        "c": 1.5,
+    }
+    assert rows["c"]["stop_duration_s"] == 25.0
+
+
+def test_decomposition_skips_long_and_neutralised_stops(spark: SparkSession) -> None:
+    t = _race_tables(
+        spark,
+        {
+            (2023, 1): [
+                ("a", "ferrari", 15.0, 22.0),
+                ("b", "haas", 60.0, 75.0),
+                ("c", "rb", 17.0, 23.0),
+            ]
+        },
+    )
+    rows = {r["driver_id"]: r for r in _features(t).where(F.col("stint") == 2).collect()}
+    assert rows["b"]["is_long_stop"] is True
+    assert rows["b"]["outlap_pace_residual_s"] is None and rows["b"]["stop_delta_s"] is None
+    assert rows["a"]["race_median_outlap_delta_s"] == 16.0  # median of a and c only
+    assert rows["a"]["race_median_stop_s"] == 22.5
+
+
+def _shrink_entries(
+    last_extra: bool = True,
+) -> dict[tuple[int, int], list[tuple[str, str, float, float]]]:
+    """Seven races. d1/d2 at ferrari, d3 at haas: deltas 18/16/13, durations 23/23/22, so the
+    race medians are 16 s and 23 s, residuals +2/0/-2 and stop deltas 0/0/-1. Race 7 adds a new
+    ferrari driver d4 and a new team (williams) driver d5."""
+    out = {}
+    for r in range(1, 8):
+        rows = [
+            ("d1", "ferrari", 18.0, 23.0),
+            ("d2", "ferrari", 16.0, 23.0),
+            ("d3", "haas", 13.0, 22.0),
+        ]
+        if r == 7 and last_extra:
+            rows += [("d4", "ferrari", 16.0, 23.0), ("d5", "williams", 16.0, 23.0)]
+        out[(2023, r)] = rows
+    return out
+
+
+def _shrink_expected(n: int) -> dict[str, tuple[float | None, str]]:
+    """Known answers for race n+1 (n prior races), from the shrinkage formulas."""
+    k = O.SHRINK_KAPPA
+    if n == 0:
+        return {"d1": (None, "none")}
+    g = 0.0  # residuals +2, 0, -2 per race
+    team = (2 * n * 1.0 + k * g) / (2 * n + k)
+    dt = (n * 2.0 + k * team) / (n + k)
+    src = "driver_team" if n >= O.DRIVER_TEAM_MIN_N else "driver_team_shrunk"
+    return {"d1": (round(dt, 3), src)}
+
+
+@pytest.mark.parametrize("n", [0, 1, 4, 5, 6])
+def test_shrinkage_values_and_sources(spark: SparkSession, n: int) -> None:
+    df = _features(_race_tables(spark, _shrink_entries()))
+    rows = {
+        r["driver_id"]: r
+        for r in df.where((F.col("round") == n + 1) & (F.col("stint") == 2)).collect()
+    }
+    value, source = _shrink_expected(n)["d1"]
+    d1 = rows["d1"]
+    assert (d1["expected_outlap_pace_residual_s"], d1["expected_outlap_pace_source"]) == (
+        value,
+        source,
+    )
+    assert d1["pace_driver_team_n"] == n and d1["pace_team_n"] == 2 * n
+    assert d1["expected_outlap_pace_missing"] is (n == 0)
+    if n == 0:
+        assert d1["expected_stop_delta_s"] is None and d1["expected_stop_source"] == "none"
+    else:  # ferrari stop deltas are 0; global mean is -1/3
+        k = O.SHRINK_KAPPA
+        stop = (0.0 + k * (-1.0 / 3.0)) / (2 * n + k)
+        assert d1["expected_stop_delta_s"] == round(stop, 3)
+        assert d1["expected_stop_source"] == "team"
+
+
+def test_shrinkage_new_driver_uses_team_and_new_team_uses_global(spark: SparkSession) -> None:
+    df = _features(_race_tables(spark, _shrink_entries()))
+    rows = {
+        r["driver_id"]: r for r in df.where((F.col("round") == 7) & (F.col("stint") == 2)).collect()
+    }
+    k, n = O.SHRINK_KAPPA, 6
+    team = (2 * n * 1.0) / (2 * n + k)
+    assert (
+        rows["d4"]["expected_outlap_pace_residual_s"],
+        rows["d4"]["expected_outlap_pace_source"],
+    ) == (
+        round(team, 3),
+        "team",
+    )
+    assert (
+        rows["d5"]["expected_outlap_pace_residual_s"],
+        rows["d5"]["expected_outlap_pace_source"],
+    ) == (
+        0.0,
+        "global",
+    )
+    assert rows["d5"]["expected_stop_source"] == "global"
+    assert rows["d5"]["expected_stop_delta_s"] == round(-1.0 / 3.0, 3)
+
+
+@pytest.mark.parametrize("target_round", [2, 5])
+def test_leakage_decomposed_priors_use_only_earlier_races(
+    spark: SparkSession, target_round: int
+) -> None:
+    """Scaling the target race and every later race x100 must not change the target's priors."""
+    cols = [
+        "expected_outlap_pace_residual_s",
+        "expected_outlap_pace_source",
+        "expected_stop_delta_s",
+        "expected_stop_source",
+    ]
+
+    def priors(scale: int | None) -> dict[tuple[int, str], tuple[Any, ...]]:
+        df = _features(_race_tables(spark, _shrink_entries(), scale_from=scale))
+        return {
+            (r["round"], r["driver_id"]): tuple(r[c] for c in cols)
+            for r in df.where(F.col("stint") == 2).collect()
+        }
+
+    base, scaled = priors(None), priors(2023 * 100 + target_round)
+    for key, value in base.items():
+        if key[0] <= target_round:
+            assert scaled[key] == value, key
+    assert any(scaled[k] != v for k, v in base.items() if k[0] > target_round + 1)

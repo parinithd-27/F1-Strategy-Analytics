@@ -9,6 +9,7 @@ end of lap L-1" (the undercut model, S8) must join lap L-1 rows. Columns are doc
 from __future__ import annotations
 
 from pyspark.sql.types import (
+    ArrayType,
     BooleanType,
     DataType,
     DoubleType,
@@ -219,10 +220,102 @@ OUTLAP_FEATURES = _s(
     ("circuit_prior_n", INT),
     ("global_prior_s", DBL),
     ("global_prior_n", INT),
+    ("stop_duration_s", DBL),
+    ("race_median_stop_s", DBL),
+    ("race_median_outlap_delta_s", DBL),
+    ("stop_delta_s", DBL),
+    ("outlap_pace_residual_s", DBL),
+    ("expected_outlap_pace_residual_s", DBL),
+    ("expected_outlap_pace_source", STR),
+    ("expected_outlap_pace_missing", BOOL),
+    ("pace_driver_team_n", INT),
+    ("pace_team_n", INT),
+    ("pace_global_n", INT),
+    ("expected_stop_delta_s", DBL),
+    ("expected_stop_source", STR),
+    ("stop_team_n", INT),
+    ("stop_global_n", INT),
 )
-"""One row per (race, driver, stint). ``realised_*`` is ORACLE-only (uses laps after the stop);
+"""One row per (race, driver, stint). ``realised_*``, ``stop_delta_s`` and
+``outlap_pace_residual_s`` are ORACLE-only (uses laps after the stop);
 ``expected_*`` comes from strictly earlier races and is decision-time safe
 (docs/label_definition.md)."""
+
+UNDERCUT_IDENTITY: tuple[tuple[str, DataType], ...] = (
+    ("season", INT),
+    ("round", INT),
+    ("attacker_id", STR),
+    ("defender_id", STR),
+    ("lap", INT),
+    ("decision_lap", INT),
+    ("gap_threshold_s", DBL),
+    ("response_window_laps", INT),
+    ("is_default_params", BOOL),
+    ("detector_eligible", BOOL),
+    ("outcome_category", STR),
+    ("label", INT),
+    ("exclusion_reasons", ArrayType(STR)),
+)
+UNDERCUT_OUTCOME: tuple[tuple[str, DataType], ...] = (
+    ("outcome_defender_pit_lap", INT),
+    ("outcome_label_lap", INT),
+    ("outcome_attacker_position", INT),
+    ("outcome_defender_position", INT),
+    ("outcome_gap_s", DBL),
+    ("outcome_attacker_stop_s", DBL),
+    ("outcome_defender_stop_s", DBL),
+    ("outcome_attacker_slow_stop", BOOL),
+    ("outcome_defender_slow_stop", BOOL),
+    ("outcome_attacker_double_stack", BOOL),
+    ("outcome_defender_double_stack", BOOL),
+)
+UNDERCUT_CORE = _s(
+    *UNDERCUT_IDENTITY,
+    ("gap_s", DBL),
+    ("rejoin_traffic_cars", INT),
+    ("rejoin_nearest_ahead_s", DBL),
+    *UNDERCUT_OUTCOME,
+)
+"""Internal: the rows ``features.undercut.evaluate_race`` emits (before the Spark joins)."""
+
+UNDERCUT_ATTEMPTS = _s(
+    *UNDERCUT_IDENTITY,
+    # decision-time features (features.undercut.DECISION_FEATURES): end of lap L-1 only
+    ("gap_s", DBL),
+    ("gap_ahead_change_1l", DBL),
+    ("gap_ahead_change_3l", DBL),
+    ("attacker_position", INT),
+    ("attacker_tyre_age_laps", INT),
+    ("defender_tyre_age_laps", INT),
+    ("tyre_age_delta_laps", INT),
+    ("attacker_compound", STR),
+    ("defender_compound", STR),
+    ("compound_is_synthetic", BOOL),
+    ("attacker_pace_last3_s", DBL),
+    ("defender_pace_last3_s", DBL),
+    ("pace_delta_last3_s", DBL),
+    ("attacker_deg_slope_s_per_lap", DBL),
+    ("defender_deg_slope_s_per_lap", DBL),
+    ("deg_slope_delta_s_per_lap", DBL),
+    ("laps_remaining", INT),
+    ("pit_loss_prior_s", DBL),
+    ("pit_loss_source", STR),
+    ("rejoin_traffic_cars", INT),
+    ("rejoin_nearest_ahead_s", DBL),
+    ("attacker_expected_outlap_pace_residual_s", DBL),
+    ("attacker_expected_outlap_pace_source", STR),
+    ("defender_expected_outlap_pace_residual_s", DBL),
+    ("defender_expected_outlap_pace_source", STR),
+    ("attacker_expected_stop_delta_s", DBL),
+    ("defender_expected_stop_delta_s", DBL),
+    # legacy (collinear with pit_loss), ORACLE and outcome columns: never model inputs
+    ("attacker_expected_outlap_delta_s_legacy", DBL),
+    ("oracle_attacker_realised_outlap_delta_s", DBL),
+    ("oracle_attacker_outlap_pace_residual_s", DBL),
+    ("oracle_attacker_stop_delta_s", DBL),
+    *UNDERCUT_OUTCOME,
+)
+"""One row per (race, attacker, attempt lap L, G, k). See docs/label_definition.md."""
 
 FEATURE_SCHEMAS: dict[str, StructType] = {
     "laps_enriched": LAPS_ENRICHED,
@@ -234,6 +327,7 @@ FEATURE_SCHEMAS: dict[str, StructType] = {
     "race_summary": RACE_SUMMARY,
     "telemetry_lap_features": TELEMETRY_LAP_FEATURES,
     "outlap_features": OUTLAP_FEATURES,
+    "undercut_attempts": UNDERCUT_ATTEMPTS,
 }
 FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "laps_enriched": ("season", "round", "driver_id", "lap"),
@@ -245,5 +339,13 @@ FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "race_summary": ("season", "round"),
     "telemetry_lap_features": ("season", "round", "driver_id", "lap"),
     "outlap_features": ("season", "round", "driver_id", "stint"),
+    "undercut_attempts": (
+        "season",
+        "round",
+        "attacker_id",
+        "lap",
+        "gap_threshold_s",
+        "response_window_laps",
+    ),
 }
 FEATURE_TABLES = tuple(FEATURE_SCHEMAS)

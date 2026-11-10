@@ -130,7 +130,8 @@ def test_track_status_heuristic(spark: SparkSession, run: Run) -> None:
         .distinct()
         .collect()
     }
-    assert {(2024, 22), (2024, 23), (2024, 24)} <= neutral  # 2024 Chinese GP safety car
+    # 2024 Chinese GP safety-car run, including the deployment and restart laps (21, 25, 27)
+    assert {(2024, lap) for lap in range(21, 32)} == neutral
     assert not any(season == 2023 for season, _ in neutral)
     assert laps.where(F.col("is_red_flag_lap")).count() == 0
     assert {r[0] for r in laps.select("track_status_source").distinct().collect()} == {"heuristic"}

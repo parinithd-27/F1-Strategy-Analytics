@@ -35,7 +35,7 @@ flowchart LR
 
 ## Rules
 - Storage root comes **only** from `f1sa.config.Settings.data_lake_uri`. No other module hardcodes paths or endpoints.
-- Features for lap *L* use only information available at the end of lap *L-1* (see `docs/label_definition.md`, added in S8).
+- Features for lap *L* use only information available at the end of lap *L-1* (see `docs/label_definition.md`).
 - Data is split chronologically: train on 2021–2023, validate and calibrate on 2024, test on 2025.
 
 ## Local infrastructure (Docker Compose)
@@ -353,3 +353,25 @@ race, so they are reporting tables and must never be joined as features of the s
   - The build fails when a clean-zone constructor id is in neither set, so a missed rename cannot silently split a
     team's history.
   - The list is verified on the sample only. It is to be checked against the full 2021–2025 data.
+
+## Undercut attempts and the real-time detector (`features/undercut_rule.py`, `undercut.py`, `streaming/detector.py`, Step 8)
+- **One rule, two callers.** `features/undercut_rule.py` is pure Python, with no Spark, pandas or py4j import (a
+  subprocess test enforces this). `candidate_pairs(LapSnapshot, RuleParams)` returns every candidate pair at the end of
+  a lap, with the reasons it fails:
+  - `streaming/detector.detect` keeps the eligible pairs (opportunities before any stop);
+  - `features/undercut.evaluate_race` keeps the pairs whose attacker pits on the next lap and evaluates the outcome
+    window.
+
+  `tests/unit/test_undercut.py` checks, on every scenario, lap and G, that the detector's flagged pairs (with A
+  pitting on L) equal the batch attempts that have `detector_eligible`.
+- **Distribution.** Per race, the batch job runs the pure-Python evaluation through the RDD API:
+  `keyBy(season, round)` on the lap rows and the pit stops, `cogroup`, then `flatMap(evaluate_race)`. A race is about
+  1,200 lap rows, so it fits in one task, and races are independent. Decision-time features are DataFrame windows over
+  `laps_enriched` (stint-to-date pace and degradation) plus joins to `pit_loss` and `outlap_features`, made at the
+  decision lap L − 1.
+- **Grid.** All 9 (G, k) combinations are emitted in one run. `undercut_attempts` is a sparse table, so a target race
+  with no attempts gets its stale partition deleted instead of being required.
+- **Smoke-test counts.** `--source sample` also writes `results/undercut_counts_sample.csv` (smoke test only).
+- **Out-lap plan size.** `outlap_features` reuses the realised out-lap table four times. A `localCheckpoint()` cuts
+  its lineage; without it the optimised plan grew to about 13 MB and the test JVM ran out of heap.
+

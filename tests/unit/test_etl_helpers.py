@@ -111,7 +111,7 @@ def test_heuristic_flags_neutralised_red_and_lap_one(spark: SparkSession) -> Non
             if lap == 1:
                 t = 150.0  # slow standing start: excluded, never flagged
             if lap in (5, 6):
-                t = 130.0  # safety car (> 1.25x)
+                t = 130.0  # safety car (> 1.10x)
             if lap == 8:
                 t = 400.0  # red-flag lap including the stoppage (> 3x)
             pit = d == "a" and lap == 3
@@ -124,6 +124,27 @@ def test_heuristic_flags_neutralised_red_and_lap_one(spark: SparkSession) -> Non
     assert all(
         r["is_sc_lap"] is None and r["track_status_source"] == "heuristic" for r in flags.values()
     )
+
+
+def test_heuristic_flags_sc_boundary_laps(spark: SparkSession) -> None:
+    """The tightened rule: ratio > 1.10 OR at least half the cars > 107% (Step 8). Boundary laps
+    like 2024 R5 laps 21, 25 and 27 (ratio 1.12-1.25) were missed by the old 1.25 threshold."""
+    slow: dict[int, dict[int, float]] = {
+        5: dict.fromkeys(range(6), 105.0),  # ratio 1.167: neutralised (old rule: missed)
+        7: {0: 97.0, 1: 97.0, 2: 97.0},  # median 93.5 (1.039) but share 0.5: neutralised
+        9: {0: 97.0, 1: 97.0},  # share 0.33, ratio 1.0: green
+        10: dict.fromkeys(range(6), 98.0),  # ratio 1.089 < 1.10 but share 1.0: neutralised
+        11: {0: 150.0},  # one spin, share 0.17: green
+    }
+    rows = []
+    for lap in range(1, 13):
+        for i in range(6):
+            t = slow.get(lap, {}).get(i, 90.0)
+            rows.append((2024, 5, f"d{i}", lap, i + 1, t, False, False))
+    flags = {r["lap"]: r for r in clean.heuristic_track_flags(_laps_df(spark, rows)).collect()}
+    assert [lap for lap, r in sorted(flags.items()) if r["is_neutralised_lap"]] == [5, 7, 10]
+    assert not any(r["is_red_flag_lap"] for r in flags.values())
+    assert clean.NEUTRALISED_RATIO == 1.10 and clean.NEUTRALISED_SHARE == 0.5
 
 
 def test_spark_stint_inference_matches_python_generator(spark: SparkSession) -> None:

@@ -102,14 +102,14 @@
     - Times are converted to seconds. Laps carry cumulative time, gap to leader and gap ahead at the timing line, and
       pit in/out flags.
     - SC/VSC/red-flag flags: exact from FastF1 TrackStatus, otherwise a documented Jolpica heuristic (neutralised
-      > 1.25× median, red flag > 3×).
+      > 1.25× median, red flag > 3×; tightened in Step 8).
     - Stints and telemetry prefer FastF1, then synthetic, then stints inferred from pit stops.
     - Writes `partitionBy(season, round)` with dynamic overwrite. File mode refuses to write outside ./data/lake.
   - `lake/quality.py`: hard checks (null/duplicate keys, races without results/laps, pit lap out of range) and soft
     checks (lap contiguity, positions 1..N, pit lap in laps, results.laps, unparseable times, unmapped FastF1 drivers,
     stint tiling). Writes the JSON report to `clean/_quality/report.json`.
   - Verified on data/sample: exact counts (laps 2168, pitstops 60, stints 100, …), quality PASS (28 checks, 0 hard,
-    0 soft), and identical checksums on rerun. 2024 R5 neutralised laps are 22–24, 26 and 28–31.
+    0 soft), and identical checksums on rerun. 2024 R5 neutralised laps are 22–24, 26 and 28–31 (21–31 since the Step 8 heuristic).
   - HDFS mode (your choice): `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://… python -m
     f1sa.etl.clean --source lake`. Built and documented, **not yet run**.
   - Tests:
@@ -174,6 +174,49 @@
     - 4-race ×100 leakage;
     - history exclusions;
     - lineage, including a check that the build fails on an unknown id.
+- Step 8 (W4): undercut attempts, labels and the real-time detector (#13, rule half of #20)
+  - Phase 1 review approved by the user. The definition, grid, edge cases and leakage rules are in
+    `docs/label_definition.md` ("Undercut attempts").
+  - `features/undercut_rule.py` (pure Python): `candidate_pairs(LapSnapshot, RuleParams)`. A is directly behind D,
+    0 < gap ≤ G, L ≥ 4, not teammates, no car crossing between them, neither lapped or in the pit cycle, and L − 1
+    green and not a restart lap. Failed conditions are returned as reasons.
+  - `streaming/detector.py`: `detect()` returns eligible pairs with tyre-age and last-lap deltas.
+    `snapshot_from_state()` validates the per-driver state (Redis-hash style, string values allowed). No Spark
+    import (subprocess test).
+  - `features/undercut.py`:
+    - `evaluate_race` runs per race through RDD `keyBy` → `cogroup` → `flatMap` and emits all 9 (G, k) rows;
+    - the label is A ahead on D's out-lap;
+    - `defender_stayed_out`, plus 16 `excluded_<reason>` categories in a fixed priority order, all reasons in
+      `exclusion_reasons`;
+    - slow-stop and double-stack flags;
+    - DataFrame decision features (stint pace and degradation slope, rejoin traffic, priors) in `DECISION_FEATURES`;
+      `oracle_*` and `outcome_*` columns are kept apart;
+    - `detector_eligible`.
+  - Track status: the Jolpica heuristic is tightened to ratio > 1.10 or ≥ 50% of cars > 107%. 2024 R5 laps 21, 25
+    and 27 are now caught (21–31 neutralised); 2023 R5 has none. FastF1 TrackStatus still overrides per lap.
+  - Out-lap review: 74% of the stop loss lands on the out-lap, so `expected_outlap_delta_s` is collinear with
+    `pit_loss` and is now marked legacy.
+    - New: `stop_delta_s`, `outlap_pace_residual_s` (ORACLE) and the shrunk priors `expected_outlap_pace_residual_s`
+      (driver_team → team → global, κ = 5, `driver_team` once n ≥ 5) and `expected_stop_delta_s` (team → global).
+    - `outlap_features` now `localCheckpoint()`s its realised table: the plan had grown to 13 MB and caused a JVM OOM.
+  - Build: `undercut_attempts` (sparse; stale partitions deleted) and `results/undercut_counts_sample.csv` (smoke-test
+    header and column; `--results-dir` must be under `./results`).
+  - Verified on the sample: `make etl-sample` gives quality PASS. Two `--source sample` builds both exit 0 with
+    identical checksums for all 10 tables (`undercut_attempts` 303 rows, checksum 4098e93c10d0dcdf) and an
+    identical CSV (sha256 387846fd…).
+    - Default params, smoke test only: 2023 had 1 success, 3 fail and 8 defender_stayed_out; 2024 had 1 success.
+  - Tests:
+    - six hand-built scenarios (success, fail, stays out, SC in window, attacker retires, lapped car between);
+    - ×100 leakage over 4 races;
+    - G monotonicity and k window;
+    - detector vs batch agreement on every scenario, lap and G;
+    - 15 pure-Python edge cases;
+    - rule and detector validation;
+    - shrinkage at n = 0/1/4/5/6 and decomposition leakage;
+    - the new heuristic boundary laps;
+    - build CSV and results-dir guard.
+
+    81 new tests, 453 unit tests in total (full suite: 453 passed in 225 s).
 ## Next
 - After the user's bulk HDFS ingest finishes: verify hdfs mode with
   `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://namenode:8020/f1 python -m f1sa.etl.clean --source lake`.
@@ -181,8 +224,10 @@
   already handles them (tested on hand-made FastF1 Parquet).
 - User: verify `features/lineage.py` against the full 2021–2025 constructor ids once the ingest finishes.
   `test_repo_clean_zone_has_only_known_constructors` and the build check fail on a missed rename.
-- Step 8: undercut label (`features/undercut.py`, extend `docs/label_definition.md`). It joins lap L−1 feature
-  rows and uses `expected_outlap_delta_s`, never `realised_outlap_delta_s`.
+- After the full ingest: run `--source lake` and produce the real undercut counts. Re-check the 74% out-lap
+  stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races.
+- Step 9: MLlib GBT on `undercut_attempts` (default G = 3.5, k = 2, `label` not null). Use `DECISION_FEATURES`
+  only. Train on 2021–2023, calibrate on 2024. The legacy and ORACLE columns are for S16 only.
 ## Known issues
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
@@ -220,8 +265,19 @@
 - Step 6 `team_outlap_history` (SQL, median, green-lap reference) and Step 7 `outlap_features` (mean, clean-lap
   stint reference) are two different out-lap histories by design. S8 should use `outlap_features`.
 - Lap timestamps are estimates (a fixed 180 s formation offset, error of about ±1 min). Lap-time distribution
-  medians still include slow laps that the neutralisation heuristic misses (2024 R5 max is 145 s).
+  medians can still include isolated slow laps (2024 R5 max is now 115 s, down from 145 s after the Step 8 heuristic).
 - The global prior window has no partition (single-partition sort). That is fine at about 100 races; check it in S10.
+- Step 8: the sample undercut counts are tiny and use synthetic compounds. They are smoke-test output, not findings.
+- Jolpica has no penalty data. A served 5/10 s penalty looks like a slow stop (flagged, kept), and a drive-through is
+  only suspected (a stop more than 2 s below the median, or an incident lap). FastF1 race-control messages are not
+  ingested yet.
+- Free tyre changes under a red flag are not Jolpica pit stops, so inferred and synthetic tyre ages are wrong after a
+  red flag. Those windows are excluded as neutralised.
+- `laps_remaining` uses the winner's lap count as the scheduled distance, which is wrong in shortened races.
+- The track-status heuristic still uses the whole race's median. That is fine because it is used only for
+  eligibility and exclusion, never as a feature, but it will flag laps in mixed wet/dry races.
+- The out-lap residual assumes stationary-time deviations land 1:1 on the out-lap (the line comes before the boxes).
+  This is not yet verified per circuit.
 
 ## Verify
 `uv sync --all-extras && make lint && make typecheck && make test && make up-full && make test-int && make down`
@@ -233,3 +289,7 @@ Features: `make etl-sample && uv run python -m f1sa.features.build --source samp
 `uv run pytest tests/unit/test_rdd_jobs.py tests/unit/test_df_jobs.py tests/unit/test_sql_jobs.py tests/unit/test_features_build.py -q`.
 
 Step 7: `uv run pytest tests/unit/test_telemetry_agg.py tests/unit/test_outlap.py tests/unit/test_lineage.py -q`.
+
+Step 8: `make etl-sample && uv run python -m f1sa.features.build --source sample` (twice: same checksums, same
+`sha256sum results/undercut_counts_sample.csv`), then
+`uv run pytest tests/unit/test_undercut.py tests/unit/test_detector.py tests/unit/test_outlap.py tests/unit/test_etl_helpers.py -q`.
