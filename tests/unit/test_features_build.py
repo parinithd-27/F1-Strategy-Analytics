@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -13,13 +15,14 @@ from pyspark.sql import functions as F
 
 from conftest import SAMPLE_DIR, SampleLake
 from f1sa.config import Settings
-from f1sa.etl.clean import CleanError
+from f1sa.etl.clean import CleanError, run_clean
 from f1sa.etl.io import load_clean, race_keys, resolve_feature_roots, restrict, sample_races
 from f1sa.features import build
 from f1sa.features import schemas as FS
 from f1sa.features.build import BuildError, read_feature, run_build
 from f1sa.features.gaps import gap_features, gaps_from_enriched
 from f1sa.features.stints import stint_features
+from f1sa.model.dataset import SplitSpec, build_dataset, load_attempts
 
 SAMPLE_RACES = [(2023, 5), (2024, 5)]
 
@@ -114,6 +117,149 @@ def test_sparse_table_partitions_are_deleted(spark: SparkSession, tmp_path: Path
     (part / "x.parquet").write_bytes(b"stale")
     build.delete_partitions(spark, root, "undercut_attempts", [(2023, 5), (2024, 5)])
     assert not part.exists()
+
+
+class _FakeFs:
+    def __init__(self, exists: bool) -> None:
+        self.present = exists
+        self.deleted: list[object] = []
+
+    def exists(self, _path: object) -> bool:
+        return self.present
+
+    def delete(self, path: object, _recursive: bool) -> bool:
+        self.deleted.append(path)
+        return True
+
+
+def _fake_spark(fs: _FakeFs) -> Any:
+    path = SimpleNamespace(getFileSystem=lambda _conf: fs)
+    hadoop = SimpleNamespace(fs=SimpleNamespace(Path=lambda _uri: path))
+    jvm = SimpleNamespace(org=SimpleNamespace(apache=SimpleNamespace(hadoop=hadoop)))
+    jsc = SimpleNamespace(hadoopConfiguration=lambda: object())
+    return SimpleNamespace(sparkContext=SimpleNamespace(_jvm=jvm, _jsc=jsc))
+
+
+def test_stale_hdfs_partition_is_an_error_and_nothing_is_deleted() -> None:
+    fs = _FakeFs(exists=True)
+    with pytest.raises(BuildError, match="refusing to delete"):
+        build.delete_partitions(
+            _fake_spark(fs), "hdfs://namenode:8020/f1/features", "undercut_attempts", [(2023, 5)]
+        )
+    assert fs.deleted == []
+
+
+def test_absent_hdfs_partition_is_fine() -> None:
+    fs = _FakeFs(exists=False)
+    build.delete_partitions(
+        _fake_spark(fs), "hdfs://namenode:8020/f1/features", "undercut_attempts", [(2023, 5)]
+    )
+    assert fs.deleted == []
+
+
+@pytest.fixture(scope="module")
+def jolpica_only(spark: SparkSession, tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    """The sample's real Jolpica pages with its synthetic tables removed, built like full mode."""
+    base = tmp_path_factory.mktemp("jolpica_only")
+    lake = base / "data" / "lake"
+    shutil.copytree(SAMPLE_DIR / "raw" / "jolpica", lake / "raw" / "jolpica")
+    settings = _settings(lake)
+    cwd = os.getcwd()
+    os.chdir(base)
+    try:
+        run_clean(spark, settings, source="lake", out=lambda _m: None)
+        result = run_build(spark, settings, source="lake", full_counts=True, out=lambda _m: None)
+    finally:
+        os.chdir(cwd)
+    return {"result": result, "lake": lake, "base": base}
+
+
+def test_jolpica_only_build_has_no_telemetry_or_compound(
+    spark: SparkSession, jolpica_only: dict[str, Any]
+) -> None:
+    result = jolpica_only["result"]
+    assert result.counts["telemetry_lap_features"] == 0
+    assert result.partitions["telemetry_lap_features"] == []
+    assert result.partitions["laps_enriched"] == SAMPLE_RACES
+    root = f"file://{jolpica_only['lake']}/features"
+    laps = read_feature(spark, root, "laps_enriched")
+    assert laps.where(F.col("compound").isNotNull()).isEmpty()
+    attempts = read_feature(spark, root, "undercut_attempts")
+    assert attempts.where(F.col("compound_is_synthetic")).isEmpty()
+
+
+def test_jolpica_only_full_counts_csv_is_marked_real(jolpica_only: dict[str, Any]) -> None:
+    path = jolpica_only["result"].counts_csv
+    assert path == (jolpica_only["base"] / "results" / build.FULL_COUNTS_FILE).resolve()
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith("source,smoke_test_only,")
+    assert all(line.startswith("full,false,") for line in lines[1:])
+
+
+def test_jolpica_only_real_feature_set_builds_sealed(
+    spark: SparkSession, jolpica_only: dict[str, Any]
+) -> None:
+    root = f"file://{jolpica_only['lake']}/features"
+    split_seasons = SplitSpec(train=(2023,), validation=(2024,), test=())
+    attempts = load_attempts(spark, root)
+    dataset = build_dataset(attempts, g=3.5, k=2, feature_set="real", split=split_seasons)
+    assert dataset.test.opened == 0
+    assert dataset.counts["train"]["n"] > 0
+
+
+def test_full_counts_refuse_synthetic_attempts(
+    sample_features_root: str, spark: SparkSession
+) -> None:
+    attempts = read_feature(spark, sample_features_root, "undercut_attempts")
+    with pytest.raises(BuildError, match="compound_is_synthetic"):
+        build.write_full_counts(attempts, Path("results"))
+    assert not (Path("results") / build.FULL_COUNTS_FILE).exists()
+
+
+def test_full_counts_need_source_lake(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    with pytest.raises(BuildError, match="--source lake"):
+        run_build(object(), _settings(tmp_path), source="sample", full_counts=True)  # type: ignore[arg-type]
+    assert build.main(["--source", "sample", "--full-counts"]) == 2
+    assert "--source lake" in capsys.readouterr().err
+
+
+def _laps_with_a_lap_one_only_race(spark: SparkSession) -> Any:
+    return frame(
+        spark,
+        "laps",
+        [
+            lap(2021, 11, "a", 1, 1, 90.0),
+            lap(2021, 11, "a", 2, 1, 88.0),
+            lap(2021, 12, "a", 1, 1, 300.0),  # Spa 2021: one lap behind the safety car
+            lap(2021, 13, "a", 1, 1, 90.0),
+            lap(2021, 13, "a", 2, 1, 120.0, neutralised=True),
+        ],
+    )
+
+
+def test_distribution_expects_only_races_with_green_laps(spark: SparkSession) -> None:
+    laps = _laps_with_a_lap_one_only_race(spark)
+    targets = {(2021, 11), (2021, 12), (2021, 13)}
+    got = build.expected_partitions("lap_time_distribution", laps, laps, targets)
+    assert got == [(2021, 11)]
+
+
+def test_distribution_check_is_limited_to_target_races(spark: SparkSession) -> None:
+    laps = _laps_with_a_lap_one_only_race(spark)
+    assert build.expected_partitions("lap_time_distribution", laps, laps, {(2021, 12)}) == []
+
+
+def test_dense_table_expects_every_target(spark: SparkSession) -> None:
+    laps = _laps_with_a_lap_one_only_race(spark)
+    targets = {(2021, 11), (2021, 12)}
+    assert build.expected_partitions("gaps", laps, laps, targets) == sorted(targets)
+
+
+def test_sparse_table_expects_what_it_computed(spark: SparkSession) -> None:
+    laps = _laps_with_a_lap_one_only_race(spark)
+    only = laps.where("round = 13")
+    got = build.expected_partitions("undercut_attempts", only, laps, {(2021, 11), (2021, 13)})
+    assert got == [(2021, 13)]
 
 
 def test_rebuild_is_idempotent(built: dict[str, Any]) -> None:

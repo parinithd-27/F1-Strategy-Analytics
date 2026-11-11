@@ -14,8 +14,8 @@ of every lineage. A clean-zone id that is in neither ``LINEAGE`` nor ``STABLE_CO
 reported by ``unknown_constructor_ids``. The feature build then fails, so a missed rename cannot
 silently split a team's history.
 
-Status: the map has been checked against the 2-race sample only. It is still **to be verified
-against the full 2021-2025 data** once the bulk ingest finishes.
+Status: verified against the full 2021-2025 clean zone in Step 8b. Every constructor id is in the
+map, and ``results/constructors_full.csv`` (``make report-full``) records them by season.
 """
 
 from __future__ import annotations

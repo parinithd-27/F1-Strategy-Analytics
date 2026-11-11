@@ -1,0 +1,2699 @@
+{
+ "constructors": [
+  {
+   "constructor_id": "alfa",
+   "season": 2021,
+   "status": "lineage"
+  },
+  {
+   "constructor_id": "alphatauri",
+   "season": 2021,
+   "status": "lineage"
+  },
+  {
+   "constructor_id": "alpine",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "aston_martin",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "ferrari",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "haas",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mclaren",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mercedes",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "red_bull",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "williams",
+   "season": 2021,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "alfa",
+   "season": 2022,
+   "status": "lineage"
+  },
+  {
+   "constructor_id": "alphatauri",
+   "season": 2022,
+   "status": "lineage"
+  },
+  {
+   "constructor_id": "alpine",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "aston_martin",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "ferrari",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "haas",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mclaren",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mercedes",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "red_bull",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "williams",
+   "season": 2022,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "alfa",
+   "season": 2023,
+   "status": "lineage"
+  },
+  {
+   "constructor_id": "alphatauri",
+   "season": 2023,
+   "status": "lineage"
+  },
+  {
+   "constructor_id": "alpine",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "aston_martin",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "ferrari",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "haas",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mclaren",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mercedes",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "red_bull",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "williams",
+   "season": 2023,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "alpine",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "aston_martin",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "ferrari",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "haas",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mclaren",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mercedes",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "rb",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "red_bull",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "sauber",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "williams",
+   "season": 2024,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "alpine",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "aston_martin",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "ferrari",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "haas",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mclaren",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "mercedes",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "rb",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "red_bull",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "sauber",
+   "season": 2025,
+   "status": "stable"
+  },
+  {
+   "constructor_id": "williams",
+   "season": 2025,
+   "status": "stable"
+  }
+ ],
+ "counts_by_season_at_default": [
+  {
+   "candidates": "399",
+   "gap_threshold_s": "3.5",
+   "labelled": "32",
+   "n_defender_stayed_out": "68",
+   "n_excluded_attacker_restop": "0",
+   "n_excluded_early_lap": "76",
+   "n_excluded_in_pit": "51",
+   "n_excluded_incident": "0",
+   "n_excluded_inconsistent_timing": "0",
+   "n_excluded_lapped": "50",
+   "n_excluded_long_stop": "0",
+   "n_excluded_missing_data": "0",
+   "n_excluded_neutralised": "71",
+   "n_excluded_penalty_suspected": "0",
+   "n_excluded_race_end": "1",
+   "n_excluded_retired": "0",
+   "n_excluded_same_lap_stop": "13",
+   "n_excluded_teammates": "32",
+   "n_excluded_traffic_between": "5",
+   "n_excluded_wet": "0",
+   "n_fail": "24",
+   "n_success": "8",
+   "response_window_laps": "2",
+   "season": "2021"
+  },
+  {
+   "candidates": "365",
+   "gap_threshold_s": "3.5",
+   "labelled": "32",
+   "n_defender_stayed_out": "94",
+   "n_excluded_attacker_restop": "0",
+   "n_excluded_early_lap": "21",
+   "n_excluded_in_pit": "30",
+   "n_excluded_incident": "0",
+   "n_excluded_inconsistent_timing": "1",
+   "n_excluded_lapped": "52",
+   "n_excluded_long_stop": "0",
+   "n_excluded_missing_data": "0",
+   "n_excluded_neutralised": "86",
+   "n_excluded_penalty_suspected": "1",
+   "n_excluded_race_end": "0",
+   "n_excluded_retired": "2",
+   "n_excluded_same_lap_stop": "18",
+   "n_excluded_teammates": "26",
+   "n_excluded_traffic_between": "2",
+   "n_excluded_wet": "0",
+   "n_fail": "21",
+   "n_success": "11",
+   "response_window_laps": "2",
+   "season": "2022"
+  },
+  {
+   "candidates": "452",
+   "gap_threshold_s": "3.5",
+   "labelled": "44",
+   "n_defender_stayed_out": "116",
+   "n_excluded_attacker_restop": "0",
+   "n_excluded_early_lap": "50",
+   "n_excluded_in_pit": "43",
+   "n_excluded_incident": "2",
+   "n_excluded_inconsistent_timing": "0",
+   "n_excluded_lapped": "39",
+   "n_excluded_long_stop": "0",
+   "n_excluded_missing_data": "0",
+   "n_excluded_neutralised": "95",
+   "n_excluded_penalty_suspected": "0",
+   "n_excluded_race_end": "2",
+   "n_excluded_retired": "3",
+   "n_excluded_same_lap_stop": "22",
+   "n_excluded_teammates": "36",
+   "n_excluded_traffic_between": "0",
+   "n_excluded_wet": "0",
+   "n_fail": "31",
+   "n_success": "13",
+   "response_window_laps": "2",
+   "season": "2023"
+  },
+  {
+   "candidates": "394",
+   "gap_threshold_s": "3.5",
+   "labelled": "50",
+   "n_defender_stayed_out": "121",
+   "n_excluded_attacker_restop": "0",
+   "n_excluded_early_lap": "3",
+   "n_excluded_in_pit": "37",
+   "n_excluded_incident": "3",
+   "n_excluded_inconsistent_timing": "0",
+   "n_excluded_lapped": "54",
+   "n_excluded_long_stop": "0",
+   "n_excluded_missing_data": "0",
+   "n_excluded_neutralised": "68",
+   "n_excluded_penalty_suspected": "2",
+   "n_excluded_race_end": "1",
+   "n_excluded_retired": "1",
+   "n_excluded_same_lap_stop": "28",
+   "n_excluded_teammates": "26",
+   "n_excluded_traffic_between": "0",
+   "n_excluded_wet": "0",
+   "n_fail": "33",
+   "n_success": "17",
+   "response_window_laps": "2",
+   "season": "2024"
+  },
+  {
+   "candidates": "477",
+   "gap_threshold_s": "3.5",
+   "labelled": "49",
+   "n_defender_stayed_out": "129",
+   "n_excluded_attacker_restop": "1",
+   "n_excluded_early_lap": "39",
+   "n_excluded_in_pit": "56",
+   "n_excluded_incident": "2",
+   "n_excluded_inconsistent_timing": "0",
+   "n_excluded_lapped": "61",
+   "n_excluded_long_stop": "0",
+   "n_excluded_missing_data": "0",
+   "n_excluded_neutralised": "82",
+   "n_excluded_penalty_suspected": "0",
+   "n_excluded_race_end": "0",
+   "n_excluded_retired": "1",
+   "n_excluded_same_lap_stop": "30",
+   "n_excluded_teammates": "27",
+   "n_excluded_traffic_between": "0",
+   "n_excluded_wet": "0",
+   "n_fail": "32",
+   "n_success": "17",
+   "response_window_laps": "2",
+   "season": "2025"
+  }
+ ],
+ "default_setting": {
+  "g": 3.5,
+  "k": 2
+ },
+ "feature_rows_by_season": [
+  {
+   "gaps": 23688,
+   "lap_time_distribution": 21,
+   "laps_enriched": 23688,
+   "outlap_features": 1223,
+   "pit_loss": 22,
+   "race_summary": 22,
+   "races": 22,
+   "results": 440,
+   "season": 2021,
+   "stints": 1223,
+   "team_outlap_history": 220,
+   "telemetry_lap_features": 0,
+   "undercut_attempts": 3543
+  },
+  {
+   "gaps": 23529,
+   "lap_time_distribution": 22,
+   "laps_enriched": 23529,
+   "outlap_features": 1232,
+   "pit_loss": 22,
+   "race_summary": 22,
+   "races": 22,
+   "results": 440,
+   "season": 2022,
+   "stints": 1232,
+   "team_outlap_history": 220,
+   "telemetry_lap_features": 0,
+   "undercut_attempts": 3321
+  },
+  {
+   "gaps": 24386,
+   "lap_time_distribution": 22,
+   "laps_enriched": 24386,
+   "outlap_features": 1342,
+   "pit_loss": 22,
+   "race_summary": 22,
+   "races": 22,
+   "results": 440,
+   "season": 2023,
+   "stints": 1342,
+   "team_outlap_history": 220,
+   "telemetry_lap_features": 0,
+   "undercut_attempts": 4074
+  },
+  {
+   "gaps": 26574,
+   "lap_time_distribution": 24,
+   "laps_enriched": 26574,
+   "outlap_features": 1289,
+   "pit_loss": 24,
+   "race_summary": 24,
+   "races": 24,
+   "results": 479,
+   "season": 2024,
+   "stints": 1289,
+   "team_outlap_history": 240,
+   "telemetry_lap_features": 0,
+   "undercut_attempts": 3582
+  },
+  {
+   "gaps": 26657,
+   "lap_time_distribution": 24,
+   "laps_enriched": 26657,
+   "outlap_features": 1285,
+   "pit_loss": 24,
+   "race_summary": 24,
+   "races": 24,
+   "results": 479,
+   "season": 2025,
+   "stints": 1285,
+   "team_outlap_history": 240,
+   "telemetry_lap_features": 0,
+   "undercut_attempts": 4257
+  }
+ ],
+ "labelled_by_split": {
+  "test": 49,
+  "train": 108,
+  "validation": 50
+ },
+ "neutralisation": {
+  "high": [
+   {
+    "neutralised_laps": 18,
+    "neutralised_share": 0.2857,
+    "race_laps": 63,
+    "red_flag_laps": 0,
+    "round": 4,
+    "season": 2022
+   },
+   {
+    "neutralised_laps": 27,
+    "neutralised_share": 0.4219,
+    "race_laps": 64,
+    "red_flag_laps": 0,
+    "round": 7,
+    "season": 2022
+   },
+   {
+    "neutralised_laps": 27,
+    "neutralised_share": 0.3462,
+    "race_laps": 78,
+    "red_flag_laps": 0,
+    "round": 6,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 22,
+    "neutralised_share": 0.3056,
+    "race_laps": 72,
+    "red_flag_laps": 0,
+    "round": 13,
+    "season": 2023
+   }
+  ],
+  "high_fence": 0.283,
+  "low": [],
+  "low_fence": -0.1698,
+  "median": 0.0522,
+  "q1": 0.0,
+  "q3": 0.1132,
+  "zero": [
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 78,
+    "red_flag_laps": 0,
+    "round": 5,
+    "season": 2021
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 53,
+    "red_flag_laps": 0,
+    "round": 7,
+    "season": 2021
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 71,
+    "red_flag_laps": 0,
+    "round": 8,
+    "season": 2021
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 70,
+    "red_flag_laps": 0,
+    "round": 11,
+    "season": 2021
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 1,
+    "red_flag_laps": 0,
+    "round": 12,
+    "season": 2021
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 72,
+    "red_flag_laps": 0,
+    "round": 13,
+    "season": 2021
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 58,
+    "red_flag_laps": 0,
+    "round": 16,
+    "season": 2021
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 66,
+    "red_flag_laps": 0,
+    "round": 6,
+    "season": 2022
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 58,
+    "red_flag_laps": 0,
+    "round": 22,
+    "season": 2022
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 57,
+    "red_flag_laps": 0,
+    "round": 5,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 66,
+    "red_flag_laps": 0,
+    "round": 7,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 70,
+    "red_flag_laps": 0,
+    "round": 11,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 44,
+    "red_flag_laps": 0,
+    "round": 12,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 51,
+    "red_flag_laps": 0,
+    "round": 14,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 56,
+    "red_flag_laps": 0,
+    "round": 18,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 58,
+    "red_flag_laps": 0,
+    "round": 22,
+    "season": 2023
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 57,
+    "red_flag_laps": 0,
+    "round": 1,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 63,
+    "red_flag_laps": 0,
+    "round": 7,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 66,
+    "red_flag_laps": 0,
+    "round": 10,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 70,
+    "red_flag_laps": 0,
+    "round": 13,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 44,
+    "red_flag_laps": 0,
+    "round": 14,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 72,
+    "red_flag_laps": 0,
+    "round": 15,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 53,
+    "red_flag_laps": 0,
+    "round": 16,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 62,
+    "red_flag_laps": 0,
+    "round": 18,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 50,
+    "red_flag_laps": 0,
+    "round": 22,
+    "season": 2024
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 56,
+    "red_flag_laps": 0,
+    "round": 2,
+    "season": 2025
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 53,
+    "red_flag_laps": 0,
+    "round": 3,
+    "season": 2025
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 70,
+    "red_flag_laps": 0,
+    "round": 10,
+    "season": 2025
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 70,
+    "red_flag_laps": 0,
+    "round": 14,
+    "season": 2025
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 53,
+    "red_flag_laps": 0,
+    "round": 16,
+    "season": 2025
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 62,
+    "red_flag_laps": 0,
+    "round": 18,
+    "season": 2025
+   },
+   {
+    "neutralised_laps": 0,
+    "neutralised_share": 0.0,
+    "race_laps": 58,
+    "red_flag_laps": 0,
+    "round": 24,
+    "season": 2025
+   }
+  ]
+ },
+ "provenance": [
+  {
+   "count": 0,
+   "detail": "stints not from jolpica_inferred",
+   "name": "stints_all_inferred",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "stints flagged is_synthetic (or null)",
+   "name": "stints_not_synthetic",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "stints with a compound",
+   "name": "stint_compound_null",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "enriched laps with a compound",
+   "name": "lap_compound_null",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "laps with a tyre age not flagged tyre_age_assumed_new",
+   "name": "tyre_age_flagged_assumed_new",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "rows in clean telemetry_lap",
+   "name": "clean_telemetry_absent",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "rows in telemetry_lap_features",
+   "name": "feature_telemetry_absent",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "attempts with a compound",
+   "name": "attempt_compound_null",
+   "passed": true
+  },
+  {
+   "count": 0,
+   "detail": "attempts flagged compound_is_synthetic (or null)",
+   "name": "attempts_not_synthetic",
+   "passed": true
+  }
+ ],
+ "quality": {
+  "checks": [
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:races",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:races",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:drivers",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:drivers",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:constructors",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:constructors",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:results",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:results",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:qualifying",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:qualifying",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:laps",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:laps",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:pitstops",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:pitstops",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:stints",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:stints",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:telemetry_lap",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:telemetry_lap",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "rows",
+    "examples": [],
+    "name": "null_keys:telemetry_raw",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "keys",
+    "examples": [],
+    "name": "duplicate_keys:telemetry_raw",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "races",
+    "examples": [],
+    "name": "races_have_results_and_laps",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "pit stops",
+    "examples": [],
+    "name": "pit_lap_in_range",
+    "passed": true,
+    "severity": "hard"
+   },
+   {
+    "count": 0,
+    "detail": "drivers",
+    "examples": [],
+    "name": "laps_contiguous_per_driver",
+    "passed": true,
+    "severity": "soft"
+   },
+   {
+    "count": 0,
+    "detail": "laps",
+    "examples": [],
+    "name": "positions_1_to_n_per_lap",
+    "passed": true,
+    "severity": "soft"
+   },
+   {
+    "count": 0,
+    "detail": "pit stops",
+    "examples": [],
+    "name": "pit_lap_exists_in_laps",
+    "passed": true,
+    "severity": "soft"
+   },
+   {
+    "count": 5,
+    "detail": "drivers",
+    "examples": [
+     {
+      "driver_id": "hulkenberg",
+      "laps": 0,
+      "last_lap": 30,
+      "round": 21,
+      "season": 2024
+     },
+     {
+      "driver_id": "hamilton",
+      "laps": 0,
+      "last_lap": 56,
+      "round": 2,
+      "season": 2025
+     },
+     {
+      "driver_id": "leclerc",
+      "laps": 0,
+      "last_lap": 56,
+      "round": 2,
+      "season": 2025
+     },
+     {
+      "driver_id": "hulkenberg",
+      "laps": 0,
+      "last_lap": 57,
+      "round": 4,
+      "season": 2025
+     },
+     {
+      "driver_id": "gasly",
+      "laps": 0,
+      "last_lap": 56,
+      "round": 2,
+      "season": 2025
+     }
+    ],
+    "name": "results_laps_match_lap_table",
+    "passed": false,
+    "severity": "soft"
+   },
+   {
+    "count": 0,
+    "detail": "drivers",
+    "examples": [],
+    "name": "stints_tile_laps",
+    "passed": true,
+    "severity": "soft"
+   },
+   {
+    "count": 0,
+    "detail": "lap times",
+    "examples": [],
+    "name": "time_strings_parse",
+    "passed": true,
+    "severity": "soft"
+   }
+  ],
+  "hard_failures": 0,
+  "soft_issues": 1,
+  "status": "PASS"
+ },
+ "races": [
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1026,
+   "pit_stops": 40,
+   "race_laps": 56,
+   "round": 1,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1124,
+   "pit_stops": 56,
+   "race_laps": 63,
+   "round": 2,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1244,
+   "pit_stops": 60,
+   "race_laps": 66,
+   "round": 3,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1246,
+   "pit_stops": 37,
+   "race_laps": 66,
+   "round": 4,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1418,
+   "pit_stops": 19,
+   "race_laps": 78,
+   "round": 5,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 941,
+   "pit_stops": 59,
+   "race_laps": 51,
+   "round": 6,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1051,
+   "pit_stops": 22,
+   "race_laps": 53,
+   "round": 7,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1296,
+   "pit_stops": 24,
+   "race_laps": 71,
+   "round": 8,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1336,
+   "pit_stops": 27,
+   "race_laps": 71,
+   "round": 9,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 969,
+   "pit_stops": 41,
+   "race_laps": 52,
+   "round": 10,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 16,
+   "lap_rows": 981,
+   "pit_stops": 52,
+   "race_laps": 70,
+   "round": 11,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 20,
+   "pit_stops": 0,
+   "race_laps": 1,
+   "round": 12,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1361,
+   "pit_stops": 29,
+   "race_laps": 72,
+   "round": 13,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 889,
+   "pit_stops": 22,
+   "race_laps": 53,
+   "round": 14,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1025,
+   "pit_stops": 39,
+   "race_laps": 53,
+   "round": 15,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1147,
+   "pit_stops": 20,
+   "race_laps": 58,
+   "round": 16,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1044,
+   "pit_stops": 41,
+   "race_laps": 56,
+   "round": 17,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1259,
+   "pit_stops": 25,
+   "race_laps": 71,
+   "round": 18,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1360,
+   "pit_stops": 79,
+   "race_laps": 71,
+   "round": 19,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1112,
+   "pit_stops": 30,
+   "race_laps": 57,
+   "round": 20,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 841,
+   "pit_stops": 47,
+   "race_laps": 50,
+   "round": 21,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 998,
+   "pit_stops": 29,
+   "race_laps": 58,
+   "round": 22,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1123,
+   "pit_stops": 58,
+   "race_laps": 57,
+   "round": 1,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 816,
+   "pit_stops": 19,
+   "race_laps": 50,
+   "round": 2,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1042,
+   "pit_stops": 22,
+   "race_laps": 58,
+   "round": 3,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1131,
+   "pit_stops": 25,
+   "race_laps": 63,
+   "round": 4,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1055,
+   "pit_stops": 25,
+   "race_laps": 57,
+   "round": 5,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1230,
+   "pit_stops": 53,
+   "race_laps": 66,
+   "round": 6,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1176,
+   "pit_stops": 53,
+   "race_laps": 64,
+   "round": 7,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 889,
+   "pit_stops": 27,
+   "race_laps": 51,
+   "round": 8,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1262,
+   "pit_stops": 32,
+   "race_laps": 70,
+   "round": 9,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 811,
+   "pit_stops": 47,
+   "race_laps": 52,
+   "round": 10,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1323,
+   "pit_stops": 42,
+   "race_laps": 71,
+   "round": 11,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 953,
+   "pit_stops": 25,
+   "race_laps": 53,
+   "round": 12,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1382,
+   "pit_stops": 42,
+   "race_laps": 70,
+   "round": 13,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 790,
+   "pit_stops": 38,
+   "race_laps": 44,
+   "round": 14,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1391,
+   "pit_stops": 72,
+   "race_laps": 72,
+   "round": 15,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 969,
+   "pit_stops": 28,
+   "race_laps": 53,
+   "round": 16,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 941,
+   "pit_stops": 21,
+   "race_laps": 59,
+   "round": 17,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 504,
+   "pit_stops": 42,
+   "race_laps": 28,
+   "round": 18,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 990,
+   "pit_stops": 36,
+   "race_laps": 56,
+   "round": 19,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1378,
+   "pit_stops": 23,
+   "race_laps": 71,
+   "round": 20,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1256,
+   "pit_stops": 44,
+   "race_laps": 71,
+   "round": 21,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1117,
+   "pit_stops": 31,
+   "race_laps": 58,
+   "round": 22,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1055,
+   "pit_stops": 50,
+   "race_laps": 57,
+   "round": 1,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 942,
+   "pit_stops": 24,
+   "race_laps": 50,
+   "round": 2,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 995,
+   "pit_stops": 65,
+   "race_laps": 58,
+   "round": 3,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 961,
+   "pit_stops": 23,
+   "race_laps": 51,
+   "round": 4,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1138,
+   "pit_stops": 20,
+   "race_laps": 57,
+   "round": 5,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1513,
+   "pit_stops": 37,
+   "race_laps": 78,
+   "round": 6,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1312,
+   "pit_stops": 43,
+   "race_laps": 66,
+   "round": 7,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1315,
+   "pit_stops": 33,
+   "race_laps": 70,
+   "round": 8,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1353,
+   "pit_stops": 63,
+   "race_laps": 71,
+   "round": 9,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 970,
+   "pit_stops": 24,
+   "race_laps": 52,
+   "round": 10,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1252,
+   "pit_stops": 36,
+   "race_laps": 70,
+   "round": 11,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 815,
+   "pit_stops": 37,
+   "race_laps": 44,
+   "round": 12,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1341,
+   "pit_stops": 101,
+   "race_laps": 72,
+   "round": 13,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 955,
+   "pit_stops": 25,
+   "race_laps": 51,
+   "round": 14,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1084,
+   "pit_stops": 25,
+   "race_laps": 62,
+   "round": 15,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 880,
+   "pit_stops": 43,
+   "race_laps": 53,
+   "round": 16,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1005,
+   "pit_stops": 54,
+   "race_laps": 57,
+   "round": 17,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1014,
+   "pit_stops": 36,
+   "race_laps": 56,
+   "round": 18,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1280,
+   "pit_stops": 38,
+   "race_laps": 71,
+   "round": 19,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 1106,
+   "pit_stops": 67,
+   "race_laps": 71,
+   "round": 20,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 943,
+   "pit_stops": 31,
+   "race_laps": 50,
+   "round": 21,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1157,
+   "pit_stops": 37,
+   "race_laps": 58,
+   "round": 22,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1129,
+   "pit_stops": 43,
+   "race_laps": 57,
+   "round": 1,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 900,
+   "pit_stops": 19,
+   "race_laps": 50,
+   "round": 2,
+   "season": 2024
+  },
+  {
+   "drivers": 19,
+   "drivers_with_laps": 19,
+   "lap_rows": 995,
+   "pit_stops": 36,
+   "race_laps": 58,
+   "round": 3,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 905,
+   "pit_stops": 54,
+   "race_laps": 53,
+   "round": 4,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1030,
+   "pit_stops": 40,
+   "race_laps": 56,
+   "round": 5,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1110,
+   "pit_stops": 28,
+   "race_laps": 57,
+   "round": 6,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1238,
+   "pit_stops": 27,
+   "race_laps": 63,
+   "round": 7,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 16,
+   "lap_rows": 1233,
+   "pit_stops": 23,
+   "race_laps": 78,
+   "round": 8,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1267,
+   "pit_stops": 42,
+   "race_laps": 70,
+   "round": 9,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1310,
+   "pit_stops": 42,
+   "race_laps": 66,
+   "round": 10,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1405,
+   "pit_stops": 45,
+   "race_laps": 71,
+   "round": 11,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 960,
+   "pit_stops": 45,
+   "race_laps": 52,
+   "round": 12,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1355,
+   "pit_stops": 40,
+   "race_laps": 70,
+   "round": 13,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 841,
+   "pit_stops": 34,
+   "race_laps": 44,
+   "round": 14,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1426,
+   "pit_stops": 26,
+   "race_laps": 72,
+   "round": 15,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1008,
+   "pit_stops": 30,
+   "race_laps": 53,
+   "round": 16,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 971,
+   "pit_stops": 22,
+   "race_laps": 51,
+   "round": 17,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1177,
+   "pit_stops": 23,
+   "race_laps": 62,
+   "round": 18,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1058,
+   "pit_stops": 23,
+   "race_laps": 56,
+   "round": 19,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1213,
+   "pit_stops": 21,
+   "race_laps": 71,
+   "round": 20,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1133,
+   "pit_stops": 35,
+   "race_laps": 69,
+   "round": 21,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 938,
+   "pit_stops": 39,
+   "race_laps": 50,
+   "round": 22,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 939,
+   "pit_stops": 60,
+   "race_laps": 57,
+   "round": 23,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1033,
+   "pit_stops": 28,
+   "race_laps": 58,
+   "round": 24,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 921,
+   "pit_stops": 82,
+   "race_laps": 57,
+   "round": 1,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1065,
+   "pit_stops": 25,
+   "race_laps": 56,
+   "round": 2,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1059,
+   "pit_stops": 21,
+   "race_laps": 53,
+   "round": 3,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1128,
+   "pit_stops": 42,
+   "race_laps": 57,
+   "round": 4,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 897,
+   "pit_stops": 19,
+   "race_laps": 50,
+   "round": 5,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1002,
+   "pit_stops": 18,
+   "race_laps": 57,
+   "round": 6,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1205,
+   "pit_stops": 37,
+   "race_laps": 63,
+   "round": 7,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1423,
+   "pit_stops": 40,
+   "race_laps": 78,
+   "round": 8,
+   "season": 2025
+  },
+  {
+   "drivers": 19,
+   "drivers_with_laps": 19,
+   "lap_rows": 1202,
+   "pit_stops": 54,
+   "race_laps": 66,
+   "round": 9,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1346,
+   "pit_stops": 82,
+   "race_laps": 70,
+   "round": 10,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 1124,
+   "pit_stops": 32,
+   "race_laps": 70,
+   "round": 11,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 822,
+   "pit_stops": 35,
+   "race_laps": 52,
+   "round": 12,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 879,
+   "pit_stops": 26,
+   "race_laps": 44,
+   "round": 13,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1368,
+   "pit_stops": 29,
+   "race_laps": 70,
+   "round": 14,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1362,
+   "pit_stops": 40,
+   "race_laps": 72,
+   "round": 15,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 974,
+   "pit_stops": 19,
+   "race_laps": 53,
+   "round": 16,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 967,
+   "pit_stops": 21,
+   "race_laps": 51,
+   "round": 17,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1229,
+   "pit_stops": 23,
+   "race_laps": 62,
+   "round": 18,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1066,
+   "pit_stops": 21,
+   "race_laps": 56,
+   "round": 19,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1262,
+   "pit_stops": 27,
+   "race_laps": 71,
+   "round": 20,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1249,
+   "pit_stops": 37,
+   "race_laps": 71,
+   "round": 21,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 885,
+   "pit_stops": 23,
+   "race_laps": 50,
+   "round": 22,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1066,
+   "pit_stops": 41,
+   "race_laps": 57,
+   "round": 23,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 1156,
+   "pit_stops": 27,
+   "race_laps": 58,
+   "round": 24,
+   "season": 2025
+  }
+ ],
+ "real_feature_set": {
+  "assembled_columns": 52,
+  "feature_set": "real",
+  "passed": true,
+  "rows_flagged": {
+   "attacker_telemetry_is_synthetic": 0,
+   "compound_is_synthetic": 0,
+   "defender_telemetry_is_synthetic": 0
+  },
+  "synthetic_capable_inputs": [],
+  "test_opened": 0,
+  "train": {
+   "n": 108,
+   "races": 47
+  },
+  "validation": {
+   "n": 50,
+   "races": 18
+  }
+ },
+ "seasons": [
+  {
+   "constructors": 220,
+   "drivers": 440,
+   "laps": 23688,
+   "pitstops": 798,
+   "qualifying": 439,
+   "races": 22,
+   "results": 440,
+   "season": 2021,
+   "stints": 1223,
+   "telemetry_lap": 0,
+   "telemetry_raw": 0
+  },
+  {
+   "constructors": 220,
+   "drivers": 440,
+   "laps": 23529,
+   "pitstops": 805,
+   "qualifying": 440,
+   "races": 22,
+   "results": 440,
+   "season": 2022,
+   "stints": 1232,
+   "telemetry_lap": 0,
+   "telemetry_raw": 0
+  },
+  {
+   "constructors": 220,
+   "drivers": 440,
+   "laps": 24386,
+   "pitstops": 912,
+   "qualifying": 440,
+   "races": 22,
+   "results": 440,
+   "season": 2023,
+   "stints": 1342,
+   "telemetry_lap": 0,
+   "telemetry_raw": 0
+  },
+  {
+   "constructors": 240,
+   "drivers": 479,
+   "laps": 26574,
+   "pitstops": 825,
+   "qualifying": 479,
+   "races": 24,
+   "results": 479,
+   "season": 2024,
+   "stints": 1289,
+   "telemetry_lap": 0,
+   "telemetry_raw": 0
+  },
+  {
+   "constructors": 240,
+   "drivers": 479,
+   "laps": 26657,
+   "pitstops": 821,
+   "qualifying": 479,
+   "races": 24,
+   "results": 479,
+   "season": 2025,
+   "stints": 1285,
+   "telemetry_lap": 0,
+   "telemetry_raw": 0
+  }
+ ],
+ "seasons_below_minimum": [
+  2021,
+  2022,
+  2023,
+  2025
+ ],
+ "unexpected_races": [
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1026,
+   "pit_stops": 40,
+   "race_laps": 56,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 1,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1124,
+   "pit_stops": 56,
+   "race_laps": 63,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 2,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1418,
+   "pit_stops": 19,
+   "race_laps": 78,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 5,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1336,
+   "pit_stops": 27,
+   "race_laps": 71,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 9,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 969,
+   "pit_stops": 41,
+   "race_laps": 52,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 10,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 16,
+   "lap_rows": 981,
+   "pit_stops": 52,
+   "race_laps": 70,
+   "reasons": [
+    "16 of 20 drivers have laps"
+   ],
+   "round": 11,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 20,
+   "lap_rows": 20,
+   "pit_stops": 0,
+   "race_laps": 1,
+   "reasons": [
+    "no pit stops"
+   ],
+   "round": 12,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 889,
+   "pit_stops": 22,
+   "race_laps": 53,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 14,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1259,
+   "pit_stops": 25,
+   "race_laps": 71,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 18,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 998,
+   "pit_stops": 29,
+   "race_laps": 58,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 22,
+   "season": 2021
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 816,
+   "pit_stops": 19,
+   "race_laps": 50,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 2,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1131,
+   "pit_stops": 25,
+   "race_laps": 63,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 4,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 811,
+   "pit_stops": 47,
+   "race_laps": 52,
+   "reasons": [
+    "17 of 20 drivers have laps"
+   ],
+   "round": 10,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 790,
+   "pit_stops": 38,
+   "race_laps": 44,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 14,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 504,
+   "pit_stops": 42,
+   "race_laps": 28,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 18,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1256,
+   "pit_stops": 44,
+   "race_laps": 71,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 21,
+   "season": 2022
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 995,
+   "pit_stops": 65,
+   "race_laps": 58,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 3,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 815,
+   "pit_stops": 37,
+   "race_laps": 44,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 12,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 955,
+   "pit_stops": 25,
+   "race_laps": 51,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 14,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1084,
+   "pit_stops": 25,
+   "race_laps": 62,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 15,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1005,
+   "pit_stops": 54,
+   "race_laps": 57,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 17,
+   "season": 2023
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 1106,
+   "pit_stops": 67,
+   "race_laps": 71,
+   "reasons": [
+    "17 of 20 drivers have laps"
+   ],
+   "round": 20,
+   "season": 2023
+  },
+  {
+   "drivers": 19,
+   "drivers_with_laps": 19,
+   "lap_rows": 995,
+   "pit_stops": 36,
+   "race_laps": 58,
+   "reasons": [
+    "19 drivers in results"
+   ],
+   "round": 3,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 905,
+   "pit_stops": 54,
+   "race_laps": 53,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 4,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 16,
+   "lap_rows": 1233,
+   "pit_stops": 23,
+   "race_laps": 78,
+   "reasons": [
+    "16 of 20 drivers have laps"
+   ],
+   "round": 8,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 960,
+   "pit_stops": 45,
+   "race_laps": 52,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 12,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1213,
+   "pit_stops": 21,
+   "race_laps": 71,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 20,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 1133,
+   "pit_stops": 35,
+   "race_laps": 69,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 21,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 939,
+   "pit_stops": 60,
+   "race_laps": 57,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 23,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1033,
+   "pit_stops": 28,
+   "race_laps": 58,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 24,
+   "season": 2024
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 921,
+   "pit_stops": 82,
+   "race_laps": 57,
+   "reasons": [
+    "17 of 20 drivers have laps"
+   ],
+   "round": 1,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 897,
+   "pit_stops": 19,
+   "race_laps": 50,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 5,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1002,
+   "pit_stops": 18,
+   "race_laps": 57,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 6,
+   "season": 2025
+  },
+  {
+   "drivers": 19,
+   "drivers_with_laps": 19,
+   "lap_rows": 1202,
+   "pit_stops": 54,
+   "race_laps": 66,
+   "reasons": [
+    "19 drivers in results"
+   ],
+   "round": 9,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 17,
+   "lap_rows": 1124,
+   "pit_stops": 32,
+   "race_laps": 70,
+   "reasons": [
+    "17 of 20 drivers have laps"
+   ],
+   "round": 11,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 18,
+   "lap_rows": 822,
+   "pit_stops": 35,
+   "race_laps": 52,
+   "reasons": [
+    "18 of 20 drivers have laps"
+   ],
+   "round": 12,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 974,
+   "pit_stops": 19,
+   "race_laps": 53,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 16,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 967,
+   "pit_stops": 21,
+   "race_laps": 51,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 17,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 1249,
+   "pit_stops": 37,
+   "race_laps": 71,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 21,
+   "season": 2025
+  },
+  {
+   "drivers": 20,
+   "drivers_with_laps": 19,
+   "lap_rows": 885,
+   "pit_stops": 23,
+   "race_laps": 50,
+   "reasons": [
+    "19 of 20 drivers have laps"
+   ],
+   "round": 22,
+   "season": 2025
+  }
+ ],
+ "unexpected_seasons": []
+}

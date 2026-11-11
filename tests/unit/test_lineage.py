@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import os
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from f1sa.features.build import BuildError, run_build
 from f1sa.features.pitloss import team_outlap_features
 
 REAL_CLEAN = REPO_ROOT / "data" / "lake" / "clean"
+FULL_CONSTRUCTORS = REPO_ROOT / "results" / "constructors_full.csv"
 
 
 def test_lineage_is_plain_data() -> None:
@@ -66,6 +68,28 @@ def test_repo_clean_zone_has_only_known_constructors(spark: SparkSession) -> Non
     is loaded, a missed rename fails here."""
     results = read_clean(spark, f"file://{REAL_CLEAN}", "results")
     assert lineage.unknown_constructor_ids(results) == []
+
+
+def unknown_in_csv(path: Path) -> list[str]:
+    """Constructor ids in a ``constructors_full.csv`` that the lineage map does not know."""
+    known = set(lineage.LINEAGE) | lineage.STABLE_CONSTRUCTORS
+    with path.open(newline="", encoding="utf-8") as fh:
+        return sorted({r["constructor_id"] for r in csv.DictReader(fh)} - known)
+
+
+@pytest.mark.skipif(not FULL_CONSTRUCTORS.is_file(), reason="make report-full has not been run")
+def test_full_data_has_only_known_constructors() -> None:
+    """The full clean zone lives in HDFS, so this reads the ids ``make report-full`` exported."""
+    assert unknown_in_csv(FULL_CONSTRUCTORS) == []
+
+
+def test_full_data_check_catches_a_missed_rename(tmp_path: Path) -> None:
+    path = tmp_path / "constructors_full.csv"
+    path.write_text(
+        "season,constructor_id,status\n2024,rb,stable\n2025,racing_bulls,unknown\n",
+        encoding="utf-8",
+    )
+    assert unknown_in_csv(path) == ["racing_bulls"]
 
 
 def test_sql_team_history_follows_lineage_on_sample(

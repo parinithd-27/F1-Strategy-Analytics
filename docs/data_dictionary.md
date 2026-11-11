@@ -405,3 +405,94 @@ Every file of a `sample` or `rehearsal` run has a `_sample` / `_rehearsal` suffi
 | `results/confusion_matrix*.png` | the selected calibrated model at 0.5 |
 | `results/feature_importance*.png` | GBT importance and permutation drop (top 15) |
 
+
+## Full-data quality notes (Step 8b)
+
+First run of clean and features on the complete 2021-2025 Jolpica raw zone, in HDFS mode
+(`make pipeline-full`). Source: Jolpica only, so there are no FastF1 or synthetic inputs. Two complete
+runs gave identical table checksums and byte-identical result files. Per-race detail is in
+`results/full_data_quality.json` and `results/neutralisation_by_race_full.csv`.
+
+### Coverage
+
+| Season | Races | Results | Laps | Pit stops | Stints | Undercut rows (all 9 G, k settings) |
+|---|---|---|---|---|---|---|
+| 2021 | 22 | 440 | 23,688 | 798 | 1,223 | 3,543 |
+| 2022 | 22 | 440 | 23,529 | 805 | 1,232 | 3,321 |
+| 2023 | 22 | 440 | 24,386 | 912 | 1,342 | 4,074 |
+| 2024 | 24 | 479 | 26,574 | 825 | 1,289 | 3,582 |
+| 2025 | 24 | 479 | 26,657 | 821 | 1,285 | 4,257 |
+
+Every season has the expected number of races. Races with unexpected counts:
+
+- **2021 R12** has one lap, no pit stops and no green laps, so it has no `lap_time_distribution` row. The
+  build expects exactly the races that have at least one green lap.
+- **2024 R3 and 2025 R9** list 19 drivers in results. The other 112 races list 20.
+- **37 further races** have one to four drivers in results with no lap rows (62 drivers overall). All 62 have `results.laps = 0`, with a status such as Retired, Collision or Did not
+  start, so these are retirements before completing a lap and not missing data.
+
+### Quality checks
+
+28 checks: 0 hard failures and 1 soft issue. `results_laps_match_lap_table` reports 5 drivers, all
+Disqualified: Jolpica gives them `laps = 0` although they have lap rows (2024 R21 hulkenberg; 2025 R2 gasly,
+hamilton and leclerc; 2025 R4 hulkenberg).
+
+### Constructors
+
+Each season has 10 ids. 2021-2023 use `alfa` and `alphatauri` (both in the lineage map); 2024-2025 use
+`sauber` and `rb`. `alpine`, `aston_martin`, `ferrari`, `haas`, `mclaren`, `mercedes`, `red_bull` and `williams`
+appear in every season. No id is unknown, so the lineage map is verified on the full data.
+
+### Provenance
+
+No stint or attempt is flagged synthetic, and every stint has `source = jolpica_inferred`. Compound is null
+everywhere, telemetry tables have 0 rows, and every lap with a tyre age has `tyre_age_assumed_new = true`. The
+`real` feature set builds (52 assembled columns) with no input that can be synthetic. The synthetic generator
+did not run.
+
+### Undercut attempt counts
+
+`results/undercut_counts_full.csv` has the full (G, k) grid. Labelled attempts at G = 3.5, k = 2:
+
+| Split | Seasons | Labelled |
+|---|---|---|
+| Train | 2021 (32), 2022 (32), 2023 (44) | 108 |
+| Validation | 2024 (50) | 50 |
+| Test | 2025 (49) | 49 |
+
+Seasons below 50 labelled attempts at this setting: 2021, 2022, 2023 and 2025.
+
+### Neutralisation rule on real races
+
+The Jolpica heuristic (ratio > 1.10 or at least 50% of cars > 107%) flagged 530 of 6,804 race laps (7.8%).
+
+| Season | Race laps | Neutralised | Share |
+|---|---|---|---|
+| 2021 | 1,297 | 74 | 5.7% |
+| 2022 | 1,294 | 159 | 12.3% |
+| 2023 | 1,325 | 105 | 7.9% |
+| 2024 | 1,444 | 86 | 6.0% |
+| 2025 | 1,444 | 106 | 7.3% |
+
+Per race, the median share is 5.2% (Q1 0%, Q3 11.3%). Using Tukey fences (above 28.3%), the unusually high races
+are 2022 R7 (27 of 64 laps, 42.2%), 2023 R6 (27 of 78, 34.6%), 2023 R13 (22 of 72, 30.6%) and 2022 R4 (18 of 63,
+28.6%). No race falls below the low fence, because it is negative. 32 races have no flagged laps; they are
+listed in `results/full_data_quality.json` under `neutralisation.zero`.
+
+**Known defect: red flags are not detected.** `is_red_flag_lap` is false on every lap of all 114 races. Jolpica
+records red-flag laps as pit laps for the whole field, and `heuristic_track_flags` removes pit in and out laps
+before computing the ratio, so those laps have no ratio and default to not flagged. 17 laps in 14 races have a
+field median more than 3 times the race median (5x to 34x), and on all 17 every car is marked as pitting. None is
+flagged as red flag or neutralised:
+
+2021 R2, R6, R10, R11, R21 (two laps); 2022 R7, R10, R18; 2023 R3 (three laps), R13, R19, R20; 2024 R4, R21.
+
+This also contradicts the statement in `docs/label_definition.md` that tyre changes under a red flag are not
+Jolpica pit stops. Effect on labels at G = 3.5, k = 2: 20 of the 207 labelled attempts are in these 14 races, and
+1 (2024) has its decision within 3 laps after an unflagged red-flag lap, inside the restart period the rule
+is meant to exclude. None has a red-flag lap within 5 laps after its decision. The rule has not been changed, and
+any change must not use 2025.
+
+A further 44 laps have an all-car median between 1.10 and 3 times the race median without being flagged. That
+measure includes pit laps, which raise the median on busy pit laps, so this is a weak signal and not a confirmed
+miss.

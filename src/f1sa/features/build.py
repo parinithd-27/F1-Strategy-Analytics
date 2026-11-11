@@ -9,7 +9,9 @@ partition overwrite. In file mode the job refuses to write outside ``./data/lake
 ``--source sample`` builds the races in the offline sample bundle, and every one of them must be
 in the clean zone (``make etl-sample``). ``--source lake`` builds every race in the clean zone.
 With ``--source sample`` the build also writes the undercut smoke-test counts to
-``{--results-dir}/undercut_counts_sample.csv`` (default ``results/``).
+``{--results-dir}/undercut_counts_sample.csv`` (default ``results/``). ``--source lake
+--full-counts`` writes the real counts to ``{--results-dir}/undercut_counts_full.csv`` and refuses
+if any attempt is flagged synthetic (``make features-full``).
 Prior-race history (pit loss, team out-lap) is always computed over **all** clean races and then
 filtered to the target races, so a race's history includes every earlier race the lake holds and
 never the race itself or a later one.
@@ -26,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
 
 from f1sa.config import Settings, get_settings
 from f1sa.etl.clean import CleanError, select_races, table_checksum
@@ -39,7 +42,7 @@ from f1sa.etl.io import (
     sample_races,
     write_partitioned,
 )
-from f1sa.etl.rdd_jobs import rdd_lap_time_distribution
+from f1sa.etl.rdd_jobs import green_laps, rdd_lap_time_distribution
 from f1sa.etl.spark import build_spark, configure_session
 from f1sa.etl.sql_jobs import run_sql_views
 from f1sa.features import schemas as FS
@@ -51,10 +54,12 @@ from f1sa.features.stints import stint_features
 from f1sa.features.telemetry_agg import telemetry_lap_features
 from f1sa.features.undercut import undercut_attempts, undercut_counts, write_counts_csv
 
-SPARSE_TABLES = frozenset({"undercut_attempts"})
-"""Tables where a race may legitimately have no rows (no undercut attempt). Their stale target
-partitions are deleted instead of being required."""
+SPARSE_TABLES = frozenset({"undercut_attempts", "telemetry_lap_features"})
+"""Tables where a race may legitimately have no rows (no undercut attempt; no telemetry before the
+FastF1 pass). Their stale target partitions are deleted instead of being required (file mode only;
+see ``delete_partitions``)."""
 COUNTS_FILE = "undercut_counts_sample.csv"
+FULL_COUNTS_FILE = "undercut_counts_full.csv"
 
 
 class BuildError(RuntimeError):
@@ -129,15 +134,19 @@ def run_build(
     *,
     source: str,
     results_dir: Path = Path("results"),
+    full_counts: bool = False,
     out: Callable[[str], None] = print,
 ) -> BuildResult:
     """Read the clean zone, compute the features, write them and verify every partition.
 
-    With ``source == "sample"`` the undercut counts go to ``results_dir/COUNTS_FILE``.
+    With ``source == "sample"`` the undercut counts go to ``results_dir/COUNTS_FILE``. With
+    ``full_counts`` (``source == "lake"`` only) they go to ``results_dir/FULL_COUNTS_FILE``.
     ``results_dir`` must resolve to ``./results`` (or below it).
     """
     started = time.perf_counter()
-    if source == "sample":
+    if full_counts and source != "lake":
+        raise BuildError("--full-counts needs --source lake")
+    if source == "sample" or full_counts:
         check_results_dir(results_dir)
     configure_session(spark)
     clean_root, features_root = resolve_feature_roots(settings)
@@ -175,10 +184,10 @@ def run_build(
         if name in SPARSE_TABLES:
             df = df.cache()
             tables[name] = df
-            expected[name] = race_keys(df)
+            expected[name] = expected_partitions(name, df, clean["laps"], targets)
             delete_partitions(spark, features_root, name, sorted(targets - set(expected[name])))
         else:
-            expected[name] = sorted(targets)
+            expected[name] = expected_partitions(name, df, clean["laps"], targets)
         write_partitioned(df, features_root, name, FS.FEATURE_KEYS[name])
 
     result = BuildResult(clean_root, features_root, sorted(targets))
@@ -191,6 +200,8 @@ def run_build(
             path = (results_dir / COUNTS_FILE).resolve()
             write_counts_csv(undercut_counts(stored, source), path, smoke_test=True)
             result.counts_csv = path
+        if name == "undercut_attempts" and full_counts:
+            result.counts_csv = write_full_counts(stored, results_dir)
         stored.unpersist()
         if result.partitions[name] != expected[name]:
             raise BuildError(
@@ -206,6 +217,35 @@ def run_build(
     return result
 
 
+def expected_partitions(
+    name: str, df: DataFrame, laps: DataFrame, targets: set[RaceKey]
+) -> list[RaceKey]:
+    """The races table ``name`` must hold after the write.
+
+    A sparse table holds whatever it computed. ``lap_time_distribution`` needs every race with at
+    least one green lap (a race run entirely behind the safety car, such as 2021 R12, has none);
+    that set comes from ``laps``, not from the job's own output, so a dropped race still fails.
+    """
+    if name in SPARSE_TABLES:
+        return race_keys(df)
+    if name == "lap_time_distribution":
+        return race_keys(green_laps(select_races(laps, None, targets)))
+    return sorted(targets)
+
+
+def write_full_counts(attempts: DataFrame, results_dir: Path) -> Path:
+    """Write the real undercut counts, refusing attempts that carry a synthetic compound."""
+    flagged = attempts.where(F.coalesce(F.col("compound_is_synthetic"), F.lit(True))).count()
+    if flagged:
+        raise BuildError(
+            f"{flagged} attempts are flagged compound_is_synthetic (or unproven); "
+            f"refusing to write {FULL_COUNTS_FILE} from them"
+        )
+    path = (results_dir / FULL_COUNTS_FILE).resolve()
+    write_counts_csv(undercut_counts(attempts, "full"), path, smoke_test=False)
+    return path
+
+
 def check_results_dir(results_dir: Path) -> None:
     """Results may only be written under ``./results`` (relative to the working directory)."""
     allowed = (Path.cwd() / "results").resolve()
@@ -217,7 +257,10 @@ def check_results_dir(results_dir: Path) -> None:
 def delete_partitions(
     spark: SparkSession, features_root: str, table: str, races: Iterable[RaceKey]
 ) -> None:
-    """Delete ``{root}/{table}/season=S/round=R`` for ``races`` (stale sparse partitions)."""
+    """Delete ``{root}/{table}/season=S/round=R`` for ``races`` (stale sparse partitions).
+
+    On ``hdfs://`` a stale partition is an error instead: this job never deletes from HDFS.
+    """
     jvm = spark.sparkContext._jvm
     if jvm is None:
         raise BuildError("Spark JVM gateway unavailable")
@@ -227,6 +270,8 @@ def delete_partitions(
             f"{features_root}/{table}/season={season}/round={round_}"
         )
         fs = path.getFileSystem(conf)
+        if features_root.startswith("hdfs://") and fs.exists(path):
+            raise BuildError(f"stale partition {path} in HDFS; refusing to delete it")
         if fs.exists(path) and not fs.delete(path, True):
             raise BuildError(f"could not delete stale partition {path}")
 
@@ -246,7 +291,12 @@ def _print_result(result: BuildResult, out: Callable[[str], None]) -> None:
         out(f"  {name:<22} {n:>6} rows  {parts}  checksum {digest}")
     if result.counts_csv is not None:
         digest = hashlib.sha256(result.counts_csv.read_bytes()).hexdigest()[:16]
-        out(f"undercut counts (SMOKE TEST ONLY): {result.counts_csv}  sha256 {digest}")
+        label = (
+            "undercut counts"
+            if result.counts_csv.name == FULL_COUNTS_FILE
+            else ("undercut counts (SMOKE TEST ONLY)")
+        )
+        out(f"{label}: {result.counts_csv}  sha256 {digest}")
     out(f"done in {result.seconds:.1f}s")
 
 
@@ -258,14 +308,22 @@ def main(argv: Iterable[str] | None = None) -> int:
         "--results-dir",
         type=Path,
         default=Path("results"),
-        help="where --source sample writes undercut_counts_sample.csv (must be under ./results)",
+        help="where the undercut counts CSV is written (must be under ./results)",
+    )
+    parser.add_argument(
+        "--full-counts",
+        action="store_true",
+        help="with --source lake: write the real counts to undercut_counts_full.csv",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
     settings = get_settings()
     try:
         _clean, features_root = resolve_feature_roots(settings)
+        if args.full_counts and args.source != "lake":
+            raise BuildError("--full-counts needs --source lake")
         if args.source == "sample":
             sample_races(settings)
+        if args.source == "sample" or args.full_counts:
             check_results_dir(args.results_dir)
     except (CleanError, BuildError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -275,7 +333,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         local_dir = Path(features_root.removeprefix("file://")).parent / ".spark-tmp"
     spark = build_spark("f1sa-features", args.master, local_dir=local_dir)
     try:
-        run_build(spark, settings, source=args.source, results_dir=args.results_dir)
+        run_build(
+            spark,
+            settings,
+            source=args.source,
+            results_dir=args.results_dir,
+            full_counts=args.full_counts,
+        )
     except (BuildError, CleanError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

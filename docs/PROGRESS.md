@@ -111,7 +111,7 @@
   - Verified on data/sample: exact counts (laps 2168, pitstops 60, stints 100, …), quality PASS (28 checks, 0 hard,
     0 soft), and identical checksums on rerun. 2024 R5 neutralised laps are 22–24, 26 and 28–31 (21–31 since the Step 8 heuristic).
   - HDFS mode (your choice): `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://… python -m
-    f1sa.etl.clean --source lake`. Built and documented, **not yet run**.
+    f1sa.etl.clean --source lake`. Run on the full data in Step 8b.
   - Tests:
     - the whole pipeline on the real sample, with exact counts, schemas, gaps, flags, rerun and subset idempotency;
     - a FastF1 path with hand-made Parquet: nanosecond timedeltas, mapping and unmapped driver, exact TrackStatus,
@@ -268,19 +268,38 @@
     - CLI guards; sample smoke mode; explanations recover the generated signal.
 
     41 new tests, 494 unit tests in total (full suite: 494 passed in 295 s).
+- Step 8b (W4): full 2021-2025 clean, features and undercut counts in HDFS mode (#1, #3, #6, #13)
+  - Runs in the running app container (`PYTHONPATH=/workspace/src`, `local[2]`): no rebuild or restart.
+    `/f1/clean` and `/f1/features` are owned by `f1sa`; `/f1/raw` stays `hadoop`-owned, so HDFS refuses writes to it.
+  - Makefile: `hdfs-dirs`, `etl-full`, `features-full`, `report-full`, `pipeline-full`.
+  - `features/build.py`: `--full-counts` writes `results/undercut_counts_full.csv` and refuses synthetic attempts;
+    `telemetry_lap_features` is sparse; `lap_time_distribution` expects only races with a green lap (2021 R12 has
+    none); a stale partition on `hdfs://` is an error instead of a delete.
+  - `etl/full_report.py` (new): counts, constructors, provenance, `real` feature-set build (no fit, test sealed),
+    neutralisation per race. Writes `results/full_data_quality.json`, `constructors_full.csv`,
+    `neutralisation_by_race_full.csv`.
+  - Verified: 114 races (22, 22, 22, 24, 24), 124,834 laps, quality PASS (0 hard, 1 soft: 5 disqualified drivers
+    with `results.laps = 0`). Lineage map verified: no unknown constructor. Nothing synthetic; compound null;
+    telemetry 0 rows; `real` builds.
+  - Labelled at G=3.5, k=2: train 108, validation 50, test 49. Below 50: 2021, 2022, 2023, 2025.
+  - Two complete runs: identical checksums for all tables and byte-identical result files. `/f1/raw` listing and
+    `data/manifest.json` unchanged. Sample counts CSV unchanged.
+  - Docs: "Full-data quality notes" in `docs/data_dictionary.md`. 61 new tests, 555 unit tests (555 passed in 298 s).
 ## Next
-- After the user's bulk HDFS ingest finishes: verify hdfs mode with
-  `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://namenode:8020/f1 python -m f1sa.etl.clean --source lake`.
+- User: decide the red-flag fix (see Known issues) **before** running `--source full`, which opens 2025 once.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
-- User: verify `features/lineage.py` against the full 2021–2025 constructor ids once the ingest finishes.
-  `test_repo_clean_zone_has_only_known_constructors` and the build check fail on a missed rename.
-- After the full ingest: run `--source lake` and produce the real undercut counts. Re-check the 74% out-lap
-  stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races.
-- User: sign off the label definition. Then, after the full ingest, run
+- Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
+  using 2021-2024 only.
+- User: sign off the label definition. Then run
   `uv run python experiments/model_eval.py --source full --allow-test-season` (opens 2025 once).
 - Step 10: scalability and partitioning experiments.
 ## Known issues
+- **Red flags are not detected.** `is_red_flag_lap` is false on all 114 races: Jolpica marks the whole field as
+  pitting on those laps and `heuristic_track_flags` drops pit laps first. 17 laps in 14 races (2021-2024) are
+  missed. Of 207 labelled attempts at G=3.5, k=2, 20 are in those races and 1 (2024) is in a restart period that
+  should be excluded. Not changed: it alters label eligibility, so it needs the user's decision.
+- Sample size is small: 108 labelled training attempts at G=3.5, k=2.
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
 - The integration test writes one `infra_test` message (header `test=infra`) to `f1.race.events` on each run. S12
@@ -312,7 +331,6 @@
   as provided by the team and not re-verified online.
 - CI has not yet run on GitHub (validated locally against the GitHub workflow JSON schema only).
 
-- The lineage map is verified on the 2-race sample only (see Next).
 - The raw telemetry path is tested only on hand-built fixtures (real FastF1 data needs the F1 TV login).
 - Step 6 `team_outlap_history` (SQL, median, green-lap reference) and Step 7 `outlap_features` (mean, clean-lap
   stint reference) are two different out-lap histories by design. S8 should use `outlap_features`.
@@ -323,8 +341,8 @@
 - Jolpica has no penalty data. A served 5/10 s penalty looks like a slow stop (flagged, kept), and a drive-through is
   only suspected (a stop more than 2 s below the median, or an incident lap). FastF1 race-control messages are not
   ingested yet.
-- Free tyre changes under a red flag are not Jolpica pit stops, so inferred and synthetic tyre ages are wrong after a
-  red flag. Those windows are excluded as neutralised.
+- Jolpica does record pit entries under a red flag (Step 8b), so inferred stints split there and tyre ages after a
+  red flag are unreliable. Those windows are not yet excluded (see the red-flag issue above).
 - `laps_remaining` uses the winner's lap count as the scheduled distance, which is wrong in shortened races.
 - The track-status heuristic still uses the whole race's median. That is fine because it is used only for
   eligibility and exclusion, never as a feature, but it will flag laps in mixed wet/dry races.
@@ -351,6 +369,9 @@ Step 7: `uv run pytest tests/unit/test_telemetry_agg.py tests/unit/test_outlap.p
 Step 8: `make etl-sample && uv run python -m f1sa.features.build --source sample` (twice: same checksums, same
 `sha256sum results/undercut_counts_sample.csv`), then
 `uv run pytest tests/unit/test_undercut.py tests/unit/test_detector.py tests/unit/test_outlap.py tests/unit/test_etl_helpers.py -q`.
+
+Step 8b (needs `make up-full`): `make pipeline-full` (twice: same checksums, same `sha256sum results/*_full.*`), then
+`uv run pytest tests/unit/test_full_report.py tests/unit/test_makefile_full.py tests/unit/test_features_build.py tests/unit/test_lineage.py -q`.
 
 Step 9: `make etl-sample && make features-sample && make model-eval-sample`, then
 `uv run pytest tests/unit/test_model_dataset.py tests/unit/test_model_pipeline.py tests/unit/test_calibrate.py tests/unit/test_metrics.py tests/unit/test_explain.py -q`.

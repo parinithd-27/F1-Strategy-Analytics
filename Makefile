@@ -63,6 +63,29 @@ ps: ## Show infra container status
 logs: ## Tail infra logs (S=<service> for one service)
 	$(COMPOSE) --profile full logs --tail 100 -f $(S)
 
+# ---------------------------------------------------------------- full data (HDFS mode, inside compose)
+# Runs in the already-running app container: no build, no restart. /f1/raw stays hadoop-owned, so
+# HDFS itself refuses writes to it from the app user.
+HDFS_LAKE := hdfs://namenode:8020/f1
+APP_EXEC := $(COMPOSE) exec -T -e PYTHONPATH=/workspace/src -e DATA_LAKE_URI=$(HDFS_LAKE) app
+
+.PHONY: hdfs-dirs etl-full features-full report-full pipeline-full
+
+hdfs-dirs: ## Create /f1/clean and /f1/features owned by the app user (idempotent)
+	$(COMPOSE) exec -T namenode hdfs dfs -mkdir -p /f1/clean /f1/features
+	$(COMPOSE) exec -T namenode hdfs dfs -chown f1sa /f1/clean /f1/features
+
+etl-full: hdfs-dirs ## Clean zone from /f1/raw into /f1/clean (needs make up-full)
+	$(APP_EXEC) python -m f1sa.etl.clean --source lake
+
+features-full: hdfs-dirs ## Features from /f1/clean into /f1/features + results/undercut_counts_full.csv
+	$(APP_EXEC) python -m f1sa.features.build --source lake --full-counts
+
+report-full: ## Full-data quality report into results/ (reads HDFS, writes nothing there)
+	$(APP_EXEC) python -m f1sa.etl.full_report
+
+pipeline-full: etl-full features-full report-full ## etl-full, features-full, then report-full
+
 nuke: ## DESTRUCTIVE: remove containers AND volumes (requires CONFIRM=yes)
 	@echo "WARNING: this deletes all f1sa volumes (Kafka log data, HDFS namenode/datanode data)."
 	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: re-run as 'make nuke CONFIRM=yes'." >&2; exit 1; fi
