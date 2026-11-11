@@ -177,6 +177,52 @@ def metric_rows(
     return rows
 
 
+SUPPLEMENTARY_ECE_BINS = 5
+ECE_BIAS_NOTE = (
+    "bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the "
+    "interval can lie above the point value"
+)
+
+
+def supplementary_ece_rows(
+    scored: ScoredSplit, *, n_boot: int, seed: int = 42, n_bins: int = SUPPLEMENTARY_ECE_BINS
+) -> list[dict[str, Any]]:
+    """``ece_5bin`` rows (supplementary; the pre-specified primary ECE keeps 10 bins), with the
+    same paired resamples as ``metric_rows`` (same seed and kinds)."""
+    y, groups = scored.labels, scored.groups
+    name = f"ece_{n_bins}bin"
+    fns = {name: lambda yy, pp: M.ece(yy, pp, n_bins=n_bins)}
+    n_races = int(np.unique(groups).size) if groups.size else 0
+    cis = {
+        kind: bootstrap(y, scored.scores, groups, kind=kind, n=n_boot, seed=seed, metric_fns=fns)
+        for kind in BOOTSTRAP_KINDS
+    }
+    note = f"supplementary ({n_bins} bins; primary ECE uses 10); {ECE_BIAS_NOTE}"
+    rows = []
+    for model in MODEL_NAMES:
+        if model not in scored.scores:
+            continue
+        value = M.ece(y, scored.scores[model], n_bins=n_bins) if y.size else M.NAN
+        for kind, ci in cis.items():
+            lo, hi, nv = ci[(model, name)]
+            rows.append(
+                {
+                    "model": model,
+                    "split": scored.split,
+                    "metric": name,
+                    "value": value,
+                    "ci_kind": kind,
+                    "ci_low": lo,
+                    "ci_high": hi,
+                    "n_valid": nv,
+                    "n_attempts": int(y.size),
+                    "n_races": n_races,
+                    "note": note,
+                }
+            )
+    return rows
+
+
 def evaluate_test(
     ds: ModelDataset,
     models: Mapping[str, TrainedModel],

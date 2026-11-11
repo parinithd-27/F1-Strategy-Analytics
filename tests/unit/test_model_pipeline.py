@@ -17,11 +17,12 @@ import numpy as np
 import pytest
 from _model_fixtures import SIZE, SMALL, frame, rehearsal_rows
 from pyspark.ml.base import Estimator
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame, DataFrameReader, SparkSession
 
 from conftest import SAMPLE_DIR, SampleLake
 from f1sa.model import calibrate as C
 from f1sa.model import evaluate as E
+from f1sa.model import metrics as M
 from f1sa.model import pipeline as P
 from f1sa.model.dataset import build_dataset
 from f1sa.model.train import predict, tune
@@ -265,3 +266,271 @@ def test_sample_smoke_mode(
     )
     assert meta["test_season_evaluated"] is False and meta["smoke_test"] is True
     assert meta["calibrators"]["lr"]["method"] == "identity"
+
+
+# ------------------------------------------------------------------ development mode (--no-test)
+@pytest.fixture(scope="module")
+def dev_run(
+    spark: SparkSession, sample_features_root: str, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[dict[str, Any]]:
+    """``--source full --no-test`` on a copy of the sample feature lake whose 2025 partitions
+    are unreadable junk: any read, listing for schema or fit of 2025 fails or is recorded."""
+    import shutil
+
+    base = tmp_path_factory.mktemp("dev")
+    lake = base / "data" / "lake"
+    shutil.copytree(Path(sample_features_root.removeprefix("file://")), lake / "features")
+    for table in ("undercut_attempts", "stints", "telemetry_lap_features"):
+        junk = lake / "features" / table / "season=2025" / "round=1"
+        junk.mkdir(parents=True)
+        (junk / "part-00000-junk.parquet").write_bytes(b"not parquet: the test season")
+    paths: list[str] = []
+    fits: list[set[int]] = []
+    opened: list[int] = []
+    original_parquet, original_fit = DataFrameReader.parquet, Estimator.fit
+
+    def parquet_spy(self: Any, *p: str, **kw: Any) -> Any:
+        paths.extend(str(x) for x in p)
+        return original_parquet(self, *p, **kw)
+
+    def fit_spy(self: Any, dataset: DataFrame, params: Any = None) -> Any:
+        if "season" in dataset.columns:
+            fits.append({int(r[0]) for r in dataset.select("season").distinct().collect()})
+        return original_fit(self, dataset, params)
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(DataFrameReader, "parquet", parquet_spy)
+    mp.setattr(Estimator, "fit", fit_spy)
+    mp.setattr(E, "evaluate_test", lambda *a, **k: opened.append(1))
+    mp.setattr(P, "evaluate_test", lambda *a, **k: opened.append(1))
+    mp.setenv("DATA_LAKE_URI", f"file://{lake}")
+    cwd = os.getcwd()
+    os.chdir(base)
+    lines: list[str] = []
+    try:
+        from f1sa.config import get_settings
+
+        get_settings.cache_clear()
+        cfg = P.RunConfig(source="full", no_test=True, n_boot=20, train=SMALL)
+        result = P.run(spark, cfg, out=lines.append)
+    finally:
+        os.chdir(cwd)
+        mp.undo()
+    yield {
+        "result": result,
+        "paths": paths,
+        "fits": fits,
+        "opened": opened,
+        "base": base,
+        "lines": lines,
+        "cfg": cfg,
+    }
+
+
+def test_no_test_never_reads_lists_or_fits_the_test_season(dev_run: dict[str, Any]) -> None:
+    assert dev_run["paths"], "the loader spy recorded nothing"
+    assert not [p for p in dev_run["paths"] if "2025" in p]
+    assert all("/season=" in p for p in dev_run["paths"])  # explicit partition paths only
+    assert dev_run["fits"] and all(2025 not in s for s in dev_run["fits"])
+    assert dev_run["opened"] == []
+    result = dev_run["result"]
+    assert result.test is None and result.dataset.test.opened == 0
+    assert result.dataset.split.test == ()
+    assert P.DEV_SKIP_TEST_MESSAGE in dev_run["lines"]
+
+
+def test_no_test_outputs_are_stamped_and_named_dev(dev_run: dict[str, Any]) -> None:
+    results = dev_run["base"] / "results"
+    csvs = ["eval", "calibration", "feature_importance", "class_balance", "loso"]
+    for name in csvs:
+        text = (results / f"model_dev_{name}.csv").read_text()
+        assert text.startswith("# DEVELOPMENT"), name
+        assert "noisy" in text.splitlines()[0]
+    for name in ("reliability", "confusion_matrix", "feature_importance"):
+        assert (results / f"model_dev_{name}.png").is_file()
+    meta = json.loads((results / "model_dev_metadata.json").read_text())
+    assert meta["stamp"].startswith("DEVELOPMENT") and meta["test_season_evaluated"] is False
+    assert meta["split"]["test"] == [] and meta["feature_set"] == "real"
+    assert not (dev_run["base"] / "models").exists()  # no model binaries in development mode
+    assert not (results / "model_eval.csv").exists()
+    assert dev_run["result"].dataset.feature_set == "real"
+
+
+def test_no_test_validation_rows_have_both_bootstraps_and_baselines(
+    dev_run: dict[str, Any],
+) -> None:
+    rows = dev_run["result"].eval_rows
+    assert {r["split"] for r in rows} == {"validation"}
+    assert {r["ci_kind"] for r in rows} == set(E.BOOTSTRAP_KINDS)
+    assert {"majority", "rule", "lr_calibrated", "gbt_calibrated"} <= {r["model"] for r in rows}
+    assert {"f1_positive", "macro_f1", "pr_auc", "roc_auc", "brier", "ece", "ece_5bin"} == {
+        r["metric"] for r in rows
+    }
+    five = [r for r in rows if r["metric"] == "ece_5bin"]
+    assert {r["ci_kind"] for r in five} == set(E.BOOTSTRAP_KINDS)
+    assert all("supplementary" in r["note"] and "biased upward" in r["note"] for r in five)
+    assert all("primary 10-bin" in r["note"] for r in rows if r["metric"] == "ece")
+    rule_notes = {r["note"] for r in rows if r["model"] == "rule" and r["metric"] == "brier"}
+    assert all("fall back to the training positive rate" in n for n in rule_notes)
+    assert any(
+        line.startswith("rule baseline: decision-time rule probability")
+        for line in dev_run["lines"]
+    )
+    text = (dev_run["base"] / "results" / "model_dev_calibration.csv").read_text()
+    assert "ece_5bin_raw,ece_5bin_calibrated" in text.splitlines()[1]
+
+
+def test_supplementary_ece_uses_five_bins_and_the_same_resamples() -> None:
+    import pandas as pd
+
+    y = np.array([0, 1, 0, 1, 1, 0, 0, 1, 0, 0], dtype=float)
+    p = np.linspace(0.05, 0.95, 10)
+    rows = pd.DataFrame({"label": y, "race_id": [f"r{i // 2}" for i in range(10)]})
+    scored = E.ScoredSplit("validation", rows, {"lr": p})
+    out = E.supplementary_ece_rows(scored, n_boot=30, seed=1)
+    assert {r["ci_kind"] for r in out} == set(E.BOOTSTRAP_KINDS)
+    assert all(r["metric"] == "ece_5bin" for r in out)
+    assert out[0]["value"] == pytest.approx(M.ece(y, p, n_bins=5))
+    assert out[0]["value"] != pytest.approx(M.ece(y, p))  # differs from the 10-bin ECE here
+
+
+def test_rule_fallback_note_and_annotation() -> None:
+    import pandas as pd
+
+    from f1sa.model.baselines import RuleBaseline
+
+    rows = pd.DataFrame(
+        {
+            "label": [1.0, 0.0],
+            "race_id": ["a", "b"],
+            "gap_s": [1.0, 2.0],
+            "defender_deg_slope_s_per_lap": [0.1, float("nan")],
+            "defender_stint_laps": [20, 20],
+            "attacker_expected_outlap_pace_residual_s": [0.0, 0.0],
+        }
+    )
+    scored = E.ScoredSplit("validation", rows, {})
+    rule = RuleBaseline(fallback_rate=0.25)
+    note = P.rule_fallback_note(scored, rule)
+    assert "on 1 of 2 rows; 1 fall back to the training positive rate 0.2500" in note
+    metric_rows = [
+        {"model": "rule", "metric": "brier", "value": 0.2, "note": ""},
+        {"model": "lr", "metric": "ece", "value": 0.1, "note": "x"},
+        {"model": "lr", "metric": "brier", "value": 0.3, "note": ""},
+    ]
+    out = P.annotate_rows(metric_rows, scored, rule)
+    assert [r["value"] for r in out] == [0.2, 0.1, 0.3]
+    assert out[0]["note"] == note and out[1]["note"].startswith("x; primary 10-bin ECE")
+    assert out[2]["note"] == ""
+
+
+def test_no_test_reports_class_balance_and_loso(dev_run: dict[str, Any]) -> None:
+    lines = dev_run["lines"]
+    assert any(line.startswith("class balance 2023 (train)") for line in lines)
+    assert any(line.startswith("class balance 2024 (validation)") for line in lines)
+    text = (dev_run["base"] / "results" / "model_dev_loso.csv").read_text()
+    assert "hold_out_2025" not in text and "2025" not in text.split("\n", 1)[1]
+    assert "hold_out_2021" in text and "hold_out_2024" in text
+
+
+def test_output_names_are_distinct_across_modes_and_settings() -> None:
+    final = P.RunConfig(source="full", allow_test_season=True)
+    final_sens = P.RunConfig(source="full", allow_test_season=True, g=5.0, k=3)
+    dev = P.RunConfig(source="full", no_test=True)
+    sens = P.RunConfig(source="full", no_test=True, g=5.0, k=3)
+    names = ("model_eval", "calibration", "feature_importance", "reliability", "loso")
+    paths = [cfg.output(n, "csv") for cfg in (final, final_sens, dev, sens) for n in names]
+    assert len(paths) == len(set(paths))
+    assert final.output("model_eval", "csv").name == "model_eval_G3.5_k2.csv"
+    assert final_sens.output("model_eval", "csv").name == "model_eval_G5.0_k3.csv"
+    assert final.output("reliability", "png").name == "reliability_G3.5_k2.png"
+    assert final_sens.output("confusion_matrix", "png").name == "confusion_matrix_G5.0_k3.png"
+    assert final.output("feature_importance", "png").name == "feature_importance_G3.5_k2.png"
+    # development names are unchanged by the rename
+    assert dev.output("model_eval", "csv").name == "model_dev_eval.csv"
+    assert sens.output("model_eval", "csv").name == "model_dev_eval_G5.0_k3.csv"
+    assert P.RunConfig(source="sample").output("model_eval", "csv").name == "model_eval_sample.csv"
+    assert final.stamp == "" and dev.stamp == sens.stamp == P.DEV_STAMP
+
+
+def test_primary_and_sensitivity_test_runs_never_share_a_file() -> None:
+    primary = P.RunConfig(source="full", allow_test_season=True)
+    sensitivity = P.RunConfig(source="full", allow_test_season=True, g=5.0, k=3)
+    a, b = set(primary.result_paths()), set(sensitivity.result_paths())
+    assert len(a) == len(P.RESULT_FILES) + 1 and len(b) == len(a)
+    assert not a & b
+
+
+def test_a_test_run_refuses_to_overwrite_any_existing_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    primary = P.RunConfig(source="full", allow_test_season=True)
+    sensitivity = P.RunConfig(source="full", allow_test_season=True, g=5.0, k=3)
+    for path in sensitivity.result_paths():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("sensitivity result")
+    P.check_no_previous_test_run(primary)  # the sensitivity files never block the primary
+    with pytest.raises(P.RunError, match="never overwritten"):
+        P.check_no_previous_test_run(sensitivity)
+    primary.output("model_eval", "csv").write_text("first complete primary run")
+    with pytest.raises(P.RunError, match=r"G=3\.5 k=2 already exist"):
+        P.check_no_previous_test_run(primary)
+    assert P.main(["--source", "full", "--allow-test-season"]) == 2
+    assert "never overwritten" in capsys.readouterr().err
+    assert all(p.read_text() == "sensitivity result" for p in sensitivity.result_paths())
+    P.check_no_previous_test_run(P.RunConfig(source="full", no_test=True))  # dev runs may rerun
+
+
+def test_no_test_guards(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert P.main(["--source", "full", "--no-test", "--allow-test-season"]) == 2
+    assert "mutually exclusive" in capsys.readouterr().err
+    with pytest.raises(P.RunError, match="mutually exclusive"):
+        P.RunConfig(source="full", no_test=True, allow_test_season=True)
+    for source in ("sample", "rehearsal"):
+        assert P.main(["--source", source, "--no-test"]) == 2
+        assert "development mode of --source full" in capsys.readouterr().err
+    with pytest.raises(P.RunError, match="'real' feature set"):
+        P.RunConfig(source="full", no_test=True, feature_set="with_synthetic")
+    with pytest.raises(P.RunError, match="--no-test"):
+        P.RunConfig(source="full")
+
+
+def test_test_report_has_supplementary_5bin_ece(rehearsal_run: dict[str, Any]) -> None:
+    rows = rehearsal_run["result"].eval_rows
+    five = [r for r in rows if r["split"] == "test" and r["metric"] == "ece_5bin"]
+    assert {r["ci_kind"] for r in five} == set(E.BOOTSTRAP_KINDS)
+    assert {"lr_calibrated", "gbt_calibrated", "majority", "rule"} <= {r["model"] for r in five}
+    assert all("supplementary (5 bins" in r["note"] and "biased upward" in r["note"] for r in five)
+    ten = [r for r in rows if r["split"] == "test" and r["metric"] == "ece"]
+    assert ten and all("primary 10-bin" in r["note"] for r in ten)
+    test = rehearsal_run["result"].test
+    (lr5,) = [r for r in five if r["model"] == "lr_calibrated" and r["ci_kind"] == "race_cluster"]
+    assert lr5["value"] == pytest.approx(M.ece(test.labels, test.scores["lr_calibrated"], n_bins=5))
+
+
+def test_decision_threshold_is_fixed_and_reported(rehearsal_run: dict[str, Any]) -> None:
+    import csv
+
+    assert M.DECISION_THRESHOLD == 0.5
+    result = rehearsal_run["result"]
+    test = result.test
+    for r in result.eval_rows:
+        if r["split"] == "test" and r["metric"] == "f1_positive" and r["ci_kind"] == "race_cluster":
+            expected = M.f1_positive(test.labels, test.scores[r["model"]], 0.5)
+            assert r["value"] == pytest.approx(expected) or (
+                np.isnan(r["value"]) and np.isnan(expected)
+            )
+    path = rehearsal_run["base"] / "results" / "model_eval_rehearsal.csv"
+    lines = [x for x in path.read_text().splitlines() if not x.startswith("#")]
+    rows = list(csv.DictReader(lines))
+    assert {
+        r["decision_threshold"] for r in rows if r["metric"] in ("f1_positive", "macro_f1")
+    } == {"0.500000"}
+    assert {
+        r["decision_threshold"] for r in rows if r["metric"] not in ("f1_positive", "macro_f1")
+    } == {""}
+    assert result.metadata["decision_threshold"] == 0.5

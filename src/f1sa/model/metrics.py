@@ -7,7 +7,8 @@
 * ``brier``: mean squared error of the probability.
 * ``ece``: expected calibration error over ``n_bins`` equal-width bins on [0, 1]
   (``sum_b |B|/n * |mean(p in B) - mean(y in B)|``; the last bin includes 1.0).
-* ``f1_positive`` / ``macro_f1`` at a probability threshold (default 0.5).
+* ``f1_positive`` / ``macro_f1`` at a probability threshold (default ``DECISION_THRESHOLD`` = 0.5:
+  fixed in Step 9, commit 64739ca, before any full-data model ran; never tuned on any season).
 
 A metric that is undefined for the data (for example a ranking metric when only one class is
 present, or no rows at all) is ``nan``; ``undefined_reason`` says why.
@@ -23,6 +24,8 @@ import numpy.typing as npt
 FloatArray = npt.NDArray[np.float64]
 METRICS = ("f1_positive", "macro_f1", "pr_auc", "roc_auc", "brier", "ece")
 NAN = float("nan")
+DECISION_THRESHOLD = 0.5
+"""The fixed F1 decision threshold on (calibrated) probabilities: ``p >= 0.5`` predicts success."""
 
 
 def _arrays(y: npt.ArrayLike, p: npt.ArrayLike) -> tuple[FloatArray, FloatArray]:
@@ -112,7 +115,7 @@ def ece(y: npt.ArrayLike, p: npt.ArrayLike, n_bins: int = 10) -> float:
 
 
 def confusion(
-    y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = 0.5
+    y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = DECISION_THRESHOLD
 ) -> tuple[int, int, int, int]:
     """(tn, fp, fn, tp) at ``p >= threshold``."""
     ya, pa = _arrays(y, p)
@@ -131,19 +134,21 @@ def _f1(tp: int, fp: int, fn: int) -> float:
     return 2 * tp / denom if denom else NAN
 
 
-def f1_positive(y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = 0.5) -> float:
+def f1_positive(y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = DECISION_THRESHOLD) -> float:
     _, fp, fn, tp = confusion(y, p, threshold)
     return _f1(tp, fp, fn)
 
 
-def macro_f1(y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = 0.5) -> float:
+def macro_f1(y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = DECISION_THRESHOLD) -> float:
     tn, fp, fn, tp = confusion(y, p, threshold)
     pos, neg = _f1(tp, fp, fn), _f1(tn, fn, fp)
     vals = [v for v in (pos, neg) if not math.isnan(v)]
     return float(np.mean(vals)) if vals else NAN
 
 
-def report(y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = 0.5) -> dict[str, float]:
+def report(
+    y: npt.ArrayLike, p: npt.ArrayLike, threshold: float = DECISION_THRESHOLD
+) -> dict[str, float]:
     """Every metric in ``METRICS``."""
     return {
         "f1_positive": f1_positive(y, p, threshold),

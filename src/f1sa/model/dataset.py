@@ -25,6 +25,7 @@ from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from f1sa.etl.clean import select_races
+from f1sa.features import schemas as FS
 from f1sa.features.build import read_feature
 from f1sa.features.undercut_rule import DEFAULT_GAP_S, DEFAULT_WINDOW_LAPS
 from f1sa.model import features as MF
@@ -145,6 +146,58 @@ def with_derived_inputs(attempts: DataFrame, stints: DataFrame, telemetry: DataF
     for side in ("attacker", "defender"):
         out = _side_join(out, tel, side, (*MF.TELEMETRY_COLUMNS, "telemetry_is_synthetic"))
     return out
+
+
+def season_partition_paths(
+    spark: SparkSession, features_root: str, table: str, seasons: Iterable[int]
+) -> list[str]:
+    """The existing ``{root}/{table}/season=S`` directories for ``seasons`` (only those paths are
+    checked; no other directory of the table is listed)."""
+    jvm = spark.sparkContext._jvm
+    if jvm is None:
+        raise DatasetError("Spark JVM gateway unavailable")
+    conf = spark.sparkContext._jsc.hadoopConfiguration()
+    paths = []
+    for season in sorted(set(seasons)):
+        uri = f"{features_root}/{table}/season={int(season)}"
+        path = jvm.org.apache.hadoop.fs.Path(uri)
+        if path.getFileSystem(conf).exists(path):
+            paths.append(uri)
+    return paths
+
+
+def read_feature_seasons(
+    spark: SparkSession, features_root: str, table: str, seasons: Iterable[int]
+) -> DataFrame:
+    """A stored feature table restricted to ``seasons`` **at the file level**.
+
+    Only the partition directories ``{root}/{table}/season=S`` of the requested seasons are
+    listed and read (``basePath`` keeps the partition columns); no other season's directory is
+    listed, opened or inspected, and the schema is explicit. A requested season without a
+    directory (for example an empty sparse table) is skipped.
+    """
+    schema = FS.FEATURE_SCHEMAS[table]
+    base = f"{features_root}/{table}"
+    paths = season_partition_paths(spark, features_root, table, seasons)
+    cols = [f.name for f in schema.fields]
+    if not paths:
+        return spark.createDataFrame([], schema).select(cols)
+    return spark.read.schema(schema).option("basePath", base).parquet(*paths).select(cols)
+
+
+def load_attempts_for_seasons(
+    spark: SparkSession, features_root: str, seasons: Iterable[int]
+) -> DataFrame:
+    """``load_attempts`` for ``seasons`` only, read with ``read_feature_seasons`` (the other
+    seasons' partitions are never touched)."""
+    wanted = tuple(seasons)
+
+    def read(table: str) -> DataFrame:
+        return read_feature_seasons(spark, features_root, table, wanted)
+
+    return with_derived_inputs(
+        read("undercut_attempts"), read("stints"), read("telemetry_lap_features")
+    )
 
 
 def load_attempts(

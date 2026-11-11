@@ -96,6 +96,7 @@ def test_rule_baseline_gain_and_fallback() -> None:
     p = rule.predict_proba(rows)
     assert p[0] > 0.5 > p[1]  # gap 1.0 < gain 1.5; gap 3.0 > gain 2.0
     assert p[2] == 0.3  # missing slope -> fallback
+    assert rule.fallback_mask(rows).tolist() == [False, False, True]
     negative = RuleBaseline(0.3).gain_s(
         {**rows, "defender_deg_slope_s_per_lap": [-0.2, -0.2, -0.2]}
     )

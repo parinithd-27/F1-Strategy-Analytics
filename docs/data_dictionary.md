@@ -394,16 +394,36 @@ Generating assumptions:
 
 ## Model outputs (`experiments/model_eval.py`, Step 9)
 Every file of a `sample` or `rehearsal` run has a `_sample` / `_rehearsal` suffix and a `# SMOKE TEST …` /
-`# REHEARSAL …` first line (CSV) or a title and watermark (PNG). **They are not findings.**
+`# REHEARSAL …` first line (CSV) or a title and watermark (PNG). **They are not findings.** The full test run
+(`make model-test-full CONFIRM=yes`, `docs/model_spec.md`) suffixes every file with its setting:
+`model_eval_G3.5_k2.csv` (primary), `model_eval_G5.0_k3.csv` (sensitivity), and the same for `calibration`,
+`feature_importance` (csv, png), `reliability` and `confusion_matrix`. It refuses to start if that setting's files
+or saved metadata already exist (the first complete run is the reported one).
 
 | File | Columns / content |
 |---|---|
-| `results/model_eval*.csv` | source, smoke_test, feature_set, g, k, model (`lr`, `lr_calibrated`, `gbt`, `gbt_calibrated`, `majority`, `rule`), split (`validation`, `test`), metric (`f1_positive`, `macro_f1`, `pr_auc`, `roc_auc`, `brier`, `ece`), value, ci_kind (`race_cluster` / `attempt`, test only), ci_low, ci_high (95% percentile), n_valid (usable resamples), n_attempts, n_races, note (why a metric is undefined) |
+| `results/model_eval*.csv` | source, smoke_test, feature_set, g, k, model (`lr`, `lr_calibrated`, `gbt`, `gbt_calibrated`, `majority`, `rule`), split (`validation`, `test`), metric (`f1_positive`, `macro_f1`, `pr_auc`, `roc_auc`, `brier`, `ece`), value, ci_kind (`race_cluster` / `attempt`, test only), ci_low, ci_high (95% percentile), n_valid (usable resamples), n_attempts, n_races, note (why a metric is undefined; ECE bootstrap bias; the rule's fallback count), decision_threshold (0.5 on `f1_positive` / `macro_f1` rows, fixed since Step 9, empty otherwise). The validation and test reports also have the supplementary metric `ece_5bin` |
 | `results/calibration*.csv` | model, split, chosen_method, brier_raw / _isotonic / _platt / _calibrated, ece_raw / _calibrated, n_attempts, reason |
 | `results/feature_importance*.csv` | model, method (`gbt_importance`, `lr_std_coefficient`, `permutation_pr_auc_drop`), feature, value, std, note |
 | `results/reliability*.png` | observed vs predicted (10 bins), raw vs calibrated, for the selected model (test season; validation in sample mode, marked) |
 | `results/confusion_matrix*.png` | the selected calibrated model at 0.5 |
 | `results/feature_importance*.png` | GBT importance and permutation drop (top 15) |
+
+**Development run (Step 9b, `make model-dev-full` = `--source full --no-test`).** It reads only the 2021-2024
+feature partitions; the `season=2025` directories are never listed or opened, and the run has no test split. It
+trains on 2021-2023, selects hyperparameters and fits the calibrator on 2024, and saves no model binaries. Every
+file is named `model_dev_*` and starts with `# DEVELOPMENT: …` (PNG: title and watermark): validation only, not a
+final result, noisy (about 50 labelled attempts), with 2024 used for both selection and calibration. The primary
+setting G = 3.5, k = 2 has no suffix. The sensitivity setting G = 5.0, k = 3 adds `_G5.0_k3`, and is not used to
+choose a setting.
+
+| File | Columns / content |
+|---|---|
+| `results/model_dev_eval*.csv` | as `model_eval.csv`, split `validation` only, with both `race_cluster` and `attempt` bootstrap rows. Extra metric `ece_5bin` (supplementary; the pre-specified primary ECE keeps 10 bins, about 5 rows per bin on 49 attempts). Every ECE row notes that bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so an interval can lie above its point value. Every `rule` row notes how many rows got a rule probability and how many fell back to the training positive rate (0 of 49 and 0 of 64 on the full data: the rule's Brier is a real value) |
+| `results/model_dev_calibration*.csv`, `model_dev_feature_importance*.csv/.png`, `model_dev_reliability*.png`, `model_dev_confusion_matrix*.png` | as the files above, on the validation season. `calibration*.csv` also has `ece_5bin_raw` and `ece_5bin_calibrated` (supplementary) |
+| `results/model_dev_class_balance*.csv` | season, split, n_labelled, n_positive, n_negative, positive_rate, n_races (2021-2024) |
+| `results/model_dev_loso*.csv` | fold (`hold_out_<season>`), train_seasons, held_out_season, model (`lr`, `gbt`, `majority`, `rule`), metric, value, n_attempts, n_positive, n_races, params, note. Leave one season out of 2021-2024 (never 2025); fixed first grid point, raw scores, class weights from the fold's training seasons. F1, macro-F1, PR-AUC and ROC-AUC are NaN with a note when the held-out season has fewer than 5 positives or negatives |
+| `results/model_dev_metadata*.json` | the run metadata (split with an empty test, counts, chosen parameters, calibrators, class balance, versions) |
 
 
 ## Full-data quality notes (Step 8b)

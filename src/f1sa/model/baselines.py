@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from f1sa.model.metrics import FloatArray
 
@@ -61,6 +62,13 @@ class RuleBaseline:
         )
         gain: FloatArray = np.maximum(slope, 0.0) * laps * self.k_expected - resid
         return gain
+
+    def fallback_mask(self, rows: Any) -> npt.NDArray[np.bool_]:
+        """True where the rule cannot be computed and ``predict_proba`` returns the training
+        positive rate (``fallback_rate``) instead of a rule probability."""
+        z = self.gain_s(rows) - np.asarray(rows["gap_s"], dtype=np.float64)
+        out: npt.NDArray[np.bool_] = ~np.isfinite(z)
+        return out
 
     def predict_proba(self, rows: Any) -> FloatArray:
         gain = self.gain_s(rows)

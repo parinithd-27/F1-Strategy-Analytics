@@ -1,0 +1,96 @@
+# DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and to fit the calibrator. The 2025 test season was not loaded
+model,method,feature,value,std,note
+gbt,gbt_importance,gap_s,0.192895,0.000000,
+gbt,gbt_importance,defender_expected_outlap_pace_residual_s,0.130101,0.000000,
+gbt,gbt_importance,defender_expected_stop_delta_s,0.125017,0.000000,
+gbt,gbt_importance,deg_slope_delta_s_per_lap,0.117206,0.000000,
+gbt,gbt_importance,pit_loss_prior_s,0.102844,0.000000,
+gbt,gbt_importance,attacker_stint_laps,0.093188,0.000000,
+gbt,gbt_importance,attacker_position,0.050781,0.000000,
+gbt,gbt_importance,attacker_deg_slope_s_per_lap,0.050070,0.000000,
+gbt,gbt_importance,attacker_expected_outlap_pace_residual_s,0.048696,0.000000,
+gbt,gbt_importance,defender_deg_slope_s_per_lap,0.029129,0.000000,
+gbt,gbt_importance,attacker_expected_stop_delta_s,0.017949,0.000000,
+gbt,gbt_importance,gap_ahead_change_1l,0.017015,0.000000,
+gbt,gbt_importance,pace_delta_last3_s,0.015996,0.000000,
+gbt,gbt_importance,gap_ahead_change_3l,0.005579,0.000000,
+gbt,gbt_importance,defender_stint_laps,0.003533,0.000000,
+gbt,gbt_importance,attacker_expected_outlap_pace_source,0.000000,0.000000,
+gbt,gbt_importance,defender_expected_outlap_pace_source,0.000000,0.000000,
+gbt,gbt_importance,laps_remaining,0.000000,0.000000,
+gbt,gbt_importance,pit_loss_source,0.000000,0.000000,
+gbt,gbt_importance,rejoin_nearest_ahead_s,0.000000,0.000000,
+gbt,gbt_importance,rejoin_traffic_cars,0.000000,0.000000,
+lr,lr_std_coefficient,gap_s,-0.760816,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_stint_laps,-0.158093,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_residual_s,0.067532,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_position,0.029554,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,deg_slope_delta_s_per_lap,0.016206,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_3l,-0.015156,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_deg_slope_s_per_lap,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_deg_slope_s_per_lap_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_residual_s,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_residual_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__driver_team,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__driver_team_shrunk,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__global,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__none,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__team,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_stop_delta_s,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_stop_delta_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_position_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_stint_laps_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_deg_slope_s_per_lap,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_deg_slope_s_per_lap_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_residual_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__driver_team,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__driver_team_shrunk,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__global,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__none,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__team,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_stop_delta_s,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_stop_delta_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_stint_laps,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_stint_laps_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,deg_slope_delta_s_per_lap_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_1l,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_1l_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_3l_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,laps_remaining,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,laps_remaining_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pace_delta_last3_s,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pace_delta_last3_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_prior_s,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_prior_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__circuit_prior,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__global_prior,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__none,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_nearest_ahead_s,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_nearest_ahead_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_traffic_cars,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_traffic_cars_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,permutation_pr_auc_drop,gap_s,0.268981,0.092119,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,attacker_stint_laps,0.109918,0.033871,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,gap_ahead_change_3l,0.007568,0.010767,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,attacker_position,0.007154,0.011673,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,deg_slope_delta_s_per_lap,0.001032,0.002500,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,defender_expected_outlap_pace_residual_s,0.000846,0.015520,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,attacker_deg_slope_s_per_lap,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,attacker_expected_outlap_pace_residual_s,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,attacker_expected_outlap_pace_source,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,attacker_expected_stop_delta_s,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,defender_deg_slope_s_per_lap,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,defender_expected_outlap_pace_source,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,defender_expected_stop_delta_s,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,defender_stint_laps,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,gap_ahead_change_1l,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,laps_remaining,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,pace_delta_last3_s,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,pit_loss_prior_s,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,pit_loss_source,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,rejoin_nearest_ahead_s,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"
+lr,permutation_pr_auc_drop,rejoin_traffic_cars,0.000000,0.000000,"validation PR-AUC 0.7377, 5 repeats"

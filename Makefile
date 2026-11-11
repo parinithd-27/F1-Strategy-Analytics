@@ -86,6 +86,17 @@ report-full: ## Full-data quality report into results/ (reads HDFS, writes nothi
 
 pipeline-full: etl-full features-full report-full ## etl-full, features-full, then report-full
 
+.PHONY: model-dev-full
+model-dev-full: ## DEVELOPMENT model run on the full features (2021-2024 only; 2025 never loaded)
+	$(APP_EXEC) python experiments/model_eval.py --source full --no-test
+	$(APP_EXEC) python experiments/model_eval.py --source full --no-test --g 5.0 --k 3
+
+.PHONY: model-test-full
+model-test-full: ## THE single test-season run (docs/model_spec.md): both settings, opens 2025; CONFIRM=yes
+	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: this evaluates the 2025 test season once per setting (docs/model_spec.md). Re-run as 'make model-test-full CONFIRM=yes'." >&2; exit 1; fi
+	$(APP_EXEC) python experiments/model_eval.py --source full --allow-test-season
+	$(APP_EXEC) python experiments/model_eval.py --source full --allow-test-season --g 5.0 --k 3
+
 nuke: ## DESTRUCTIVE: remove containers AND volumes (requires CONFIRM=yes)
 	@echo "WARNING: this deletes all f1sa volumes (Kafka log data, HDFS namenode/datanode data)."
 	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: re-run as 'make nuke CONFIRM=yes'." >&2; exit 1; fi

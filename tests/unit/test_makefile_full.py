@@ -8,7 +8,14 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TARGETS = ("hdfs-dirs", "etl-full", "features-full", "report-full", "pipeline-full")
+TARGETS = (
+    "hdfs-dirs",
+    "etl-full",
+    "features-full",
+    "report-full",
+    "pipeline-full",
+    "model-dev-full",
+)
 
 
 def _dry_run(target: str) -> str:
@@ -57,3 +64,40 @@ def test_pipeline_runs_clean_then_features_then_report() -> None:
     out = _dry_run("pipeline-full")
     assert out.index("f1sa.etl.clean") < out.index("f1sa.features.build")
     assert out.index("f1sa.features.build") < out.index("f1sa.etl.full_report")
+
+
+def test_model_dev_full_runs_primary_then_sensitivity_without_the_test_season() -> None:
+    lines = [x for x in _dry_run("model-dev-full").splitlines() if "model_eval.py" in x]
+    assert len(lines) == 2
+    assert all("--source full --no-test" in x and "--allow-test-season" not in x for x in lines)
+    assert all("DATA_LAKE_URI=hdfs://namenode:8020/f1" in x for x in lines)
+    assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")
+
+
+def test_model_test_full_needs_confirm_and_runs_both_settings_once() -> None:
+    refused = subprocess.run(
+        ["make", "--no-print-directory", "-C", str(REPO_ROOT), "model-test-full"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert refused.returncode != 0 and "Refusing" in refused.stderr
+    out = subprocess.run(
+        [
+            "make",
+            "-n",
+            "--no-print-directory",
+            "-C",
+            str(REPO_ROOT),
+            "model-test-full",
+            "CONFIRM=yes",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    ).stdout
+    lines = [x for x in out.splitlines() if "model_eval.py" in x]
+    assert len(lines) == 2 and all("--source full --allow-test-season" in x for x in lines)
+    assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")

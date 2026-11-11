@@ -1,0 +1,6 @@
+# DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and to fit the calibrator. The 2025 test season was not loaded
+season,split,n_labelled,n_positive,n_negative,positive_rate,n_races
+2021,train,32,8,24,0.250000,16
+2022,train,32,11,21,0.343750,16
+2023,train,44,13,31,0.295455,15
+2024,validation,49,16,33,0.326531,18

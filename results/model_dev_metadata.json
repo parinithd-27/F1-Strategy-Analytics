@@ -1,0 +1,344 @@
+{
+  "assembled_columns": [
+    "f_gap_s",
+    "f_gap_s_missing",
+    "f_gap_ahead_change_1l",
+    "f_gap_ahead_change_1l_missing",
+    "f_gap_ahead_change_3l",
+    "f_gap_ahead_change_3l_missing",
+    "f_attacker_position",
+    "f_attacker_position_missing",
+    "f_pace_delta_last3_s",
+    "f_pace_delta_last3_s_missing",
+    "f_attacker_deg_slope_s_per_lap",
+    "f_attacker_deg_slope_s_per_lap_missing",
+    "f_defender_deg_slope_s_per_lap",
+    "f_defender_deg_slope_s_per_lap_missing",
+    "f_deg_slope_delta_s_per_lap",
+    "f_deg_slope_delta_s_per_lap_missing",
+    "f_laps_remaining",
+    "f_laps_remaining_missing",
+    "f_pit_loss_prior_s",
+    "f_pit_loss_prior_s_missing",
+    "f_pit_loss_source__circuit_prior",
+    "f_pit_loss_source__global_prior",
+    "f_pit_loss_source__none",
+    "f_pit_loss_source__unknown",
+    "f_rejoin_traffic_cars",
+    "f_rejoin_traffic_cars_missing",
+    "f_rejoin_nearest_ahead_s",
+    "f_rejoin_nearest_ahead_s_missing",
+    "f_attacker_expected_outlap_pace_residual_s",
+    "f_attacker_expected_outlap_pace_residual_s_missing",
+    "f_attacker_expected_outlap_pace_source__driver_team",
+    "f_attacker_expected_outlap_pace_source__driver_team_shrunk",
+    "f_attacker_expected_outlap_pace_source__team",
+    "f_attacker_expected_outlap_pace_source__global",
+    "f_attacker_expected_outlap_pace_source__none",
+    "f_attacker_expected_outlap_pace_source__unknown",
+    "f_defender_expected_outlap_pace_residual_s",
+    "f_defender_expected_outlap_pace_residual_s_missing",
+    "f_defender_expected_outlap_pace_source__driver_team",
+    "f_defender_expected_outlap_pace_source__driver_team_shrunk",
+    "f_defender_expected_outlap_pace_source__team",
+    "f_defender_expected_outlap_pace_source__global",
+    "f_defender_expected_outlap_pace_source__none",
+    "f_defender_expected_outlap_pace_source__unknown",
+    "f_attacker_expected_stop_delta_s",
+    "f_attacker_expected_stop_delta_s_missing",
+    "f_defender_expected_stop_delta_s",
+    "f_defender_expected_stop_delta_s_missing",
+    "f_attacker_stint_laps",
+    "f_attacker_stint_laps_missing",
+    "f_defender_stint_laps",
+    "f_defender_stint_laps_missing"
+  ],
+  "bootstrap_n": 1000,
+  "calibrators": {
+    "gbt": {
+      "method": "platt",
+      "params": {
+        "a": 0.30605235996430785,
+        "b": -0.5105812070469122
+      },
+      "reason": "platt: validation has 49 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples"
+    },
+    "lr": {
+      "method": "platt",
+      "params": {
+        "a": 1.5444072248837364,
+        "b": -0.7114782477332869
+      },
+      "reason": "platt: validation has 49 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples"
+    }
+  },
+  "class_balance": [
+    {
+      "n_labelled": 32,
+      "n_negative": 24,
+      "n_positive": 8,
+      "n_races": 16,
+      "positive_rate": 0.25,
+      "season": 2021,
+      "split": "train"
+    },
+    {
+      "n_labelled": 32,
+      "n_negative": 21,
+      "n_positive": 11,
+      "n_races": 16,
+      "positive_rate": 0.34375,
+      "season": 2022,
+      "split": "train"
+    },
+    {
+      "n_labelled": 44,
+      "n_negative": 31,
+      "n_positive": 13,
+      "n_races": 15,
+      "positive_rate": 0.29545454545454547,
+      "season": 2023,
+      "split": "train"
+    },
+    {
+      "n_labelled": 49,
+      "n_negative": 33,
+      "n_positive": 16,
+      "n_races": 18,
+      "positive_rate": 0.32653061224489793,
+      "season": 2024,
+      "split": "validation"
+    }
+  ],
+  "class_weights": {
+    "0": 0.7105263157894737,
+    "1": 1.6875
+  },
+  "counts": {
+    "train": {
+      "n": 108,
+      "positive": 32,
+      "races": 47
+    },
+    "validation": {
+      "n": 49,
+      "positive": 16,
+      "races": 18
+    }
+  },
+  "decision_threshold": 0.5,
+  "feature_set": "real",
+  "features": [
+    "gap_s",
+    "gap_ahead_change_1l",
+    "gap_ahead_change_3l",
+    "attacker_position",
+    "pace_delta_last3_s",
+    "attacker_deg_slope_s_per_lap",
+    "defender_deg_slope_s_per_lap",
+    "deg_slope_delta_s_per_lap",
+    "laps_remaining",
+    "pit_loss_prior_s",
+    "pit_loss_source",
+    "rejoin_traffic_cars",
+    "rejoin_nearest_ahead_s",
+    "attacker_expected_outlap_pace_residual_s",
+    "attacker_expected_outlap_pace_source",
+    "defender_expected_outlap_pace_residual_s",
+    "defender_expected_outlap_pace_source",
+    "attacker_expected_stop_delta_s",
+    "defender_expected_stop_delta_s",
+    "attacker_stint_laps",
+    "defender_stint_laps"
+  ],
+  "g": 3.5,
+  "k": 2,
+  "models": {
+    "gbt": {
+      "grid_scores": [
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 20,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.5468763523477269
+        },
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 20,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5321091287538431
+        },
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 50,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.5601979757300497
+        },
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 50,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5074548317995616
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 20,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.45706252693731475
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 20,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5021320511611258
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 50,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.4814742211016208
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 50,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.49251599014180913
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 20,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.5245955543883969
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 20,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5160408574883536
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 50,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.5322275708667596
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 50,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.4569076303905691
+        }
+      ],
+      "params": {
+        "maxDepth": 2,
+        "maxIter": 50,
+        "stepSize": 0.05
+      },
+      "tuning_status": "tuned on validation PR-AUC",
+      "validation_pr_auc": 0.5601979757300497
+    },
+    "lr": {
+      "grid_scores": [
+        {
+          "params": {
+            "elasticNetParam": 0.0,
+            "regParam": 0.0
+          },
+          "validation_pr_auc": 0.4792569625071883
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.5,
+            "regParam": 0.0
+          },
+          "validation_pr_auc": 0.4792569625071883
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.0,
+            "regParam": 0.01
+          },
+          "validation_pr_auc": 0.5086773852169073
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.5,
+            "regParam": 0.01
+          },
+          "validation_pr_auc": 0.48750930637381057
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.0,
+            "regParam": 0.1
+          },
+          "validation_pr_auc": 0.5686387063114371
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.5,
+            "regParam": 0.1
+          },
+          "validation_pr_auc": 0.5937751380756096
+        }
+      ],
+      "params": {
+        "elasticNetParam": 0.5,
+        "regParam": 0.1
+      },
+      "tuning_status": "tuned on validation PR-AUC",
+      "validation_pr_auc": 0.5937751380756096
+    }
+  },
+  "provenances": [
+    "jolpica",
+    "stint_boundary"
+  ],
+  "seed": 42,
+  "selected_model": "lr",
+  "smoke_test": false,
+  "source": "full",
+  "split": {
+    "test": [],
+    "train": [
+      2021,
+      2022,
+      2023
+    ],
+    "validation": [
+      2024
+    ]
+  },
+  "stamp": "DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and to fit the calibrator. The 2025 test season was not loaded",
+  "test_season_evaluated": false,
+  "versions": {
+    "git_commit": null,
+    "numpy": "2.5.4",
+    "pyspark": "4.2.1",
+    "python": "3.12.3"
+  }
+}

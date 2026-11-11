@@ -170,3 +170,17 @@ def test_load_attempts_on_the_sample_lake(spark: SparkSession, sample_features_r
         row is not None and row["attacker_stint_laps"] == row["decision_lap"]
     )  # first stint from lap 1
     assert row["attacker_telemetry_is_synthetic"] is True and row["attacker_mean_rpm"] is not None
+
+
+def test_read_feature_seasons_reads_only_requested_partitions(
+    spark: SparkSession, sample_features_root: str
+) -> None:
+    from f1sa.model.dataset import load_attempts_for_seasons, read_feature_seasons
+
+    only_2024 = read_feature_seasons(spark, sample_features_root, "undercut_attempts", [2024])
+    assert {r[0] for r in only_2024.select("season").distinct().collect()} == {2024}
+    none = read_feature_seasons(spark, sample_features_root, "undercut_attempts", [2021])
+    assert none.count() == 0 and "gap_s" in none.columns
+    both = load_attempts_for_seasons(spark, sample_features_root, [2023, 2024])
+    assert {r[0] for r in both.select("season").distinct().collect()} == {2023, 2024}
+    assert "attacker_stint_laps" in both.columns
