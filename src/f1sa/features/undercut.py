@@ -877,6 +877,17 @@ def labels_checksum(attempts: DataFrame) -> str:
     return table_checksum(attempts.select(*LABEL_COLUMNS))
 
 
+def labelled_set_checksum(attempts: DataFrame, g: float, k: int) -> str:
+    """Checksum of the labelled set at one (G, k): (attempt key, label) of ``success`` / ``fail``
+    rows only, so the categories of excluded or stayed-out attempts do not affect it."""
+    labelled = attempts.where(
+        F.col("outcome_category").isin("success", "fail")
+        & (F.col("gap_threshold_s") == F.lit(float(g)))
+        & (F.col("response_window_laps") == F.lit(int(k)))
+    )
+    return table_checksum(labelled.select(*LABEL_COLUMNS[:7], "label"))
+
+
 def _rate(num: int, den: int) -> str:
     return f"{num / den:.4f}" if den else ""
 

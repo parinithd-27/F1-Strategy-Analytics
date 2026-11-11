@@ -1,14 +1,14 @@
 # SMOKE TEST ONLY: 2 sample races, SYNTHETIC tyre compounds; not findings
 source,smoke_test_only,season,gap_threshold_s,response_window_laps,candidates,labelled,success,fail,success_rate,success_rate_excl_slow_stop,n_success,n_fail,n_defender_stayed_out,n_excluded_missing_data,n_excluded_inconsistent_timing,n_excluded_early_lap,n_excluded_teammates,n_excluded_traffic_between,n_excluded_lapped,n_excluded_in_pit,n_excluded_neutralised,n_excluded_same_lap_stop,n_excluded_retired,n_excluded_long_stop,n_excluded_penalty_suspected,n_excluded_attacker_restop,n_excluded_incident,n_excluded_wet,n_excluded_race_end,n_excluded_neutralised_sc_vsc_red_flag,n_excluded_neutralised_sustained_slow
-sample,true,2023,2.5,1,9,0,0,0,,,0,0,8,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,2.5,2,9,1,1,0,1.0000,1.0000,1,0,7,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,2.5,3,9,1,1,0,1.0000,1.0000,1,0,7,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,3.5,1,13,2,0,2,0.0000,0.0000,0,2,10,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,3.5,2,13,4,1,3,0.2500,0.2500,1,3,8,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,3.5,3,13,4,1,3,0.2500,0.2500,1,3,8,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,5.0,1,16,3,0,3,0.0000,0.0000,0,3,12,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,5.0,2,16,5,1,4,0.2000,0.2000,1,4,10,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-sample,true,2023,5.0,3,16,5,1,4,0.2000,0.2000,1,4,10,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,2.5,1,9,0,0,0,,,0,0,7,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,2.5,2,9,1,1,0,1.0000,1.0000,1,0,6,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,2.5,3,9,1,1,0,1.0000,1.0000,1,0,6,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,3.5,1,13,2,0,2,0.0000,0.0000,0,2,9,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,3.5,2,13,4,1,3,0.2500,0.2500,1,3,7,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,3.5,3,13,4,1,3,0.2500,0.2500,1,3,7,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,5.0,1,16,3,0,3,0.0000,0.0000,0,3,11,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,5.0,2,16,5,1,4,0.2000,0.2000,1,4,9,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+sample,true,2023,5.0,3,16,5,1,4,0.2000,0.2000,1,4,9,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 sample,true,2024,2.5,1,16,1,1,0,1.0000,1.0000,1,0,4,0,0,0,3,0,0,3,2,3,0,0,0,0,0,0,0,2,0
 sample,true,2024,2.5,2,16,1,1,0,1.0000,1.0000,1,0,4,0,0,0,3,0,0,3,2,3,0,0,0,0,0,0,0,2,0
 sample,true,2024,2.5,3,16,1,1,0,1.0000,1.0000,1,0,4,0,0,0,3,0,0,3,2,3,0,0,0,0,0,0,0,2,0

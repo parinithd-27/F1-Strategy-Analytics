@@ -465,42 +465,46 @@ At G = 3.5, k = 2 every season has fewer than 50 labelled attempts. At G = 5.0, 
 **Neutralised exclusions, split for reporting.** The last two CSV columns split `n_excluded_neutralised` into safety
 car / VSC / red flag and sustained slow running (the wet or drying pattern). This is a timing-only heuristic for
 reporting and does not affect labels (rule: `docs/label_definition.md`, "Reporting split of excluded_neutralised").
-All 20 table checksums and the labels checksum (`73fe89cf9f4e8ee6`) are identical with and without it.
+All 20 table checksums and the labels checksum were identical with and without it. Counts after the L < 5 change:
 
 | Season | G = 3.5, k = 2: SC/VSC/red flag + sustained slow | G = 5.0, k = 3 |
 |---|---|---|
-| 2021 | 71 + 0 = 71 | 74 + 0 = 74 |
-| 2022 | 75 + 12 = 87 | 99 + 15 = 114 |
-| 2023 | 88 + 7 = 95 | 114 + 8 = 122 |
-| 2024 | 63 + 8 = 71 | 72 + 9 = 81 |
+| 2021 | 69 + 0 = 69 | 72 + 0 = 72 |
+| 2022 | 75 + 11 = 86 | 99 + 14 = 113 |
+| 2023 | 88 + 6 = 94 | 114 + 7 = 121 |
+| 2024 | 62 + 8 = 70 | 71 + 9 = 80 |
 | 2025 | 72 + 10 = 82 | 84 + 11 = 95 |
 
-At G = 3.5, k = 2, 37 of 406 neutralised exclusions (9%) are sustained slow running; 2021 has none.
+At G = 3.5, k = 2, 35 of 401 neutralised exclusions (9%) are sustained slow running; 2021 has none.
 
-**Early decision laps.** No attempt at L = 4 or L = 5 is labelled in any season (G = 3.5, k = 2). The 25 candidates
-at L = 4 are all excluded first as `in_pit` (15), `neutralised` (5), `teammates` (3) or `defender_stayed_out` (2);
-the 19 at L = 5 as `defender_stayed_out` (11), `neutralised` (4) or other reasons. The earliest labelled L is 6
-(2023, 2024) or 8-9 (2021, 2022, 2025).
+**Early-lap threshold L < 5 (Step 8b, final label change).** Before the change no attempt at L = 4 was labelled in
+any season: the 25 candidates at G = 3.5, k = 2 were excluded first as `in_pit` (15), `neutralised` (5),
+`teammates` (3) or `defender_stayed_out` (2). After it, all 213 L = 4 candidates across the 9 (G, k) settings are
+`excluded_early_lap`, every other attempt keeps its category, and the labelled set ((attempt key, label) of
+`success`/`fail` rows) is identical at every setting (`labelled_set_checksums` in
+`results/full_data_quality.json`). Labelled counts are unchanged (G = 3.5, k = 2: train 108, validation 49,
+test 49). The earliest labelled L is 6 (2023, 2024) or 8-9 (2021, 2022, 2025). The decision was taken from these
+counts only, before any model result.
 
-**`excluded_early_lap` varies by season** (G = 3.5: 76, 21, 50, 3, 39 for 2021-2025; it does not depend on k). The
-rule excludes an attempt whose stop lap L is below 4. A stop on lap 1 is never a candidate (there is no decision
-lap 0), so every early-lap exclusion is a stop on lap 2 or 3 with a car directly ahead within G at the end of
+**`excluded_early_lap` varies by season** (G = 3.5: 80, 23, 52, 5, 54 for 2021-2025; it does not depend on k). The
+rule excludes an attempt whose stop lap L is below 5. A stop on lap 1 is never a candidate (there is no decision
+lap 0), so every early-lap exclusion is a stop on laps 2-4 with a car directly ahead within G at the end of
 lap L - 1:
 
-| Season | L = 2 | L = 3 | All stops on laps 1 / 2 / 3 | Red-flag stops on laps 2-3 | Red-flag share of the exclusions |
-|---|---|---|---|---|---|
-| 2021 | 50 | 26 | 14 / 55 / 34 | 47 | 37 of 76 |
-| 2022 | 17 | 4 | 23 / 23 / 4 | 18 | 14 of 21 |
-| 2023 | 44 | 6 | 45 / 48 / 8 | 17 | 15 of 50 |
-| 2024 | 1 | 2 | 40 / 1 / 2 | 0 | 0 of 3 |
-| 2025 | 23 | 16 | 13 / 26 / 17 | 0 | 0 of 39 |
+| Season | L = 2 | L = 3 | L = 4 | All stops on laps 1 / 2 / 3 | Red-flag stops on laps 2-3 | Red-flag share of L = 2-3 |
+|---|---|---|---|---|---|---|
+| 2021 | 50 | 26 | 4 | 14 / 55 / 34 | 47 | 37 of 76 |
+| 2022 | 17 | 4 | 2 | 23 / 23 / 4 | 18 | 14 of 21 |
+| 2023 | 44 | 6 | 2 | 45 / 48 / 8 | 17 | 15 of 50 |
+| 2024 | 1 | 2 | 2 | 40 / 1 / 2 | 0 | 0 of 3 |
+| 2025 | 23 | 16 | 15 | 13 / 26 / 17 | 0 | 0 of 39 |
 
-An independent recount from `laps` and `pitstops` (stops on laps 2-3 by a car with 0 < gap ahead <= 3.5 s at the
-end of L - 1) gives exactly the pipeline's numbers in every season, so the variation comes from the data. It is
-driven by a few races with a mass stop on lap 2 or 3 (12-19 exclusions on a single lap): red-flag entries recorded
-as stops in 2021 R10, 2021 R11, 2022 R18 and 2023 R20, and mass early stops without a red flag in 2021 R3, 2023 R9
-and 2025 R1. 2024 has 3 because almost all its early stops are on lap 1 (40 of 43). Its two early red flags
-(2024 R4 and R8) have their stops recorded on lap 1, and lap-1 stops are never candidates.
+For L = 2-3, an independent recount from `laps` and `pitstops` (stops on laps 2-3 by a car with 0 < gap ahead
+<= 3.5 s at the end of L - 1) gave exactly the pipeline's numbers in every season, so the variation comes from the
+data. It is driven by a few races with a mass stop on lap 2 or 3 (12-19 exclusions on a single lap): red-flag
+entries recorded as stops in 2021 R10, 2021 R11, 2022 R18 and 2023 R20, and mass early stops without a red flag in
+2021 R3, 2023 R9 and 2025 R1. 2024 is low because almost all its early stops are on lap 1 (40 of 43). Its two early
+red flags (2024 R4 and R8) have their stops recorded on lap 1, and lap-1 stops are never candidates.
 
 ### Neutralisation rule on real races
 

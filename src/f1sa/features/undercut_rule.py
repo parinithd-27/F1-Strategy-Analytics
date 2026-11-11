@@ -7,7 +7,7 @@ L-1** (the decision lap), attacker A and defender D form a candidate pair when:
 
 * A is directly behind D on the timing line (``A.position == D.position + 1``) and
   ``0 < gap <= gap_threshold_s``, where gap = A's gap to the car ahead (cum_A - cum_D);
-* the attempt lap L = L-1 + 1 is at least ``min_attempt_lap``;
+* the attempt lap L = L-1 + 1 is at least ``min_attempt_lap`` (5);
 * A and D are not teammates (same team history key);
 * no other car crossed the line between D and A (a lapped car, or one lapping them);
 * neither A nor D is lapped (gap to the leader >= the leader's lap time at L-1);
@@ -32,8 +32,12 @@ WINDOW_GRID: tuple[int, ...] = (1, 2, 3)
 """Defender response windows k (laps) emitted by the batch build."""
 DEFAULT_GAP_S = 3.5
 DEFAULT_WINDOW_LAPS = 2
-MIN_ATTEMPT_LAP = 4
-"""Stops before this lap are mostly lap-1 damage, not strategy."""
+MIN_ATTEMPT_LAP = 5
+"""An attempt with stop lap L < 5 is ``early_lap``. Stops on laps 2-4 are mostly lap-1 damage,
+red-flag entries or early wet stops, not strategy, and at L = 4 the 3-lap decision lookback
+(``gap_ahead_change_3l``, L-1 vs L-4) and the degradation slopes are always null. Raised from 4 to 5
+in Step 8b from counts only (no labelled attempt at L = 4), before any model result; the label
+definition is frozen after this change. The batch label and the detector both use this one value."""
 
 # Rule-level reasons (subset of the batch exclusion reasons, see features/undercut.py).
 MISSING_DATA = "missing_data"

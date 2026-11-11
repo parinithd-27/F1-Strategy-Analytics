@@ -101,6 +101,11 @@ def test_neutralised_restart_and_early_lap() -> None:
     assert _pair(_snap(*BASE, restart_lap=True)).reasons == (R.NEUTRALISED,)  # type: ignore[union-attr]
     early = _pair(_snap(*BASE, lap=2))
     assert early is not None and R.EARLY_LAP in early.reasons
+    assert R.RuleParams().min_attempt_lap == R.MIN_ATTEMPT_LAP == 5
+    at4 = _pair(_snap(*BASE, lap=3))  # decision lap 3: attempt lap 4
+    assert at4 is not None and at4.reasons == (R.EARLY_LAP,)
+    at5 = _pair(_snap(*BASE, lap=4))  # decision lap 4: attempt lap 5
+    assert at5 is not None and at5.eligible
 
 
 def test_several_reasons_are_all_reported() -> None:

@@ -30,7 +30,7 @@ For each gap threshold G and response window k, an **undercut attempt** is a tup
 
 1. **Candidate rule** (end of lap L − 1; shared with the detector). All of the following hold:
    - A is directly behind D and 0 < gap ≤ G;
-   - L ≥ `min_attempt_lap` (4);
+   - L ≥ `min_attempt_lap` (5);
    - A and D are not teammates (same team history key, via `features/lineage.py`);
    - no other car crossed the line strictly between D and A (its crossing of lap L − 1 or L − 2), which catches a
      lapped car between them;
@@ -55,7 +55,7 @@ would have flagged it before the stop.
 |---|---|---|---|
 | G, gap threshold (s) | 2.5, 3.5, 5.0 | **3.5** | `undercut_rule.GAP_GRID`, `DEFAULT_GAP_S` |
 | k, defender response window (laps) | 1, 2, 3 | **2** | `undercut_rule.WINDOW_GRID`, `DEFAULT_WINDOW_LAPS` |
-| min_attempt_lap | 4 | 4 | `undercut_rule.MIN_ATTEMPT_LAP` |
+| min_attempt_lap | 5 | 5 | `undercut_rule.MIN_ATTEMPT_LAP` (4 until Step 8b) |
 | restart buffer (laps) | 1 | 1 | `undercut.RESTART_BUFFER_LAPS` |
 | slow-stop margin (s) | 3.0 | 3.0 | `undercut.SLOW_STOP_MARGIN_S` |
 | drive-through margin (s) | 2.0 | 2.0 | `undercut.DRIVE_THROUGH_MARGIN_S` |
@@ -75,7 +75,7 @@ kept in `exclusion_reasons`. Reasons marked **rule** come from the shared candid
 |---|---|---|---|
 | 1 | `missing_data` (rule) | the gap or a position is unknown at L − 1, or a position is unknown on the label lap | Jolpica gaps are cumulative times, and one missing lap time makes every later gap null |
 | 2 | `inconsistent_timing` (rule) | gap ≤ 0 (position and time disagree, or a tie) | |
-| 3 | `early_lap` (rule) | L < 4 | Stops on laps 2–3 are lap-1 damage, red-flag entries recorded as stops, or early wet-to-dry changes, not strategy (sample: Sargeant L2, 48.9 s). A stop on lap 1 is never a candidate, because there is no decision lap 0 |
+| 3 | `early_lap` (rule) | L < 5 | Stops on laps 2–4 are lap-1 damage, red-flag entries recorded as stops, or early wet-to-dry changes, not strategy (sample: Sargeant L2, 48.9 s), and at L = 4 the 3-lap lookback and the degradation slopes are always null (see "Early decision laps"). A stop on lap 1 is never a candidate, because there is no decision lap 0. The threshold was raised from L < 4 in Step 8b, decided from counts only (no L = 4 attempt was labelled in any season) and before any model result |
 | 4 | `teammates` (rule) | same team history key | team orders, not a competitive call |
 | 5 | `traffic_between` (rule) | another car's crossing of lap L − 1 or L − 2 lies strictly between D's and A's crossing of L − 1 | a lapped car between them on track |
 | 6 | `lapped` (rule + window) | at L − 1: `gap_leader_s` ≥ the leader's lap time at L − 1; in the window: the car's crossing of lap j is after the leader's crossing of lap j + 1 | blue flags make the fight meaningless |
@@ -150,14 +150,14 @@ Only these columns may feed the S9 model or the detector. All of them use the en
 | `attacker_/defender_pace_last3_s`, `pace_delta_last3_s` | mean of the last (up to) 3 green laps of the current stint; A − D |
 | `attacker_/defender_deg_slope_s_per_lap`, `deg_slope_delta_s_per_lap` | least-squares slope of lap time on tyre age over the stint's green laps (≥ 3 laps, else null) |
 
-**Early decision laps.** Lap 1 is never a green lap and there is no lap 0, so for the earliest eligible stop, L = 4
-(decision lap 3), two features are always null: `gap_ahead_change_3l` (it compares lap 3 with lap 0) and both
-`*_deg_slope_s_per_lap` (at most 2 green laps, laps 2-3, in the stint), so `deg_slope_delta_s_per_lap` too.
-`*_pace_last3_s` is the mean of 2 laps instead of 3. From L = 5 all of them can be computed, unless the car ahead
-changed or a lap was not green. They are not imputed: the model gets the constant 0.0 plus a `_missing` indicator
-(see "Model inputs"). On the full data no attempt at L = 4 or 5 is labelled (all 44 candidates are excluded for
-other reasons, mostly `neutralised`, `in_pit` and `same_lap_stop`), so this affects only the detector, not the
-training rows.
+**Early decision laps.** Lap 1 is never a green lap and there is no lap 0, so at L = 4 (decision lap 3) two features
+would always be null: `gap_ahead_change_3l` (it compares lap 3 with lap 0) and both `*_deg_slope_s_per_lap` (at most
+2 green laps, laps 2-3, in the stint), so `deg_slope_delta_s_per_lap` too. This is why `early_lap` is L < 5 since
+Step 8b. From L = 5 (decision lap 4) all of them can be computed, unless the car ahead changed or a lap was not
+green; such nulls are not imputed: the model gets the constant 0.0 plus a `_missing` indicator (see "Model
+inputs"). The change was decided from counts only, before any model result: on the full data no L = 4 attempt was
+labelled in any season, and the labelled set at every (G, k) is identical before and after (labelled-set checksums
+in `results/full_data_quality.json`). **The label definition is frozen after this change.**
 | `laps_remaining` | race laps − (L − 1). `race_laps` is the winner's lap count, a stand-in for the scheduled distance; it is wrong only in shortened races, which are mostly excluded as neutralised anyway |
 | `pit_loss_prior_s`, `pit_loss_source` | Step 6 prior pit loss (circuit → global, strictly earlier races) |
 | `rejoin_traffic_cars`, `rejoin_nearest_ahead_s` | cars whose on-track gap behind A at L − 1 is in (pit_loss − 3.0 s, pit_loss]: A would rejoin just behind them. The nearest margin is also given |
@@ -223,8 +223,9 @@ have 1.31-1.44. Safety-car laps are mostly 1.3× or more (the median of laps in 
   lap-1 incidents (the heuristic skips lap 1 except for red flags), separates SC from VSC, and gives real stints and
   tyre ages, including the free tyre change under a red flag. Any of these changes the labels, so it would need a
   fresh review on 2021-2024 before the test season is opened.
-- **Early decision laps** (L = 4) always have null `gap_ahead_change_3l` and degradation slopes (see
-  "Decision-time features").
+- **Early decision laps.** Attempts at L = 4 are now `excluded_early_lap` rather than eligible with structurally
+  null features (see "Decision-time features"). At L = 5 the 3-lap gap change uses the lap-1 gap, which includes
+  the standing start.
 
 ## Model inputs (Step 9, `model/features.py`, `model/dataset.py`)
 - **One setting per run.** The default is G = 3.5 s, k = 2. Only labelled rows are used (`success` / `fail`).

@@ -34,7 +34,13 @@ from pyspark.sql import functions as F
 from f1sa.features import schemas as FS
 from f1sa.features import undercut as U
 from f1sa.features.build import compute_features
-from f1sa.features.undercut_rule import GAP_GRID, RULE_REASONS, WINDOW_GRID, RuleParams
+from f1sa.features.undercut_rule import (
+    GAP_GRID,
+    MIN_ATTEMPT_LAP,
+    RULE_REASONS,
+    WINDOW_GRID,
+    RuleParams,
+)
 from f1sa.streaming.detector import detect, snapshot_from_state
 
 LAPPED = Car("x", "team_x", 119.25, 100.0)
@@ -321,8 +327,94 @@ def test_teammates_are_excluded() -> None:
 
 
 def test_early_lap_stop() -> None:
-    r = _default(_eval(Scenario(2023, 1, standard_cars(a_pit_laps=[3], d_pit_laps=[4]))))
-    assert r["outcome_category"] == "excluded_early_lap" and r["lap"] == 3
+    assert MIN_ATTEMPT_LAP == 5
+    for stop in (3, 4):
+        sc = Scenario(2023, 1, standard_cars(a_pit_laps=[stop], d_pit_laps=[stop + 1]))
+        r = _default(_eval(sc))
+        assert r["outcome_category"] == "excluded_early_lap" and r["lap"] == stop
+        assert not r["detector_eligible"]
+
+
+EARLY_SCENARIOS = [
+    Scenario(2023, 11, standard_cars(a_pit_laps=[4], d_pit_laps=[5])),
+    Scenario(2023, 12, standard_cars(a_pit_laps=[5], d_pit_laps=[6])),
+]
+_KEY = ("season", "round", "lap", "attacker_id", "defender_id")
+
+
+def _by_key(rows: list[dict[str, Any]]) -> dict[tuple[Any, ...], dict[str, Any]]:
+    return {
+        tuple(r[c] for c in (*_KEY, "gap_threshold_s", "response_window_laps")): r for r in rows
+    }
+
+
+def test_threshold_five_moves_only_lap_four_attempts() -> None:
+    """L < 5 vs the old L < 4, on every scenario and every (G, k): the same attempt rows, every
+    row with L != 4 identical (category, label, reasons), and every L = 4 row now
+    ``excluded_early_lap``. On the full data no L = 4 attempt was labelled, so the labelled set
+    is unchanged there (checked by ``labelled_set_checksum`` in the full report)."""
+    moved = 0
+    for sc in [*SCENARIOS.values(), *EARLY_SCENARIOS]:
+        data = race_data(sc, 21.0)
+        old = _by_key(U.evaluate_race(data, min_attempt_lap=4))
+        new = _by_key(U.evaluate_race(data))
+        assert old.keys() == new.keys()
+        for key, n in new.items():
+            o = old[key]
+            if n["lap"] == 4:
+                assert n["outcome_category"] == "excluded_early_lap" and n["label"] is None
+                assert "early_lap" in n["exclusion_reasons"] and not n["detector_eligible"]
+                moved += 1
+            else:
+                for c in ("outcome_category", "label", "exclusion_reasons", "detector_eligible"):
+                    assert n[c] == o[c], (key, c)
+        labelled = {
+            k: r["label"] for k, r in new.items() if r["outcome_category"] in ("success", "fail")
+        }
+        old_labelled = {
+            k: r["label"]
+            for k, r in old.items()
+            if r["outcome_category"] in ("success", "fail") and r["lap"] != 4
+        }
+        assert labelled == old_labelled
+    assert moved == len(GAP_GRID) * len(WINDOW_GRID)  # the L = 4 attempt of round 11
+
+
+def test_detector_and_batch_agree_at_laps_four_and_five(spark: SparkSession) -> None:
+    df, tables = _attempts(spark, EARLY_SCENARIOS)
+    rows = [r.asDict() for r in df.collect()]
+    enriched = [r.asDict() for r in tables["laps_enriched"].collect()]
+    snaps = _snapshots(enriched)
+    for g in GAP_GRID:
+        detected = {
+            (c.round, c.attacker_id, c.attempt_lap)
+            for snap in snaps.values()
+            for c in detect(snap, RuleParams(gap_threshold_s=g))
+            if c.attacker_id == "a" and c.attempt_lap in (4, 5)
+        }
+        batch = {
+            (r["round"], r["attacker_id"], r["lap"])
+            for r in rows
+            if r["gap_threshold_s"] == g and r["attacker_id"] == "a" and r["detector_eligible"]
+        }
+        assert detected == batch == {(12, "a", 5)}, g
+    at4 = [r for r in rows if r["round"] == 11 and r["attacker_id"] == "a" and r["lap"] == 4]
+    assert at4 and all(r["outcome_category"] == "excluded_early_lap" for r in at4)
+    at5 = [r for r in rows if r["round"] == 12 and r["attacker_id"] == "a" and r["lap"] == 5]
+    assert at5 and all(r["detector_eligible"] for r in at5)
+
+
+def test_labelled_set_checksum_ignores_unlabelled_rows(spark: SparkSession) -> None:
+    df, _tables = _attempts(spark, EARLY_SCENARIOS)
+    base = U.labelled_set_checksum(df, 3.5, 2)
+    recat = df.withColumn(
+        "outcome_category",
+        F.when(F.col("lap") == 4, F.lit("excluded_teammates")).otherwise(F.col("outcome_category")),
+    )
+    assert U.labelled_set_checksum(recat, 3.5, 2) == base  # L = 4 is not labelled
+    flipped = df.withColumn("label", F.when(F.col("label") == 1, 0).otherwise(F.col("label")))
+    assert U.labelled_set_checksum(flipped, 3.5, 2) != base
+    assert U.labelled_set_checksum(df, 5.0, 3) != base  # another setting
 
 
 def test_lap_one_stop_is_never_a_candidate() -> None:

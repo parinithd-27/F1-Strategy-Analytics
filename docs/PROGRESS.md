@@ -298,25 +298,30 @@
   - Split tests (18): the rule (wet run, long SC, red-flag run, thresholds, restarts, windows), and labels checksum
     plus every other count identical with and without the split. 579 unit tests (579 passed in 444 s). The sample
     CSV gains the two columns (other columns unchanged; sha256 1c93ec30…).
+  - Early-lap threshold L < 5 (user decision, from counts only, before any model result; final label change, the
+    definition is now frozen): `undercut_rule.MIN_ATTEMPT_LAP = 5`, shared by the batch label and the detector.
+    All 213 L = 4 candidates (9 settings; 25 at G=3.5, k=2) are now `excluded_early_lap`; no other attempt changed
+    category; none was labelled. New `undercut.labelled_set_checksum` per (G, k) in `full_data_quality.json`:
+    identical before and after at all 9 settings. Only `undercut_attempts` changed (f82c2f9c47398d67).
+    Tests: L < 5 vs L < 4 moves only L = 4 rows at every (G, k); detector and batch agree at L = 4 and 5;
+    the labelled-set checksum ignores unlabelled rows.
   - Two complete runs: identical checksums for all tables and byte-identical result files. `/f1/raw` listing and
     `data/manifest.json` unchanged. Sample counts CSV unchanged.
   - Docs: "Full-data quality notes" in `docs/data_dictionary.md`. 67 new tests, 561 unit tests (561 passed in 382 s). Red-flag
     tests: a lap where every car "pits" is a red flag, ordinary all-car and half-field pit laps are not, lap-1
     stoppage, restart period excludes an attempt, ends after 3 laps, counts from the end of the run.
 ## Next
-- User: decide on the early-lap threshold (L < 4 vs L < 5; no labelled attempt moves either way), then sign off
-  the label definition. Only then run `--source full`, which opens 2025 once.
+- The label definition is frozen (L < 5 was the last change). Next: run
+  `uv run python experiments/model_eval.py --source full --allow-test-season` (opens 2025 once) when the user says so.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
 - Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
   using 2021-2024 only.
-- User: sign off the label definition. Then run
-  `uv run python experiments/model_eval.py --source full --allow-test-season` (opens 2025 once).
 - Step 10: scalability and partitioning experiments.
 ## Known issues
 - Wet running is excluded as `neutralised` in full mode (compounds are null, so `wet` cannot fire). Kept on
   purpose; the reporting split estimates the share. See `docs/label_definition.md` "Known limitations".
-- At L=4, `gap_ahead_change_3l` and the degradation slopes are always null (0.0 + `_missing` in the model).
+- At L=5 `gap_ahead_change_3l` uses the lap-1 gap (standing start). L=4 is now excluded as `early_lap`.
 - The app container does not come back after a Docker Desktop/WSL restart (exit 128, not OOM; seen twice). The
   scratchpad in /tmp is wiped at the same time.
 - Sample size is small: 108 labelled training attempts at G=3.5, k=2 (184 at G=5.0, k=3).
