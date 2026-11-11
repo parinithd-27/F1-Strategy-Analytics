@@ -375,3 +375,31 @@ race, so they are reporting tables and must never be joined as features of the s
 - **Out-lap plan size.** `outlap_features` reuses the realised out-lap table four times. A `localCheckpoint()` cuts
   its lineage; without it the optimised plan grew to about 13 MB and the test JVM ran out of heap.
 
+## Undercut model (`model/`, `experiments/model_eval.py`, Step 9)
+```
+undercut_attempts + stints + telemetry_lap_features --dataset.load_attempts--> one (G, k), labelled rows
+  --build_dataset--> train 2021-23 | validation 2024 | SealedSplit(test 2025)
+  --train.tune (grid; fit on train, PR-AUC on validation)--> LR (assembler, scaler, LR) and GBT pipelines
+  --calibrate.choose (validation scores)--> isotonic or Platt (Platt below 300 rows) or identity
+  --evaluate.evaluate_test (opens the test split once)--> metrics plus race-cluster and attempt bootstrap CIs
+  --explain--> GBT importances, standardised LR coefficients, validation permutation importance
+```
+- **Metrics** (`model/metrics.py`) are numpy, so tuning, evaluation, the bootstrap and permutation importance share
+  one implementation.
+  - PR-AUC is average precision; it does not interpolate like Spark's `areaUnderPR`.
+  - ROC-AUC matches Spark's `areaUnderROC` exactly (tested).
+- **Refit policy.** The chosen grid point is the model fitted on train only, so validation stays out of sample for
+  calibration. There is no CrossValidator across time.
+- **Sources** (`model/pipeline.py`):
+
+  | Source | What runs | Output suffix and stamp |
+  |---|---|---|
+  | `sample` | the real sample features; the test step is skipped | `_sample`, SMOKE TEST |
+  | `rehearsal` | GENERATED 2021–2025 data, the whole pipeline (never reads the lake) | `_rehearsal`, REHEARSAL |
+  | `full` | the whole lake; needs `--allow-test-season` | no suffix |
+
+- **Outputs:** `results/{model_eval,calibration,feature_importance}*.csv` and
+  `results/{reliability,confusion_matrix,feature_importance}*.png`. Models go to
+  `models/undercut/{source}_{feature_set}_G{g}_k{k}/{lr,gbt}` (gitignored) with `metadata.json`: features, versions,
+  seed, split counts, class weights, the grid and calibrators.
+

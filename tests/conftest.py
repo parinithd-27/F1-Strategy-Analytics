@@ -85,3 +85,19 @@ def sample_clean_lake(
     finally:
         os.chdir(cwd)
     yield lake
+
+
+@pytest.fixture(scope="session")
+def sample_features_root(spark: SparkSession, sample_clean_lake: SampleLake) -> str:
+    """The sample lake's feature zone (built once if another test has not built it yet)."""
+    root = sample_clean_lake.lake / "features"
+    if not (root / "undercut_attempts").is_dir():
+        from f1sa.features.build import run_build
+
+        cwd = os.getcwd()
+        os.chdir(sample_clean_lake.base)
+        try:
+            run_build(spark, sample_clean_lake.settings(), source="lake", out=lambda _m: None)
+        finally:
+            os.chdir(cwd)
+    return f"file://{root}"

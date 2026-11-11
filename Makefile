@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 UV ?= uv
 
-.PHONY: help setup lint typecheck test test-int sample-data etl-sample features-sample
+.PHONY: help setup lint typecheck test test-int sample-data etl-sample features-sample model-eval-sample model-eval-rehearsal
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -11,8 +11,8 @@ setup: ## Install Python deps (incl. dev extras) into .venv
 	$(UV) sync --all-extras
 
 lint: ## Ruff lint + format check
-	$(UV) run ruff check src tests
-	$(UV) run ruff format --check src tests
+	$(UV) run ruff check src tests experiments
+	$(UV) run ruff format --check src tests experiments
 
 typecheck: ## mypy (strict) on src
 	$(UV) run mypy src
@@ -28,6 +28,12 @@ etl-sample: ## Clean zone from data/sample into data/lake/clean (file mode, Spar
 
 features-sample: ## Feature tables from data/lake/clean into data/lake/features (run etl-sample first)
 	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python -m f1sa.features.build --source sample
+
+model-eval-sample: ## Model smoke test on the sample features (no test season; outputs *_sample, SMOKE TEST)
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python experiments/model_eval.py --source sample
+
+model-eval-rehearsal: ## Whole model pipeline on GENERATED data (outputs *_rehearsal, never reads the lake)
+	$(UV) run python experiments/model_eval.py --source rehearsal
 
 test-int: ## Integration tests (needs infra); exit 5 = none collected is OK
 	$(UV) run pytest tests/integration -q -m integration; rc=$$?; \

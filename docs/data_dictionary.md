@@ -391,3 +391,17 @@ Generating assumptions:
 - A missing real lap time gives missing aggregates. The row is kept and still flagged.
 - Caveat: because speed is derived from the real lap time and the synthetic tyre age, these columns are partly
   redundant with real data and partly random. Any "signal" a model finds in them is an artefact.
+
+## Model outputs (`experiments/model_eval.py`, Step 9)
+Every file of a `sample` or `rehearsal` run has a `_sample` / `_rehearsal` suffix and a `# SMOKE TEST …` /
+`# REHEARSAL …` first line (CSV) or a title and watermark (PNG). **They are not findings.**
+
+| File | Columns / content |
+|---|---|
+| `results/model_eval*.csv` | source, smoke_test, feature_set, g, k, model (`lr`, `lr_calibrated`, `gbt`, `gbt_calibrated`, `majority`, `rule`), split (`validation`, `test`), metric (`f1_positive`, `macro_f1`, `pr_auc`, `roc_auc`, `brier`, `ece`), value, ci_kind (`race_cluster` / `attempt`, test only), ci_low, ci_high (95% percentile), n_valid (usable resamples), n_attempts, n_races, note (why a metric is undefined) |
+| `results/calibration*.csv` | model, split, chosen_method, brier_raw / _isotonic / _platt / _calibrated, ece_raw / _calibrated, n_attempts, reason |
+| `results/feature_importance*.csv` | model, method (`gbt_importance`, `lr_std_coefficient`, `permutation_pr_auc_drop`), feature, value, std, note |
+| `results/reliability*.png` | observed vs predicted (10 bins), raw vs calibrated, for the selected model (test season; validation in sample mode, marked) |
+| `results/confusion_matrix*.png` | the selected calibrated model at 0.5 |
+| `results/feature_importance*.png` | GBT importance and permutation drop (top 15) |
+

@@ -217,6 +217,57 @@
     - build CSV and results-dir guard.
 
     81 new tests, 453 unit tests in total (full suite: 453 passed in 225 s).
+- Step 9 (W5): MLlib undercut model, baselines, calibration and explanations (#14–#18, #29, #39)
+  - `model/features.py`: feature registry with provenance (jolpica, stint_boundary, tyre_state, telemetry,
+    fastf1).
+    - Every `DECISION_FEATURES` column is either a model input or excluded with a reason; derived inputs are
+      documented.
+    - Feature sets: `real` and `with_synthetic`. `with_fastf1` will be one new entry.
+  - `model/dataset.py`:
+    - one (G, k) setting, labelled rows only, a duplicate-key check;
+    - derived stint length and telemetry at L−1;
+    - constant fill plus `_missing` indicators, and one-hot `*_source` columns;
+    - season split (`SplitSpec`) with a `SealedSplit` test season (token from `evaluate_test`, opened once);
+    - class weights from the training rows only.
+  - `model/baselines.py`: majority class, and a rule (expected fresh-tyre gain vs gap, decision-time only).
+  - `model/train.py`:
+    - LR pipeline (assembler → scaler → LR) and GBT pipeline;
+    - grid tuned on validation PR-AUC (fit on train only, no CrossValidator);
+    - explicit degenerate-validation path;
+    - full-mode synthetic refusal (`SyntheticFeatureError`, exit 3);
+    - model and metadata save under `./models` only.
+  - `model/calibrate.py`: isotonic (Spark) and Platt (slope ≥ 0), chosen by validation Brier; Platt below 300 rows,
+    identity when validation cannot support a fit.
+  - `model/metrics.py`: numpy AP, ROC (equal to Spark's), Brier, ECE (10 bins), F1, macro-F1, with NaN and a reason
+    when undefined.
+  - `model/evaluate.py`: race-cluster and attempt bootstraps (1000, paired, seeded); `evaluate_test` is the only
+    place the test season is opened.
+  - `model/explain.py`: GBT importances (grouped per feature), standardised LR coefficients, permutation importance
+    on validation (5 repeats, one stacked Spark job).
+  - `model/rehearsal.py`: a GENERATED 2021–2025 table with a known logistic signal and race effects.
+  - `model/pipeline.py`, `experiments/model_eval.py`, `make model-eval-sample` / `model-eval-rehearsal`:
+    - `--source sample|rehearsal|full`;
+    - full needs `--allow-test-season`;
+    - stamped, suffixed outputs.
+  - Verified:
+    - `DATA_LAKE_URI=file://$PWD/data/lake uv run python experiments/model_eval.py --source sample` exits 0. Its
+      data is train 2023 (4 rows), validation 2024 (1 row). Tuning is skipped (one class) and calibration is
+      identity. The test season is skipped and the sealed split is never opened. All outputs are `_sample` and
+      SMOKE TEST.
+    - Rehearsal (generated data, small grid): the whole pipeline in about 20 s; the calibrated model beats the
+      majority baseline on test PR-AUC.
+  - Tests:
+    - an `Estimator.fit` spy: no fit, tuning or calibration sees 2025, and no fit mixes train with validation;
+    - poisoned 2025 rows leave the weights, parameters, coefficients, importances and calibrator unchanged;
+    - the test split opens once;
+    - the (G, k) filter and duplicates;
+    - training-only class weights;
+    - monotonic calibration, isotonic equal to Spark, the chooser rules;
+    - the race-cluster bootstrap draws whole races, and its CI is wider under correlation;
+    - full-mode refusal (static, flags, null flag);
+    - CLI guards; sample smoke mode; explanations recover the generated signal.
+
+    41 new tests, 494 unit tests in total (full suite: 494 passed in 295 s).
 ## Next
 - After the user's bulk HDFS ingest finishes: verify hdfs mode with
   `docker compose exec app env PYTHONPATH=/workspace/src DATA_LAKE_URI=hdfs://namenode:8020/f1 python -m f1sa.etl.clean --source lake`.
@@ -226,8 +277,9 @@
   `test_repo_clean_zone_has_only_known_constructors` and the build check fail on a missed rename.
 - After the full ingest: run `--source lake` and produce the real undercut counts. Re-check the 74% out-lap
   stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races.
-- Step 9: MLlib GBT on `undercut_attempts` (default G = 3.5, k = 2, `label` not null). Use `DECISION_FEATURES`
-  only. Train on 2021–2023, calibrate on 2024. The legacy and ORACLE columns are for S16 only.
+- User: sign off the label definition. Then, after the full ingest, run
+  `uv run python experiments/model_eval.py --source full --allow-test-season` (opens 2025 once).
+- Step 10: scalability and partitioning experiments.
 ## Known issues
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
@@ -278,6 +330,12 @@
   eligibility and exclusion, never as a feature, but it will flag laps in mixed wet/dry races.
 - The out-lap residual assumes stationary-time deviations land 1:1 on the out-lap (the line comes before the boxes).
   This is not yet verified per circuit.
+- Step 9: the sample run is plumbing only (4 training rows, 1 validation row). Every sample metric is a smoke test,
+  and tuning and calibration fall back to defaults. Rehearsal numbers come from GENERATED data.
+- The PySpark Python worker daemon prints harmless `BrokenPipeError` tracebacks to stderr when a job stops early
+  (e.g. `isEmpty`/`limit` on Python-RDD-backed frames). Results are unaffected.
+- `real` excludes compounds and tyre age, so the model cannot use compound effects until FastF1 stints replace the
+  synthetic compounds (`with_synthetic` is then allowed in full mode).
 
 ## Verify
 `uv sync --all-extras && make lint && make typecheck && make test && make up-full && make test-int && make down`
@@ -293,3 +351,6 @@ Step 7: `uv run pytest tests/unit/test_telemetry_agg.py tests/unit/test_outlap.p
 Step 8: `make etl-sample && uv run python -m f1sa.features.build --source sample` (twice: same checksums, same
 `sha256sum results/undercut_counts_sample.csv`), then
 `uv run pytest tests/unit/test_undercut.py tests/unit/test_detector.py tests/unit/test_outlap.py tests/unit/test_etl_helpers.py -q`.
+
+Step 9: `make etl-sample && make features-sample && make model-eval-sample`, then
+`uv run pytest tests/unit/test_model_dataset.py tests/unit/test_model_pipeline.py tests/unit/test_calibrate.py tests/unit/test_metrics.py tests/unit/test_explain.py -q`.

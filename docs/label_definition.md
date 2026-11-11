@@ -159,6 +159,37 @@ Only these columns may feed the S9 model or the detector. All of them use the en
 outcome category. **These are smoke-test numbers, not findings.** The file covers 2 races, its tyre compounds are
 synthetic, and its first line says so. The real counts come from the full 2021–2025 ingest.
 
+## Model inputs (Step 9, `model/features.py`, `model/dataset.py`)
+- **One setting per run.** The default is G = 3.5 s, k = 2. Only labelled rows are used (`success` / `fail`).
+  `defender_stayed_out` and every `excluded_*` row are dropped. A duplicated attempt key (season, round, attacker_id,
+  lap) after the filter is an error.
+- **Feature registry.** Every `DECISION_FEATURES` column is either a model input with a provenance, or in `EXCLUDED`
+  with a reason:
+  - the absolute `*_pace_last3_s` columns are circuit proxies; `pace_delta_last3_s` is used instead;
+  - `compound_is_synthetic` is a provenance flag, not a feature.
+
+  `DERIVED` documents the extra inputs, all taken at `decision_lap` (L − 1): the stint length of A and D, and the
+  per-lap telemetry of A and D. ORACLE, outcome and legacy columns can never be registered (`check_registry`).
+- **Feature sets** are sets of provenances:
+
+  | Set | Provenances |
+  |---|---|
+  | `real` | `jolpica`, `stint_boundary` |
+  | `with_synthetic` | `real` + `tyre_state`, `telemetry` |
+
+  Step 16 adds `with_fastf1` as one new entry. `real` uses the stint length (real stint boundaries) instead of tyre
+  age, because tyre age includes the synthetic starting age in sample mode.
+- **Full mode refuses synthetic values.** `train.check_feature_policy` fails if any selected row has
+  `compound_is_synthetic` or `*_telemetry_is_synthetic` that is true or null.
+- **Missing values** are never imputed from data:
+  - a numeric value becomes the constant 0.0, plus a `_missing` indicator;
+  - the Step 7/8 `*_source` columns are one-hot encoded, with an `unknown` level.
+- **Split** by season: train 2021–2023, validation and calibration 2024, test 2025.
+  - The test split is sealed. Only `evaluate.evaluate_test` can open it, and only once.
+  - Class weights come from the training rows only.
+  - Tuning uses validation PR-AUC. Calibration uses validation scores. Neither ever reads 2025, and a spy test
+    enforces this.
+
 ## Out-lap pace features (`features/outlap.py`, table `outlap_features`)
 
 ### Clean lap
