@@ -15,6 +15,7 @@ TARGETS = (
     "report-full",
     "pipeline-full",
     "model-dev-full",
+    "model-save-full",
 )
 
 
@@ -101,3 +102,27 @@ def test_model_test_full_needs_confirm_and_runs_both_settings_once() -> None:
     lines = [x for x in out.splitlines() if "model_eval.py" in x]
     assert len(lines) == 2 and all("--source full --allow-test-season" in x for x in lines)
     assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")
+
+
+def test_model_save_full_runs_the_deployment_entry_point_without_the_test_season() -> None:
+    lines = _dry_run("model-save-full").splitlines()
+    assert "test -w /workspace/models" in lines[0]  # refuses before the ./models mount exists
+    runs = [x for x in lines if "model_save.py" in x]
+    assert len(runs) == 1
+    line = runs[0]
+    assert "exec -T" in line and "DATA_LAKE_URI=hdfs://namenode:8020/f1" in line
+    assert "F1SA_GIT_SHA=" in line and "F1SA_GIT_DIRTY=" in line
+    assert line.endswith("app python experiments/model_save.py --source full")
+    for forbidden in ("--allow-test-season", "model_eval.py", "--g", "--force"):
+        assert forbidden not in line
+
+
+def test_model_save_full_force_is_opt_in() -> None:
+    out = subprocess.run(
+        ["make", "-n", "--no-print-directory", "-C", str(REPO_ROOT), "model-save-full", "FORCE=1"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    ).stdout
+    assert out.splitlines()[-1].endswith("--source full --force")

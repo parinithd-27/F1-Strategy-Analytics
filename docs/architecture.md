@@ -56,6 +56,7 @@ Defined in `docker-compose.yml`, project name `f1sa`. `make up` starts `core`; `
 - Host ports 3000 and 8000 are reserved for the web app and the API (later steps). Every host port can be overridden in `.env` (see `.env.example`). If you change `KAFKA_HOST_PORT` or `REDIS_HOST_PORT`, update `KAFKA_BOOTSTRAP` and `REDIS_URL` to match.
 - The app image installs `spark-sql-kafka-0-10_2.13:4.2.1` (plus `kafka-clients`, `spark-token-provider-kafka` and `commons-pool2`) into `$SPARK_HOME/jars` at build time, so Structured Streaming needs no network at runtime. Inside containers, Kafka is `kafka:29092`. From the host, it is `localhost:9092`.
 - HDFS is a single-node dev setup: `dfs.replication=1` and permissions disabled (`docker/hadoop/`). The NameNode is formatted on first start only.
+- The app container mounts the repo read-only at `/workspace`, with `data/`, `results/` and `models/` (Step 9c) mounted read-write over it.
 
 ### Memory budget
 The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserProfile%\.wslconfig`. On the dev machine the VM currently has about 9 GiB and 6 CPUs (`free -g`, `nproc`). Each container has a hard `mem_limit`:
@@ -402,4 +403,43 @@ undercut_attempts + stints + telemetry_lap_features --dataset.load_attempts--> o
   `results/{reliability,confusion_matrix,feature_importance}*.png`. Models go to
   `models/undercut/{source}_{feature_set}_G{g}_k{k}/{lr,gbt}` (gitignored) with `metadata.json`: features, versions,
   seed, split counts, class weights, the grid and calibrators.
+
+### Deployment model (`model/deploy.py`, `model/lr_scorer.py`, `experiments/model_save.py`, Step 9c)
+- `make model-save-full` runs the frozen specification (`docs/model_spec.md`) once, in the app container, on the
+  primary setting G=3.5, k=2. It reuses the development path unchanged: `pipeline.load_frame` in no-test mode
+  (only the `season=2021..2024` partitions are listed and read), `DEV_SPLIT`, `train.tune` with the frozen grids
+  and seed 42, and `calibrate.choose` (Platt, 49 validation rows). `evaluate_test` is never imported. Separate entry
+  point, so `pipeline.run` and the test-season path are untouched.
+- Layout (gitignored, about 280 KB). The `deploy` source token keeps it apart from the test run's
+  `full_real_G*_k*` folder:
+  ```
+  models/undercut/deploy_real_G3.5_k2/
+    lr/   pipeline/ (Spark PipelineModel)  calibrator.json  scorer.json  metadata.json
+    gbt/  pipeline/                        calibrator.json                metadata.json
+    reproduction.json
+  ```
+  Each `metadata.json` holds the features in order, the assembled columns, the feature set, G and k, the
+  training and calibration seasons, the hyperparameters, the calibrator, `decision_threshold` 0.5, the seed, the
+  library versions, the git sha and dirty flag, `test_season_read: false` and the partitions read.
+- Writes go to `.staging-*` and are renamed into place only after the **reproduction check** passes:
+  - the reloaded models predict exactly like the in-memory models;
+  - the parameters, calibrator, raw validation PR-AUC and calibrated validation Brier / PR-AUC equal
+    `results/model_dev_*`;
+  - the Python scorer equals Spark within 1e-9.
+
+  Otherwise exit 4 and the staging folder is kept. An existing folder is replaced only with `FORCE=1`
+  (`--force`).
+- **Pure-Python scorer** (`lr_scorer.LRScorer`, reads `lr/scorer.json`, no Spark or numpy import). It
+  reproduces the training transforms:
+  - assembler order, with 0.0 fill and a `_missing` indicator for numeric inputs;
+  - one-hot plus `unknown` for categorical inputs, and NaN/inf rejected as `VectorAssembler(handleInvalid="error")`
+    does;
+  - the scaler `(x - mean) / std` (0 where std = 0), then the LR sigmoid, then Platt.
+- **Streaming (S12) deploys the calibrated LR only**, the pre-registered primary model, via the scorer
+  (microseconds per pair, no JVM round trip). GBT is saved and loadable for batch and dashboard comparison; a Spark
+  `transform` per micro-batch would add a Spark job (tens to hundreds of ms) for a non-primary model.
+- **How containers reach `models/`.** The app service mounts `./models:/workspace/models` read-write (the repo
+  itself stays `:ro`). The API container (S13) will mount `./models:/workspace/models:ro` and load
+  `lr/scorer.json` without Spark. The container has no git, so the Makefile passes `F1SA_GIT_SHA` /
+  `F1SA_GIT_DIRTY`; without a sha the run refuses.
 

@@ -141,6 +141,7 @@ services:
       - ./:/workspace:ro
       - ./data:/workspace/data
       - ./results:/workspace/results
+      - ./models:/workspace/models
     depends_on:
       kafka:
         condition: service_healthy

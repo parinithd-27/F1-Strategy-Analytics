@@ -61,6 +61,19 @@ def test_compose_config_valid() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_app_mounts_models_writable_and_repo_read_only() -> None:
+    if shutil.which("docker") is None:
+        pytest.skip("docker CLI not installed")
+    import json
+
+    result = _compose("config", "--format", "json")
+    assert result.returncode == 0, result.stderr
+    vols = {v["target"]: v for v in json.loads(result.stdout)["services"]["app"]["volumes"]}
+    assert vols["/workspace"].get("read_only") is True
+    assert not vols["/workspace/models"].get("read_only", False)
+    assert vols["/workspace/models"]["source"].endswith("/models")
+
+
 def test_kafka_topic_exists_with_partitions(settings: Settings) -> None:
     admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap})
     metadata = admin.list_topics(topic=settings.kafka_topic_events, timeout=15)

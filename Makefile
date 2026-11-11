@@ -91,6 +91,14 @@ model-dev-full: ## DEVELOPMENT model run on the full features (2021-2024 only; 2
 	$(APP_EXEC) python experiments/model_eval.py --source full --no-test
 	$(APP_EXEC) python experiments/model_eval.py --source full --no-test --g 5.0 --k 3
 
+.PHONY: model-save-full
+# Recursively expanded: git runs only when the target is used (the app container has no git).
+GIT_SHA = $(shell git rev-parse HEAD 2>/dev/null)
+GIT_DIRTY = $(shell if [ -n "$$(git status --porcelain 2>/dev/null)" ]; then echo true; else echo false; fi)
+model-save-full: ## Deployment model (frozen spec, G=3.5 k=2, 2025 never read) into models/; FORCE=1 replaces
+	@$(COMPOSE) exec -T app test -w /workspace/models || { echo "Refusing: /workspace/models is not writable in the app container; it needs the ./models mount ('docker compose up -d app' recreates only the app container)." >&2; exit 1; }
+	$(COMPOSE) exec -T -e PYTHONPATH=/workspace/src -e DATA_LAKE_URI=$(HDFS_LAKE) -e F1SA_GIT_SHA=$(GIT_SHA) -e F1SA_GIT_DIRTY=$(GIT_DIRTY) app python experiments/model_save.py --source full$(if $(FORCE), --force,)
+
 .PHONY: model-test-full
 model-test-full: ## THE single test-season run (docs/model_spec.md): both settings, opens 2025; CONFIRM=yes
 	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: this evaluates the 2025 test season once per setting (docs/model_spec.md). Re-run as 'make model-test-full CONFIRM=yes'." >&2; exit 1; fi

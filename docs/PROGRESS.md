@@ -341,6 +341,40 @@
     tuned); new `decision_threshold` column and metadata key. 5-bin ECE also in the test report.
   - Dev outputs regenerated once (reads only `season=2021..2024`): 6,036 existing cells identical, only the new
     column and key added.
+- Step 9c (deployment model for streaming, no test season)
+  - New entry point (not a flag on `model_eval.py`, so `pipeline.run` and the test path are untouched):
+    - `model/deploy.py`, `experiments/model_save.py`, `make model-save-full` (`FORCE=1` replaces).
+    - Reuses `load_frame` (no-test mode), `DEV_SPLIT`, `tune`, `score_split` and `choose` unchanged; `evaluate_test`
+      is not imported.
+  - Output `models/undercut/deploy_real_G3.5_k2/` (gitignored, about 280 KB):
+    - `{lr,gbt}/pipeline/`, `calibrator.json` and `metadata.json` (every field asked for, including git sha, dirty
+      flag and `test_season_read: false`);
+    - `lr/scorer.json` and `reproduction.json`.
+  - The run writes to `.staging-*` and moves into place only if the reproduction check passes.
+  - `model/lr_scorer.py`: pure-Python calibrated-LR scorer. It imports no Spark or numpy, and every number it uses
+    comes from `scorer.json`.
+  - Streaming will deploy the LR only; GBT stays Spark-only, for batch use.
+  - `docker-compose.yml`: the app mounts `./models:/workspace/models` read-write (user choice). Only the app
+    container was recreated (`docker compose up -d --no-deps app`, user-approved). The other 8 services kept
+    running and no volume was touched.
+  - Ran `make model-save-full` (2m02s):
+    - partitions read: `season=2021..2024` only;
+    - train 108 (32 positive), validation 49 (16);
+    - LR regParam 0.1, elasticNetParam 0.5; GBT depth 2, 50 iterations, step 0.05; Platt for both;
+    - reproduction MATCH: the round trip is exact for all 4 score vectors, and the parameters and Platt a/b are
+      identical to the dev run;
+    - calibrated validation Brier / PR-AUC: LR 0.168438 / 0.593775, GBT 0.205233 / 0.560198, equal to
+      `model_dev_*`;
+    - scorer vs Spark: max |diff| 2.2e-16.
+  - Tests (38 new): `test_model_deploy.py` (19) and `test_lr_scorer.py` (19), plus 3 in
+    `test_makefile_full.py` and 1 compose-mount integration test.
+    - The loader and fit spies see no 2025 data, and `evaluate_test` is never called.
+    - Exact round trip.
+    - The dev-run match, and the tampered-reference mismatch (exit 4, staging kept, nothing moved).
+    - Every metadata field; distinct folders per setting, never the test-run folder; refusal without `--force`.
+    - CLI guards and the git sha refusal.
+    - Scorer vs Spark within 1e-9: validation rows, None numerics and categoricals, unseen categories, std-0
+      columns, NaN/inf/bool rejected.
 ## Next
 - User: commit `docs/model_spec.md` (the freeze). Then `make model-test-full CONFIRM=yes` (opens 2025 once per
   setting) when the user says so.
@@ -349,7 +383,14 @@
 - Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
   using 2021-2024 only.
 - Step 10: scalability and partitioning experiments.
+- After committing Step 9c, optionally run `make model-save-full FORCE=1` so that `git_dirty` is false in the
+  deployment metadata.
+- Step 12: load `lr/scorer.json` with `LRScorer.load` in the stream job; compute the inputs exactly as
+  `features/undercut.py` does at L-1.
 ## Known issues
+- The deployment metadata records `git_dirty: true`, because it was saved before the Step 9c code was committed.
+  The sha (36c369b) is the parent commit. The model itself is unaffected (it is the same frozen procedure, and the
+  reproduction check matched).
 - Wet running is excluded as `neutralised` in full mode (compounds are null, so `wet` cannot fire). Kept on
   purpose; the reporting split estimates the share. See `docs/label_definition.md` "Known limitations".
 - At L=5 `gap_ahead_change_3l` uses the lap-1 gap (standing start). L=4 is now excluded as `early_lap`.
@@ -436,3 +477,7 @@ Step 8b (needs `make up-full`): `make pipeline-full` (twice: same checksums, sam
 
 Step 9: `make etl-sample && make features-sample && make model-eval-sample`, then
 `uv run pytest tests/unit/test_model_dataset.py tests/unit/test_model_pipeline.py tests/unit/test_calibrate.py tests/unit/test_metrics.py tests/unit/test_explain.py -q`.
+
+Step 9c (needs `make up-full`; the app must have the `./models` mount): `make model-save-full` (add `FORCE=1` if
+the folder exists), then
+`uv run pytest tests/unit/test_model_deploy.py tests/unit/test_lr_scorer.py tests/unit/test_makefile_full.py -q`.

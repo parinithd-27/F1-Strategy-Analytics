@@ -125,3 +125,15 @@ feature-importance, reliability and confusion-matrix files), so the two settings
 **Reruns:** a crashed test run may be rerun only if no test-season number was seen. The first complete run is
 the reported one. The pipeline refuses to start a test run for a setting whose result files or saved metadata
 already exist, so a complete run is never overwritten.
+
+## Deployment artefact (Step 9c; documentation only, no rule change)
+The model used by streaming and serving is **this same specification**, trained once by `make model-save-full`
+(`experiments/model_save.py`, `model/deploy.py`). The settings are G=3.5 and k=2, with feature set `real`. It
+trains on 2021-2023 with the grids above and seed 42, and is calibrated with Platt on 2024. It was produced
+**without reading 2025**: only the `season=2021..2024` feature partitions were listed and loaded, and the
+test-season evaluation was not called. It is saved under `models/undercut/deploy_real_G3.5_k2/` (gitignored), with
+the Spark pipelines, the calibrators as JSON and per-model metadata. Before saving, the run checked the artefact
+against the development run. It reproduces the development results exactly: the same selected parameters and Platt
+coefficients, and calibrated validation Brier 0.168438 and PR-AUC 0.593775 for LR (0.205233 and 0.560198 for
+GBT). The streaming path uses the calibrated LR (the primary model) through a pure-Python scorer that equals Spark
+within 1e-9. This artefact is not a test-season result and does not replace the single test run described above.
