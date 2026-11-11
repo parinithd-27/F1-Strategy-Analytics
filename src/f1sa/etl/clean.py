@@ -54,7 +54,11 @@ deployments whose field median stays low. Green laps in the sample never exceed 
 SLOW_LAP_RATIO = 1.07
 """A lap slower than this multiple of the race's green median counts as slow (107% rule)."""
 RED_FLAG_RATIO = 3.0
-"""Heuristic: above this multiple the lap is treated as a red-flag lap (includes the stoppage)."""
+"""Heuristic: above this multiple the lap is treated as a red-flag lap (includes the stoppage).
+It is tested on the field median over **every** car on the lap, pit laps included: Jolpica records
+the red-flag entry to the pit lane as a pit stop for the whole field, so a test on racing laps
+only never sees those laps (Step 8b: 17 laps in 14 races, field medians 5x-34x). An ordinary pit
+lap costs about 20-30 s (1.2-1.4x), so even a lap where every car pits stays far below 3x."""
 LONG_STOP_S = 60.0
 CLEAN_TABLES = tuple(S.CLEAN_SCHEMAS)
 RaceKey = tuple[int, int]
@@ -424,9 +428,15 @@ def heuristic_track_flags(laps: DataFrame) -> DataFrame:
 
     Lap 1 and pit in/out laps are excluded. ``ratio`` = field-median lap time / the race's median
     green lap time; ``slow_share`` = share of the lap's cars slower than SLOW_LAP_RATIO x that
-    median. ratio > RED_FLAG_RATIO -> red flag; ratio > NEUTRALISED_RATIO or slow_share >=
-    NEUTRALISED_SHARE -> neutralised (SC or VSC: indistinguishable, so ``is_sc_lap`` /
-    ``is_vsc_lap`` stay null). FastF1 TrackStatus replaces these flags per lap when present.
+    median. ``field_ratio`` = median lap time of **all** cars on the lap (lap 1 and pit laps
+    included) / the same race median.
+
+    * red flag: ratio > RED_FLAG_RATIO or field_ratio > RED_FLAG_RATIO (the field-wide test
+      catches red-flag laps, which Jolpica records as a pit stop for every car);
+    * neutralised: red flag, or ratio > NEUTRALISED_RATIO, or slow_share >= NEUTRALISED_SHARE
+      (SC or VSC: indistinguishable, so ``is_sc_lap`` / ``is_vsc_lap`` stay null).
+
+    FastF1 TrackStatus replaces these flags per lap when present.
     """
     racing = laps.where(
         (F.col("lap") > 1)
@@ -444,15 +454,27 @@ def heuristic_track_flags(laps: DataFrame) -> DataFrame:
             F.avg(slow).alias("slow_share"),
         )
     )
+    field = (
+        laps.where(F.col("lap_time_s").isNotNull())
+        .join(race_median, _RACE)
+        .groupBy(*_RACE, "lap", "race_median")
+        .agg((F.median("lap_time_s") / F.col("race_median")).alias("field_ratio"))
+        .drop("race_median")
+    )
     all_laps = laps.select(*_RACE, "lap").distinct()
-    j = all_laps.join(per_lap, [*_RACE, "lap"], "left")
-    neutralised = (F.col("ratio") > NEUTRALISED_RATIO) | (F.col("slow_share") >= NEUTRALISED_SHARE)
+    j = all_laps.join(per_lap, [*_RACE, "lap"], "left").join(field, [*_RACE, "lap"], "left")
+    red = F.coalesce(F.col("ratio") > RED_FLAG_RATIO, F.lit(False)) | F.coalesce(
+        F.col("field_ratio") > RED_FLAG_RATIO, F.lit(False)
+    )
+    neutralised = (
+        red | (F.col("ratio") > NEUTRALISED_RATIO) | (F.col("slow_share") >= NEUTRALISED_SHARE)
+    )
     return j.select(
         *_RACE,
         "lap",
         F.lit(None).cast("boolean").alias("is_sc_lap"),
         F.lit(None).cast("boolean").alias("is_vsc_lap"),
-        F.coalesce(F.col("ratio") > RED_FLAG_RATIO, F.lit(False)).alias("is_red_flag_lap"),
+        red.alias("is_red_flag_lap"),
         F.coalesce(neutralised, F.lit(False)).alias("is_neutralised_lap"),
         F.lit("heuristic").alias("track_status_source"),
     )

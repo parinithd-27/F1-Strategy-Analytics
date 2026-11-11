@@ -395,6 +395,42 @@ def test_neutralised_decision_lap_and_restart_lap() -> None:
     assert not restart["detector_eligible"]
 
 
+def test_red_flag_restart_period_excludes_the_attempt() -> None:
+    """A red flag on lap 2: laps 3-5 are the restart period, so decision lap 5 is excluded."""
+    sc = Scenario(2023, 1, standard_cars(), red_flag_laps={2})
+    r = _default(_eval(sc))
+    assert r["outcome_category"] == "excluded_neutralised"
+    assert r["exclusion_reasons"] == ["neutralised"]
+    assert not r["detector_eligible"]
+    assert U.snapshot_at(race_data(sc), 5).restart_lap is True
+
+
+def test_red_flag_restart_period_ends_after_three_laps() -> None:
+    """A red flag on lap 1: the restart period is laps 2-4, so decision lap 5 is eligible."""
+    assert U.RED_FLAG_RESTART_LAPS == 3
+    sc = Scenario(2023, 1, standard_cars(), red_flag_laps={1})
+    r = _default(_eval(sc))
+    assert r["outcome_category"] == "success" and r["detector_eligible"]
+    assert U.snapshot_at(race_data(sc), 5).restart_lap is False
+    assert U.snapshot_at(race_data(sc), 4).restart_lap is True
+
+
+def test_safety_car_without_red_flag_keeps_one_restart_lap() -> None:
+    """The same lap-2 neutralisation without a red flag only makes lap 3 a restart lap."""
+    sc = Scenario(2023, 1, standard_cars(), neutral_laps={2})
+    assert _default(_eval(sc))["outcome_category"] == "success"
+    data = race_data(sc)
+    assert [n for n in range(2, 7) if U.snapshot_at(data, n).restart_lap] == [3]
+
+
+def test_red_flag_restart_counts_from_the_end_of_the_neutralised_run() -> None:
+    """Red flag on lap 1 followed by SC laps 2-3: the restart period is laps 4-6."""
+    sc = Scenario(2023, 1, standard_cars(), red_flag_laps={1}, neutral_laps={2, 3})
+    data = race_data(sc)
+    assert [n for n in range(2, 9) if U.snapshot_at(data, n).restart_lap] == [4, 5, 6]
+    assert _default(_eval(sc))["outcome_category"] == "excluded_neutralised"
+
+
 def test_defender_lapped_at_decision() -> None:
     cars = standard_cars()
     slow_d = Car("d", "team_d", 100.0, 97.0, pit_laps=[7], fresh_gain=2.5)

@@ -147,6 +147,50 @@ def test_heuristic_flags_sc_boundary_laps(spark: SparkSession) -> None:
     assert clean.NEUTRALISED_RATIO == 1.10 and clean.NEUTRALISED_SHARE == 0.5
 
 
+def test_heuristic_red_flag_lap_where_every_car_pits(spark: SparkSession) -> None:
+    """Jolpica records a red flag as a pit stop for the whole field. Lap 9 (every car on its
+    out-lap, 1600 s with the stoppage) must be a red-flag lap although no car is "racing".
+    Lap 4, where every car makes an ordinary stop (112 s, 1.24x), and lap 6, where half the
+    field stops, must not be flagged at all."""
+    rows = []
+    for lap in range(1, 13):
+        for i in range(6):
+            t, pit_in, pit_out = 90.0 + i * 0.1, False, False
+            if lap == 1:
+                t = 150.0
+            if lap == 4:
+                t, pit_in = 112.0, True
+            if lap == 5:
+                t, pit_out = 107.0, True
+            if lap == 6 and i < 3:
+                t, pit_in = 112.0, True
+            if lap == 7 and i < 3:
+                t, pit_out = 107.0, True
+            if lap == 8:
+                t, pit_in = 125.0, True  # SC laps into the pit lane before the stoppage
+            if lap == 9:
+                t, pit_out = 1600.0, True
+            rows.append((2023, 3, f"d{i}", lap, i + 1, t, pit_in, pit_out))
+    flags = {r["lap"]: r for r in clean.heuristic_track_flags(_laps_df(spark, rows)).collect()}
+    assert [lap for lap, r in sorted(flags.items()) if r["is_red_flag_lap"]] == [9]
+    assert [lap for lap, r in sorted(flags.items()) if r["is_neutralised_lap"]] == [9]
+    for lap in (4, 5, 6, 7):
+        assert flags[lap]["is_red_flag_lap"] is False, lap
+        assert flags[lap]["is_neutralised_lap"] is False, lap
+
+
+def test_heuristic_red_flag_on_lap_one(spark: SparkSession) -> None:
+    """A stoppage on lap 1 (every car > 3x) is a red flag; a slow standing start is not."""
+    rows = [
+        (2024, 8, f"d{i}", lap, i + 1, (2500.0 if lap == 1 else 90.0), False, False)
+        for lap in range(1, 8)
+        for i in range(4)
+    ]
+    flags = {r["lap"]: r for r in clean.heuristic_track_flags(_laps_df(spark, rows)).collect()}
+    assert flags[1]["is_red_flag_lap"] is True and flags[1]["is_neutralised_lap"] is True
+    assert not any(r["is_red_flag_lap"] for lap, r in flags.items() if lap > 1)
+
+
 def test_spark_stint_inference_matches_python_generator(spark: SparkSession) -> None:
     pages = [json.loads((FIXTURES / f"laps_2023_5_p{i}.json").read_text()) for i in range(3)]
     pit_pages = [json.loads((FIXTURES / "pitstops_2023_5.json").read_text())]

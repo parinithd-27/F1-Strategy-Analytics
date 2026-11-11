@@ -51,6 +51,12 @@ from f1sa.features.undercut_rule import (
 
 RESTART_BUFFER_LAPS = 1
 """Green laps after a neutralised run that still count as neutralised (the restart lap)."""
+RED_FLAG_RESTART_LAPS = 3
+"""Green laps after a neutralised run that contains a red-flag lap that still count as
+neutralised. After a red flag the field restarts bunched on free new tyres, and the longest
+decision-feature lookback is 3 laps (``gap_ahead_change_3l`` compares L-1 with L-4). With 3
+restart laps, an eligible decision lap L-1 is at least 4 laps after the run, so no decision
+feature reaches back into the stoppage or the restart."""
 SLOW_STOP_MARGIN_S = 3.0
 """A stop this much slower than the race's median green stop is flagged ``*_slow_stop``."""
 DRIVE_THROUGH_MARGIN_S = 2.0
@@ -157,6 +163,7 @@ class LapRow:
     is_pit_in_lap: bool = False
     is_pit_out_lap: bool = False
     track_neutral: bool = False
+    track_red_flag: bool = False
     compound: str | None = None
     tyre_age_laps: int | None = None
     team_key: str | None = None
@@ -204,16 +211,42 @@ def _neutral_laps(race: RaceData) -> dict[int, bool]:
     return out
 
 
-def _is_restart(neutral: Mapping[int, bool], lap: int) -> bool:
-    """A green lap within ``RESTART_BUFFER_LAPS`` after a neutralised lap."""
+def _red_flag_laps(race: RaceData) -> frozenset[int]:
+    return frozenset(r.lap for r in race.laps if r.track_red_flag)
+
+
+def _is_restart(
+    neutral: Mapping[int, bool], lap: int, red_flag: frozenset[int] = frozenset()
+) -> bool:
+    """A green lap within ``RESTART_BUFFER_LAPS`` after a neutralised lap, or within
+    ``RED_FLAG_RESTART_LAPS`` after a neutralised run that contains a red-flag lap."""
     if neutral.get(lap, False):
         return False
-    return any(neutral.get(lap - b, False) for b in range(1, RESTART_BUFFER_LAPS + 1))
+    if any(neutral.get(lap - b, False) for b in range(1, RESTART_BUFFER_LAPS + 1)):
+        return True
+    end = next(
+        (lap - b for b in range(1, RED_FLAG_RESTART_LAPS + 1) if neutral.get(lap - b, False)),
+        None,
+    )
+    if end is None:
+        return False
+    j = end
+    while neutral.get(j, False):
+        if j in red_flag:
+            return True
+        j -= 1
+    return False
 
 
-def snapshot_at(race: RaceData, lap: int, neutral: Mapping[int, bool] | None = None) -> LapSnapshot:
+def snapshot_at(
+    race: RaceData,
+    lap: int,
+    neutral: Mapping[int, bool] | None = None,
+    red_flag: frozenset[int] | None = None,
+) -> LapSnapshot:
     """The rule's view of the race at the end of ``lap`` (uses laps ``lap`` and ``lap - 1``)."""
     flags = neutral if neutral is not None else _neutral_laps(race)
+    red = red_flag if red_flag is not None else _red_flag_laps(race)
     rows = race.rows_at(lap)
     leader = next((r for r in rows if r.position == 1), None)
     drivers = []
@@ -242,7 +275,7 @@ def snapshot_at(race: RaceData, lap: int, neutral: Mapping[int, bool] | None = N
         lap=lap,
         drivers=tuple(drivers),
         track_green=not flags.get(lap, False),
-        restart_lap=_is_restart(flags, lap),
+        restart_lap=_is_restart(flags, lap, red),
         leader_lap_time_s=leader.lap_time_s if leader else None,
     )
 
@@ -322,6 +355,7 @@ def _rejoin_traffic(race: RaceData, attacker: str, lap: int) -> tuple[int | None
 class _RaceContext:
     race: RaceData
     neutral: Mapping[int, bool]
+    red_flag: frozenset[int]
     stops: Mapping[tuple[str, int], StopRow]
     pit_laps: Mapping[str, frozenset[int]]
     green_lap_median: float | None
@@ -340,6 +374,7 @@ def _context(race: RaceData) -> _RaceContext:
     return _RaceContext(
         race,
         neutral,
+        _red_flag_laps(race),
         stops,
         {d: frozenset(v) for d, v in pit.items()},
         lap_med,
@@ -393,7 +428,7 @@ def _evaluate(ctx: _RaceContext, pair: CandidatePair, k: int) -> dict[str, Any]:
     if any(race.row(x, j) is None for x in (a_id, d_id) for j in range(lap, end + 1)):
         reasons.add("retired")
     window = range(lap - 1, end + 1)
-    if any(ctx.neutral.get(j, False) or _is_restart(ctx.neutral, j) for j in window):
+    if any(ctx.neutral.get(j, False) or _is_restart(ctx.neutral, j, ctx.red_flag) for j in window):
         reasons.add("neutralised")
     if any(_lapped_in_window(ctx, x, j) for x in (a_id, d_id) for j in range(lap, end + 1)):
         reasons.add("lapped")
@@ -511,7 +546,7 @@ def evaluate_race(
         if decision < 1 or race.row(attacker, decision) is None:
             continue
         if decision not in snapshots:
-            snapshots[decision] = snapshot_at(race, decision, ctx.neutral)
+            snapshots[decision] = snapshot_at(race, decision, ctx.neutral, ctx.red_flag)
         for g in sorted(set(gap_grid)):
             params = RuleParams(gap_threshold_s=g, min_attempt_lap=min_attempt_lap)
             pair = next(
@@ -561,6 +596,7 @@ def _race_from_rows(key: tuple[int, int], laps: Iterable[Any], stops: Iterable[A
                 is_pit_in_lap=_opt_bool(r["is_pit_in_lap"]),
                 is_pit_out_lap=_opt_bool(r["is_pit_out_lap"]),
                 track_neutral=_opt_bool(r["track_neutral"]),
+                track_red_flag=_opt_bool(r["track_red_flag"]),
                 compound=r["compound"],
                 tyre_age_laps=r["tyre_age_laps"],
                 team_key=r["team_key"],
@@ -605,6 +641,7 @@ def race_lap_rows(laps_enriched: DataFrame, pit_loss: DataFrame) -> DataFrame:
         "is_pit_in_lap",
         "is_pit_out_lap",
         _track_neutral().alias("track_neutral"),
+        F.coalesce(F.col("is_red_flag_lap"), F.lit(False)).alias("track_red_flag"),
         "compound",
         "tyre_age_laps",
         history_key_col("constructor_id").alias("team_key"),

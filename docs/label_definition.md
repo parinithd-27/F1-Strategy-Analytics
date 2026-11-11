@@ -75,12 +75,12 @@ kept in `exclusion_reasons`. Reasons marked **rule** come from the shared candid
 |---|---|---|---|
 | 1 | `missing_data` (rule) | the gap or a position is unknown at L − 1, or a position is unknown on the label lap | Jolpica gaps are cumulative times, and one missing lap time makes every later gap null |
 | 2 | `inconsistent_timing` (rule) | gap ≤ 0 (position and time disagree, or a tie) | |
-| 3 | `early_lap` (rule) | L < 4 | Stops on laps 2–3 are mostly lap-1 damage (sample: Sargeant L2, 48.9 s) |
+| 3 | `early_lap` (rule) | L < 4 | Stops on laps 2–3 are lap-1 damage, red-flag entries recorded as stops, or early wet-to-dry changes, not strategy (sample: Sargeant L2, 48.9 s). A stop on lap 1 is never a candidate, because there is no decision lap 0 |
 | 4 | `teammates` (rule) | same team history key | team orders, not a competitive call |
 | 5 | `traffic_between` (rule) | another car's crossing of lap L − 1 or L − 2 lies strictly between D's and A's crossing of L − 1 | a lapped car between them on track |
 | 6 | `lapped` (rule + window) | at L − 1: `gap_leader_s` ≥ the leader's lap time at L − 1; in the window: the car's crossing of lap j is after the leader's crossing of lap j + 1 | blue flags make the fight meaningless |
 | 7 | `in_pit` (rule) | A or D is on an in-lap or out-lap at L − 1 | D has just stopped (fresh tyres), or A is already mid-cycle |
-| 8 | `neutralised` (rule + window) | any lap in the window is SC/VSC/red-flag, or is the restart lap (the first green lap after a neutralised run) | a stop under SC/VSC is cheap, and restart gaps are compressed (see "Track status") |
+| 8 | `neutralised` (rule + window) | any lap in the window is SC/VSC/red-flag, or is in a restart period: the first green lap after a neutralised run, or the first **3** green laps after a neutralised run that contains a red-flag lap | a stop under SC/VSC is cheap, and restart gaps are compressed. After a red flag every car has free new tyres and the gap and pace lookbacks span the stoppage (see "Track status") |
 | 9 | `same_lap_stop` | D stops on lap L too | no lap offset, so there is no undercut. A double stack behind a teammate is flagged, not excluded |
 | 10 | `retired` | A or D has no lap row for some lap in L … label lap (or L … L + k) | Jolpica lap rows stop at retirement |
 | 11 | `long_stop` | A's or D's stop is > 60 s (`is_long_stop`) | repairs, or a red-flag stoppage |
@@ -101,8 +101,10 @@ kept in `exclusion_reasons`. Reasons marked **rule** come from the shared candid
 - **Penalties.** Post-race time penalties do not change the timing-line order, so they do not affect the label.
   Jolpica has no penalty data. FastF1 race-control messages, once ingested, will replace the heuristics in
   reasons 12 and 14.
-- **Red-flag restarts.** Tyre changes under a red flag are free and are not Jolpica pit stops, so inferred stint and
-  tyre-age data are wrong after one. The window is excluded as `neutralised`, and FastF1 stints fix the tyre data.
+- **Red-flag restarts.** Jolpica records the red-flag entry to the pit lane as a pit stop for the whole field
+  (checked on the full 2021-2025 data in Step 8b), so inferred stints start again after the stoppage. The free tyre
+  change makes tyre age and pace comparisons across the restart meaningless, so the red-flag restart period (below)
+  is excluded as `neutralised`. FastF1 stints fix the tyre data.
 - **Sprint races** are out of scope. Jolpica laps and pit stops cover the Grand Prix only, and a sprint has no
   mandatory stop.
 
@@ -111,13 +113,27 @@ kept in `exclusion_reasons`. Reasons marked **rule** come from the shared candid
   - the field median lap time is > **1.10** × the race's green median, **or**
   - at least **50%** of the cars running that lap (pit laps excluded) are > 1.07 × the green median.
 
-  Red flag: ratio > 3.0.
+  Red flag (Step 8b): **either** the median of the racing cars (pit laps excluded) is > **3.0** × the green median,
+  **or** the median of **every** car on the lap (pit laps and lap 1 included) is > 3.0 × the green median. A red-flag
+  lap is also a neutralised lap. Timing only.
+- **Why the field-wide red-flag test.** Jolpica marks every car as pitting on a red-flag lap, so the racing-car
+  median had no cars and no red flag was ever detected: on the full data, 17 laps in 14 races had a field median of
+  5×–34× the green median and none was flagged. An ordinary stop costs about 20–30 s (1.2–1.4×), so a lap where
+  every car pits under green stays far below 3×, and a lap with a normal pit stop or a slow standing start is never
+  a red flag. The 3.0 threshold is the Step 5 value and was not tuned on the full data.
+- **Restart period after a red flag: 3 green laps** (`features/undercut.RED_FLAG_RESTART_LAPS`), counted from the
+  last lap of the neutralised run that contains the red-flag lap (the run usually includes SC laps before the
+  stoppage and the rolling restart). After an SC or VSC without a red flag it stays 1 lap
+  (`RESTART_BUFFER_LAPS`). Why 3: the field restarts bunched on free new tyres, and the longest decision-feature
+  lookback is 3 laps (`gap_ahead_change_3l` compares L − 1 with L − 4). With 3 restart laps, an eligible decision
+  lap L − 1 is at least 4 laps after the run, so no decision feature reaches back into the stoppage or the restart.
+  The real-time detector receives the same flag through `LapSnapshot.restart_lap`, so batch and stream agree.
 - **Why it was tightened.** The old rule (ratio > 1.25) missed the deployment and restart laps of the 2024 Shanghai SC
   run: lap 21 (ratio 1.155, 81% slow), lap 25 (1.248, the 145 s lap maximum) and lap 27 (1.121). Green laps in the
   sample never exceed ratio 1.026 or share 0.056. Shanghai 2024 is now laps 21–31, with lap 32 as the restart lap.
 - **FastF1 override.** When FastF1 has the lap, its TrackStatus codes replace the heuristic for that lap (per lap, in
   `etl/clean.build_laps`): 4 = SC, 6/7 = VSC, 5 = red flag. A lap with any of these codes at any point is flagged.
-  The restart buffer applies on top of either source.
+  Both restart periods apply on top of either source.
 - **Leakage.** The heuristic uses the whole race's median, but track flags are used only for eligibility and
   exclusion, never as features. In a live race the SC status is known the moment it is called, and the heuristic
   only stands in for that signal.

@@ -3,7 +3,8 @@
 Every car has a base lap time, a lap-1 time, pit laps and a fresh-tyre gain. A pit stop on lap p
 adds ``IN_LOSS`` to lap p (the in-lap) and ``OUT_LOSS`` to lap p+1 (the out-lap); after the
 out-lap the car is ``fresh_gain`` seconds per lap faster. Neutralised laps add ``SC_SLOW`` to
-every car. Positions at each lap come from the cumulative times, as on a real timing line.
+every car. Red-flag laps are neutralised laps that also carry ``is_red_flag_lap``. Positions at
+each lap come from the cumulative times, as on a real timing line.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ class Scenario:
     round: int
     cars: list[Car]
     neutral_laps: set[int] = field(default_factory=set)
+    red_flag_laps: set[int] = field(default_factory=set)
     n_laps: int = N_LAPS
     circuit: str = ""
 
@@ -52,7 +54,7 @@ class Scenario:
             t += OUT_LOSS
         elif any(p + 1 < n for p in car.pit_laps):
             t -= car.fresh_gain
-        if n in self.neutral_laps:
+        if n in self.neutral_laps or n in self.red_flag_laps:
             t += SC_SLOW
         return round(t, 3)
 
@@ -79,7 +81,8 @@ class Scenario:
                         times[c.driver],
                         pit_in=n in c.pit_laps,
                         pit_out=n - 1 in c.pit_laps,
-                        neutralised=n in self.neutral_laps,
+                        neutralised=n in self.neutral_laps or n in self.red_flag_laps,
+                        red_flag=n in self.red_flag_laps,
                     )
                 )
         finish = sorted(self.cars, key=lambda c: (-self.last_lap(c), cum[c.driver]))
@@ -199,6 +202,7 @@ def race_data(sc: Scenario, pit_loss: float | None = None) -> Any:
                     is_pit_in_lap=r["is_pit_in_lap"],
                     is_pit_out_lap=r["is_pit_out_lap"],
                     track_neutral=r["is_neutralised_lap"],
+                    track_red_flag=r["is_red_flag_lap"],
                     compound=compounds.get((r["driver_id"], n)),
                     team_key=teams[r["driver_id"]],
                 )

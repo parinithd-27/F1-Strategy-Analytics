@@ -282,7 +282,7 @@
    "candidates": "365",
    "gap_threshold_s": "3.5",
    "labelled": "32",
-   "n_defender_stayed_out": "94",
+   "n_defender_stayed_out": "93",
    "n_excluded_attacker_restop": "0",
    "n_excluded_early_lap": "21",
    "n_excluded_in_pit": "30",
@@ -291,7 +291,7 @@
    "n_excluded_lapped": "52",
    "n_excluded_long_stop": "0",
    "n_excluded_missing_data": "0",
-   "n_excluded_neutralised": "86",
+   "n_excluded_neutralised": "87",
    "n_excluded_penalty_suspected": "1",
    "n_excluded_race_end": "0",
    "n_excluded_retired": "2",
@@ -333,8 +333,8 @@
   {
    "candidates": "394",
    "gap_threshold_s": "3.5",
-   "labelled": "50",
-   "n_defender_stayed_out": "121",
+   "labelled": "49",
+   "n_defender_stayed_out": "119",
    "n_excluded_attacker_restop": "0",
    "n_excluded_early_lap": "3",
    "n_excluded_in_pit": "37",
@@ -343,7 +343,7 @@
    "n_excluded_lapped": "54",
    "n_excluded_long_stop": "0",
    "n_excluded_missing_data": "0",
-   "n_excluded_neutralised": "68",
+   "n_excluded_neutralised": "71",
    "n_excluded_penalty_suspected": "2",
    "n_excluded_race_end": "1",
    "n_excluded_retired": "1",
@@ -352,7 +352,7 @@
    "n_excluded_traffic_between": "0",
    "n_excluded_wet": "0",
    "n_fail": "33",
-   "n_success": "17",
+   "n_success": "16",
    "response_window_laps": "2",
    "season": "2024"
   },
@@ -467,23 +467,15 @@
  "labelled_by_split": {
   "test": 49,
   "train": 108,
-  "validation": 50
+  "validation": 49
  },
  "neutralisation": {
   "high": [
    {
-    "neutralised_laps": 18,
-    "neutralised_share": 0.2857,
-    "race_laps": 63,
-    "red_flag_laps": 0,
-    "round": 4,
-    "season": 2022
-   },
-   {
-    "neutralised_laps": 27,
-    "neutralised_share": 0.4219,
+    "neutralised_laps": 28,
+    "neutralised_share": 0.4375,
     "race_laps": 64,
-    "red_flag_laps": 0,
+    "red_flag_laps": 1,
     "round": 7,
     "season": 2022
    },
@@ -496,20 +488,20 @@
     "season": 2023
    },
    {
-    "neutralised_laps": 22,
-    "neutralised_share": 0.3056,
+    "neutralised_laps": 23,
+    "neutralised_share": 0.3194,
     "race_laps": 72,
-    "red_flag_laps": 0,
+    "red_flag_laps": 1,
     "round": 13,
     "season": 2023
    }
   ],
-  "high_fence": 0.283,
+  "high_fence": 0.3024,
   "low": [],
-  "low_fence": -0.1698,
-  "median": 0.0522,
+  "low_fence": -0.1814,
+  "median": 0.0531,
   "q1": 0.0,
-  "q3": 0.1132,
+  "q3": 0.121,
   "zero": [
    {
     "neutralised_laps": 0,
@@ -533,14 +525,6 @@
     "race_laps": 71,
     "red_flag_laps": 0,
     "round": 8,
-    "season": 2021
-   },
-   {
-    "neutralised_laps": 0,
-    "neutralised_share": 0.0,
-    "race_laps": 70,
-    "red_flag_laps": 0,
-    "round": 11,
     "season": 2021
    },
    {
@@ -2136,7 +2120,7 @@
    "races": 47
   },
   "validation": {
-   "n": 50,
+   "n": 49,
    "races": 18
   }
  },
@@ -2211,6 +2195,7 @@
   2021,
   2022,
   2023,
+  2024,
   2025
  ],
  "unexpected_races": [

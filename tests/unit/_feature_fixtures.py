@@ -29,6 +29,7 @@ def lap(
     pit_in: bool = False,
     pit_out: bool = False,
     neutralised: bool = False,
+    red_flag: bool = False,
 ) -> dict[str, Any]:
     return {
         "season": season,
@@ -40,7 +41,7 @@ def lap(
         "is_pit_in_lap": pit_in,
         "is_pit_out_lap": pit_out,
         "is_neutralised_lap": neutralised,
-        "is_red_flag_lap": False,
+        "is_red_flag_lap": red_flag,
         "track_status_source": "heuristic",
     }
 

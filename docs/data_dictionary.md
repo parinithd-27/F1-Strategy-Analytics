@@ -452,47 +452,91 @@ did not run.
 
 ### Undercut attempt counts
 
-`results/undercut_counts_full.csv` has the full (G, k) grid. Labelled attempts at G = 3.5, k = 2:
+`results/undercut_counts_full.csv` has the full (G, k) grid. Labelled attempts after the red-flag fix (below):
 
-| Split | Seasons | Labelled |
-|---|---|---|
-| Train | 2021 (32), 2022 (32), 2023 (44) | 108 |
-| Validation | 2024 (50) | 50 |
-| Test | 2025 (49) | 49 |
+| Split | Seasons | G = 3.5, k = 2 | G = 5.0, k = 3 |
+|---|---|---|---|
+| Train | 2021-2023 | 108 (32, 32, 44) | 184 (48, 62, 74) |
+| Validation | 2024 | 49 | 64 |
+| Test | 2025 | 49 | 60 |
 
-Seasons below 50 labelled attempts at this setting: 2021, 2022, 2023 and 2025.
+At G = 3.5, k = 2 every season has fewer than 50 labelled attempts. At G = 5.0, k = 3 only 2021 does (48).
+
+**`excluded_early_lap` varies by season** (G = 3.5: 76, 21, 50, 3, 39 for 2021-2025; it does not depend on k). The
+rule excludes an attempt whose stop lap L is below 4. A stop on lap 1 is never a candidate (there is no decision
+lap 0), so every early-lap exclusion is a stop on lap 2 or 3 with a car directly ahead within G at the end of
+lap L - 1:
+
+| Season | L = 2 | L = 3 | All stops on laps 1 / 2 / 3 | Red-flag stops on laps 2-3 | Red-flag share of the exclusions |
+|---|---|---|---|---|---|
+| 2021 | 50 | 26 | 14 / 55 / 34 | 47 | 37 of 76 |
+| 2022 | 17 | 4 | 23 / 23 / 4 | 18 | 14 of 21 |
+| 2023 | 44 | 6 | 45 / 48 / 8 | 17 | 15 of 50 |
+| 2024 | 1 | 2 | 40 / 1 / 2 | 0 | 0 of 3 |
+| 2025 | 23 | 16 | 13 / 26 / 17 | 0 | 0 of 39 |
+
+An independent recount from `laps` and `pitstops` (stops on laps 2-3 by a car with 0 < gap ahead <= 3.5 s at the
+end of L - 1) gives exactly the pipeline's numbers in every season, so the variation comes from the data. It is
+driven by a few races with a mass stop on lap 2 or 3 (12-19 exclusions on a single lap): red-flag entries recorded
+as stops in 2021 R10, 2021 R11, 2022 R18 and 2023 R20, and mass early stops without a red flag in 2021 R3, 2023 R9
+and 2025 R1. 2024 has 3 because almost all its early stops are on lap 1 (40 of 43). Its two early red flags
+(2024 R4 and R8) have their stops recorded on lap 1, and lap-1 stops are never candidates.
 
 ### Neutralisation rule on real races
 
-The Jolpica heuristic (ratio > 1.10 or at least 50% of cars > 107%) flagged 530 of 6,804 race laps (7.8%).
+After the Step 8b red-flag fix, the Jolpica heuristic flags 548 of 6,804 race laps as neutralised (8.1%), and 18 of
+them as red-flag laps.
 
-| Season | Race laps | Neutralised | Share |
-|---|---|---|---|
-| 2021 | 1,297 | 74 | 5.7% |
-| 2022 | 1,294 | 159 | 12.3% |
-| 2023 | 1,325 | 105 | 7.9% |
-| 2024 | 1,444 | 86 | 6.0% |
-| 2025 | 1,444 | 106 | 7.3% |
+| Season | Race laps | Neutralised | Share | Red-flag laps |
+|---|---|---|---|---|
+| 2021 | 1,297 | 80 | 6.2% | 6 |
+| 2022 | 1,294 | 162 | 12.5% | 3 |
+| 2023 | 1,325 | 111 | 8.4% | 6 |
+| 2024 | 1,444 | 89 | 6.2% | 3 |
+| 2025 | 1,444 | 106 | 7.3% | 0 |
 
-Per race, the median share is 5.2% (Q1 0%, Q3 11.3%). Using Tukey fences (above 28.3%), the unusually high races
-are 2022 R7 (27 of 64 laps, 42.2%), 2023 R6 (27 of 78, 34.6%), 2023 R13 (22 of 72, 30.6%) and 2022 R4 (18 of 63,
-28.6%). No race falls below the low fence, because it is negative. 32 races have no flagged laps; they are
-listed in `results/full_data_quality.json` under `neutralisation.zero`.
+Per race, the median share is 5.3% (Q1 0%, Q3 12.1%). Using Tukey fences (above 30.2%), the unusually high races
+are 2022 R7 (28 of 64 laps, 43.8%), 2023 R6 (27 of 78, 34.6%) and 2023 R13 (23 of 72, 31.9%). 2022 R4 (18 of 63,
+28.6%) is just under the fence. No race falls below the low fence, because it is negative. 31 races have no flagged
+laps (`neutralisation.zero` in `results/full_data_quality.json`).
 
-**Known defect: red flags are not detected.** `is_red_flag_lap` is false on every lap of all 114 races. Jolpica
-records red-flag laps as pit laps for the whole field, and `heuristic_track_flags` removes pit in and out laps
-before computing the ratio, so those laps have no ratio and default to not flagged. 17 laps in 14 races have a
-field median more than 3 times the race median (5x to 34x), and on all 17 every car is marked as pitting. None is
-flagged as red flag or neutralised:
+**Red-flag fix (Step 8b).** Jolpica records a red-flag entry to the pit lane as a pit stop for the whole field, and
+the original heuristic removed pit laps before testing for a red flag, so none was ever detected. The field-wide
+test (`docs/label_definition.md`, "Track status") now flags these laps:
 
-2021 R2, R6, R10, R11, R21 (two laps); 2022 R7, R10, R18; 2023 R3 (three laps), R13, R19, R20; 2024 R4, R21.
+| Race | Neutralised laps before -> after | Red-flag laps |
+|---|---|---|
+| 2021 R2 | 15 -> 16 | 1 |
+| 2021 R6 | 7 -> 8 | 1 |
+| 2021 R10 | 1 -> 2 | 1 |
+| 2021 R11 | 0 -> 1 | 1 |
+| 2021 R21 | 12 -> 14 | 2 |
+| 2022 R7 | 27 -> 28 | 1 |
+| 2022 R10 | 5 -> 6 | 1 |
+| 2022 R18 | 3 -> 4 | 1 |
+| 2023 R3 | 7 -> 10 | 3 |
+| 2023 R13 | 22 -> 23 | 1 |
+| 2023 R19 | 3 -> 4 | 1 |
+| 2023 R20 | 1 -> 2 | 1 |
+| 2024 R4 | 1 -> 2 | 1 |
+| 2024 R21 | 11 -> 12 | 1 |
+| 2024 R8 | 1 -> 2 | 1 (lap 1) |
 
-This also contradicts the statement in `docs/label_definition.md` that tyre changes under a red flag are not
-Jolpica pit stops. Effect on labels at G = 3.5, k = 2: 20 of the 207 labelled attempts are in these 14 races, and
-1 (2024) has its decision within 3 laps after an unflagged red-flag lap, inside the restart period the rule
-is meant to exclude. None has a red-flag lap within 5 laps after its decision. The rule has not been changed, and
-any change must not use 2025.
+2024 R8 was not one of the 14 races found before the fix, because that check started at lap 2; its stoppage is on
+lap 1. No other race changed. With the 3-lap red-flag restart period, exactly one attempt moved from labelled to
+excluded (2024 R4, at both G = 3.5, k = 2 and G = 5.0, k = 3), and three `defender_stayed_out` attempts (2022 R10
+and 2024 R4) became `excluded_neutralised`. No attempt was added or removed, and no 2025 attempt changed (2025 has
+no red-flag lap).
 
-A further 44 laps have an all-car median between 1.10 and 3 times the race median without being flagged. That
-measure includes pit laps, which raise the median on busy pit laps, so this is a weak signal and not a confirmed
-miss.
+**Spot check of the high-share races.** The flagged shares are plausible as "not green dry running", but most of the
+flagged laps in these four races are a wet or drying track, not a safety car. The timing shows two patterns:
+
+- a safety car: a step to a uniform 1.3-1.7x for a few laps, every car slow (2022 R7 laps 26-29, 2023 R13 laps
+  16-21, 2022 R4 laps 2-4);
+- a wet track: every car slow at 1.1-1.3x for 10-25 laps, slowly converging to 1.0, and ending in a wave of pit stops
+  (the crossover to slicks or to intermediates): 2022 R7 laps 5-22 (stops on laps 17-22), 2022 R4 laps 5-19 (14
+  cars stop on laps 18-19), 2023 R6 laps 52-78 (stops on laps 53-56), 2023 R13 laps 2-9 and 61-63.
+
+Red-flag laps are now flagged in 2022 R7 (lap 30) and 2023 R13 (lap 64). Excluding wet laps is consistent with the
+label definition, which excludes wet running (reason 15). In full mode, compounds are null, so reason 15 cannot fire
+and the heuristic is the only thing that excludes them; those attempts are counted as `neutralised`, not `wet`.

@@ -281,12 +281,22 @@
   - Verified: 114 races (22, 22, 22, 24, 24), 124,834 laps, quality PASS (0 hard, 1 soft: 5 disqualified drivers
     with `results.laps = 0`). Lineage map verified: no unknown constructor. Nothing synthetic; compound null;
     telemetry 0 rows; `real` builds.
-  - Labelled at G=3.5, k=2: train 108, validation 50, test 49. Below 50: 2021, 2022, 2023, 2025.
+  - Red-flag fix (user-approved): `heuristic_track_flags` also tests the field median of every car (pit laps and
+    lap 1 included) against 3.0x, because Jolpica records a red flag as a stop for the whole field. 0 -> 18 red-flag
+    laps in 15 races. `undercut.RED_FLAG_RESTART_LAPS = 3` green laps after a run containing a red flag count as
+    neutralised (the longest decision lookback is 3 laps). One attempt moved from labelled to excluded (2024 R4);
+    no 2025 attempt changed.
+  - Labelled at G=3.5, k=2: train 108, validation 49, test 49 (every season below 50). At G=5.0, k=3: 184, 64, 60.
+  - `excluded_early_lap` (76, 21, 50, 3, 39) matches an independent recount: mass stops on laps 2-3 (red flags,
+    early wet stops); 2024's early stops are on lap 1, which is never a candidate. Data, not a bug.
   - Two complete runs: identical checksums for all tables and byte-identical result files. `/f1/raw` listing and
     `data/manifest.json` unchanged. Sample counts CSV unchanged.
-  - Docs: "Full-data quality notes" in `docs/data_dictionary.md`. 61 new tests, 555 unit tests (555 passed in 298 s).
+  - Docs: "Full-data quality notes" in `docs/data_dictionary.md`. 67 new tests, 561 unit tests (561 passed in 382 s). Red-flag
+    tests: a lap where every car "pits" is a red flag, ordinary all-car and half-field pit laps are not, lap-1
+    stoppage, restart period excludes an attempt, ends after 3 laps, counts from the end of the run.
 ## Next
-- User: decide the red-flag fix (see Known issues) **before** running `--source full`, which opens 2025 once.
+- User: decide whether wet running should be reported as `wet` rather than `neutralised` in full mode (see Known
+  issues), then sign off the label definition. Only then run `--source full`, which opens 2025 once.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
 - Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
@@ -295,11 +305,10 @@
   `uv run python experiments/model_eval.py --source full --allow-test-season` (opens 2025 once).
 - Step 10: scalability and partitioning experiments.
 ## Known issues
-- **Red flags are not detected.** `is_red_flag_lap` is false on all 114 races: Jolpica marks the whole field as
-  pitting on those laps and `heuristic_track_flags` drops pit laps first. 17 laps in 14 races (2021-2024) are
-  missed. Of 207 labelled attempts at G=3.5, k=2, 20 are in those races and 1 (2024) is in a restart period that
-  should be excluded. Not changed: it alters label eligibility, so it needs the user's decision.
-- Sample size is small: 108 labelled training attempts at G=3.5, k=2.
+- Most flagged laps in the high-share races (2022 R4, R7; 2023 R6, R13) are wet or drying running, not SC. In full
+  mode compounds are null, so the `wet` exclusion cannot fire and those attempts count as `neutralised`.
+- Sample size is small: 108 labelled training attempts at G=3.5, k=2 (184 at G=5.0, k=3).
+- The streaming side (Step 12) must compute `restart_lap` with the same 1-lap / 3-lap red-flag rule.
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
 - The integration test writes one `infra_test` message (header `test=infra`) to `f1.race.events` on each run. S12
@@ -341,8 +350,8 @@
 - Jolpica has no penalty data. A served 5/10 s penalty looks like a slow stop (flagged, kept), and a drive-through is
   only suspected (a stop more than 2 s below the median, or an incident lap). FastF1 race-control messages are not
   ingested yet.
-- Jolpica does record pit entries under a red flag (Step 8b), so inferred stints split there and tyre ages after a
-  red flag are unreliable. Those windows are not yet excluded (see the red-flag issue above).
+- Jolpica records pit entries under a red flag (Step 8b), so inferred stints split there. The red-flag lap and the
+  3-lap restart period are excluded as neutralised.
 - `laps_remaining` uses the winner's lap count as the scheduled distance, which is wrong in shortened races.
 - The track-status heuristic still uses the whole race's median. That is fine because it is used only for
   eligibility and exclusion, never as a feature, but it will flag laps in mixed wet/dry races.
@@ -371,7 +380,7 @@ Step 8: `make etl-sample && uv run python -m f1sa.features.build --source sample
 `uv run pytest tests/unit/test_undercut.py tests/unit/test_detector.py tests/unit/test_outlap.py tests/unit/test_etl_helpers.py -q`.
 
 Step 8b (needs `make up-full`): `make pipeline-full` (twice: same checksums, same `sha256sum results/*_full.*`), then
-`uv run pytest tests/unit/test_full_report.py tests/unit/test_makefile_full.py tests/unit/test_features_build.py tests/unit/test_lineage.py -q`.
+`uv run pytest tests/unit/test_full_report.py tests/unit/test_makefile_full.py tests/unit/test_features_build.py tests/unit/test_lineage.py tests/unit/test_etl_helpers.py tests/unit/test_undercut.py -q`.
 
 Step 9: `make etl-sample && make features-sample && make model-eval-sample`, then
 `uv run pytest tests/unit/test_model_dataset.py tests/unit/test_model_pipeline.py tests/unit/test_calibrate.py tests/unit/test_metrics.py tests/unit/test_explain.py -q`.
