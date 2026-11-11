@@ -149,6 +149,15 @@ Only these columns may feed the S9 model or the detector. All of them use the en
 | `attacker_/defender_compound`, `compound_is_synthetic` | compounds (synthetic in sample mode) |
 | `attacker_/defender_pace_last3_s`, `pace_delta_last3_s` | mean of the last (up to) 3 green laps of the current stint; A − D |
 | `attacker_/defender_deg_slope_s_per_lap`, `deg_slope_delta_s_per_lap` | least-squares slope of lap time on tyre age over the stint's green laps (≥ 3 laps, else null) |
+
+**Early decision laps.** Lap 1 is never a green lap and there is no lap 0, so for the earliest eligible stop, L = 4
+(decision lap 3), two features are always null: `gap_ahead_change_3l` (it compares lap 3 with lap 0) and both
+`*_deg_slope_s_per_lap` (at most 2 green laps, laps 2-3, in the stint), so `deg_slope_delta_s_per_lap` too.
+`*_pace_last3_s` is the mean of 2 laps instead of 3. From L = 5 all of them can be computed, unless the car ahead
+changed or a lap was not green. They are not imputed: the model gets the constant 0.0 plus a `_missing` indicator
+(see "Model inputs"). On the full data no attempt at L = 4 or 5 is labelled (all 44 candidates are excluded for
+other reasons, mostly `neutralised`, `in_pit` and `same_lap_stop`), so this affects only the detector, not the
+training rows.
 | `laps_remaining` | race laps − (L − 1). `race_laps` is the winner's lap count, a stand-in for the scheduled distance; it is wrong only in shortened races, which are mostly excluded as neutralised anyway |
 | `pit_loss_prior_s`, `pit_loss_source` | Step 6 prior pit loss (circuit → global, strictly earlier races) |
 | `rejoin_traffic_cars`, `rejoin_nearest_ahead_s` | cars whose on-track gap behind A at L − 1 is in (pit_loss − 3.0 s, pit_loss]: A would rejoin just behind them. The nearest margin is also given |
@@ -174,6 +183,48 @@ Only these columns may feed the S9 model or the detector. All of them use the en
 (season, G, k): candidates, labelled, success, fail, success_rate, success_rate_excl_slow_stop, and a count per
 outcome category. **These are smoke-test numbers, not findings.** The file covers 2 races, its tyre compounds are
 synthetic, and its first line says so. The real counts come from the full 2021–2025 ingest.
+
+### Reporting split of `excluded_neutralised` (reporting only)
+The counts CSVs split `n_excluded_neutralised` into `n_excluded_neutralised_sc_vsc_red_flag` and
+`n_excluded_neutralised_sustained_slow`; the two always add up to `n_excluded_neutralised`. **This split is a
+heuristic for reporting and does not affect labels.** It is computed afterwards from the finished
+`undercut_attempts` table and the clean laps (`features/neutral_split.py`); no attempt changes category and no
+column of `undercut_attempts` changes. `tests/unit/test_neutral_split.py` checks that the labels checksum and every
+other count are identical with and without it, and the full run reports `labels_checksum` in
+`results/full_data_quality.json`.
+
+Timing-only rule, per neutralised lap (a run = consecutive neutralised laps of one race):
+- **sustained slow running** (the wet or drying pattern): the run is at least **8** laps long, has no red-flag lap,
+  and its median racing-car ratio is below **1.25**; the lap's flags come from the Jolpica heuristic (not FastF1);
+  and the lap's own ratio is known and below **1.35**;
+- **SC/VSC/red flag**: every other neutralised lap (short runs, red-flag runs, long runs at safety-car pace, laps at
+  1.35× or more, laps where every car pits, and exact FastF1 flags).
+
+A restart lap takes the kind of the last neutralised lap before it, so the red-flag restart period always counts as
+SC/VSC/red flag. An attempt counts as sustained slow running only if every neutralised or restart lap in its window
+is. The thresholds come from 2021-2024 only: of the 9 runs of 8 or more laps, the six wet races (2021 R2, 2022 R4,
+R7, 2023 R6, R13, 2024 R12) have run medians of 1.10-1.20, and the three long safety cars (2022 R19, R21, 2024 R5)
+have 1.31-1.44. Safety-car laps are mostly 1.3× or more (the median of laps in short runs is 1.33).
+
+### Known limitations
+- **Wet running is excluded as `neutralised`.** In full mode tyre compounds are null (Jolpica has none), so the
+  `wet` exclusion (reason 15) cannot fire. The track-status heuristic flags laps where the whole field is slow, so
+  wet and drying running is neutralised and its attempts are counted as `excluded_neutralised`, not
+  `excluded_wet`. This was reviewed and kept on purpose: both reasons exclude the attempt, so the labelled set is
+  the one the definition intends. The reporting split above estimates how many exclusions are wet running.
+- **The four high-share races** (the highest flagged shares in 2021-2025; the first three are above the Tukey
+  fence of 30.2%): 2022 R7 (43.8%), 2023 R6 (34.6%), 2023 R13 (31.9%) and 2022 R4 (28.6%). Most of their flagged laps are wet or drying running
+  (2022 R7 laps 5-22, 2022 R4 laps 5-19, 2023 R6 laps 52-78, 2023 R13 laps 2-9 and 61-63). The rest are safety cars
+  and red flags.
+- **What FastF1 data would change.** TrackStatus gives exact SC, VSC and red-flag laps (codes 4, 6/7, 5) and replaces
+  the heuristic per lap. Wet laps would then no longer be neutralised. Real compounds (INTERMEDIATE, WET) would let
+  reason 15 exclude wet windows as `excluded_wet` instead. Attempts on a drying track where both cars are already
+  on slicks, and no SC or VSC is out, would become eligible, so the labelled set would grow. FastF1 also detects
+  lap-1 incidents (the heuristic skips lap 1 except for red flags), separates SC from VSC, and gives real stints and
+  tyre ages, including the free tyre change under a red flag. Any of these changes the labels, so it would need a
+  fresh review on 2021-2024 before the test season is opened.
+- **Early decision laps** (L = 4) always have null `gap_ahead_change_3l` and degradation slopes (see
+  "Decision-time features").
 
 ## Model inputs (Step 9, `model/features.py`, `model/dataset.py`)
 - **One setting per run.** The default is G = 3.5 s, k = 2. Only labelled rows are used (`success` / `fail`).

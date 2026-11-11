@@ -289,14 +289,23 @@
   - Labelled at G=3.5, k=2: train 108, validation 49, test 49 (every season below 50). At G=5.0, k=3: 184, 64, 60.
   - `excluded_early_lap` (76, 21, 50, 3, 39) matches an independent recount: mass stops on laps 2-3 (red flags,
     early wet stops); 2024's early stops are on lap 1, which is never a candidate. Data, not a bug.
+  - Wet running stays `neutralised` (user decision). Reporting-only split (`features/neutral_split.py`): the counts
+    CSVs gain `n_excluded_neutralised_sc_vsc_red_flag` and `_sustained_slow` (run >= 8 laps, no red flag, run
+    median < 1.25x, lap < 1.35x; set from 2021-2024 only). G=3.5, k=2: 37 of 406 are sustained slow running.
+    All 20 table checksums and `labels_checksum` (73fe89cf9f4e8ee6, new in `full_data_quality.json`) unchanged.
+  - `clean.track_ratios` and `undercut.attempt_window` factored out unchanged. `docs/label_definition.md`
+    gains "Known limitations" and the L=4 feature note: no labelled attempt at L=4 or 5 in any season.
+  - Split tests (18): the rule (wet run, long SC, red-flag run, thresholds, restarts, windows), and labels checksum
+    plus every other count identical with and without the split. 579 unit tests (579 passed in 444 s). The sample
+    CSV gains the two columns (other columns unchanged; sha256 1c93ec30…).
   - Two complete runs: identical checksums for all tables and byte-identical result files. `/f1/raw` listing and
     `data/manifest.json` unchanged. Sample counts CSV unchanged.
   - Docs: "Full-data quality notes" in `docs/data_dictionary.md`. 67 new tests, 561 unit tests (561 passed in 382 s). Red-flag
     tests: a lap where every car "pits" is a red flag, ordinary all-car and half-field pit laps are not, lap-1
     stoppage, restart period excludes an attempt, ends after 3 laps, counts from the end of the run.
 ## Next
-- User: decide whether wet running should be reported as `wet` rather than `neutralised` in full mode (see Known
-  issues), then sign off the label definition. Only then run `--source full`, which opens 2025 once.
+- User: decide on the early-lap threshold (L < 4 vs L < 5; no labelled attempt moves either way), then sign off
+  the label definition. Only then run `--source full`, which opens 2025 once.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
 - Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
@@ -305,8 +314,11 @@
   `uv run python experiments/model_eval.py --source full --allow-test-season` (opens 2025 once).
 - Step 10: scalability and partitioning experiments.
 ## Known issues
-- Most flagged laps in the high-share races (2022 R4, R7; 2023 R6, R13) are wet or drying running, not SC. In full
-  mode compounds are null, so the `wet` exclusion cannot fire and those attempts count as `neutralised`.
+- Wet running is excluded as `neutralised` in full mode (compounds are null, so `wet` cannot fire). Kept on
+  purpose; the reporting split estimates the share. See `docs/label_definition.md` "Known limitations".
+- At L=4, `gap_ahead_change_3l` and the degradation slopes are always null (0.0 + `_missing` in the model).
+- The app container does not come back after a Docker Desktop/WSL restart (exit 128, not OOM; seen twice). The
+  scratchpad in /tmp is wiped at the same time.
 - Sample size is small: 108 labelled training attempts at G=3.5, k=2 (184 at G=5.0, k=3).
 - The streaming side (Step 12) must compute `restart_lap` with the same 1-lap / 3-lap red-flag rule.
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
@@ -380,7 +392,7 @@ Step 8: `make etl-sample && uv run python -m f1sa.features.build --source sample
 `uv run pytest tests/unit/test_undercut.py tests/unit/test_detector.py tests/unit/test_outlap.py tests/unit/test_etl_helpers.py -q`.
 
 Step 8b (needs `make up-full`): `make pipeline-full` (twice: same checksums, same `sha256sum results/*_full.*`), then
-`uv run pytest tests/unit/test_full_report.py tests/unit/test_makefile_full.py tests/unit/test_features_build.py tests/unit/test_lineage.py tests/unit/test_etl_helpers.py tests/unit/test_undercut.py -q`.
+`uv run pytest tests/unit/test_full_report.py tests/unit/test_makefile_full.py tests/unit/test_features_build.py tests/unit/test_lineage.py tests/unit/test_etl_helpers.py tests/unit/test_undercut.py tests/unit/test_neutral_split.py -q`.
 
 Step 9: `make etl-sample && make features-sample && make model-eval-sample`, then
 `uv run pytest tests/unit/test_model_dataset.py tests/unit/test_model_pipeline.py tests/unit/test_calibrate.py tests/unit/test_metrics.py tests/unit/test_explain.py -q`.

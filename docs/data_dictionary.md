@@ -462,6 +462,26 @@ did not run.
 
 At G = 3.5, k = 2 every season has fewer than 50 labelled attempts. At G = 5.0, k = 3 only 2021 does (48).
 
+**Neutralised exclusions, split for reporting.** The last two CSV columns split `n_excluded_neutralised` into safety
+car / VSC / red flag and sustained slow running (the wet or drying pattern). This is a timing-only heuristic for
+reporting and does not affect labels (rule: `docs/label_definition.md`, "Reporting split of excluded_neutralised").
+All 20 table checksums and the labels checksum (`73fe89cf9f4e8ee6`) are identical with and without it.
+
+| Season | G = 3.5, k = 2: SC/VSC/red flag + sustained slow | G = 5.0, k = 3 |
+|---|---|---|
+| 2021 | 71 + 0 = 71 | 74 + 0 = 74 |
+| 2022 | 75 + 12 = 87 | 99 + 15 = 114 |
+| 2023 | 88 + 7 = 95 | 114 + 8 = 122 |
+| 2024 | 63 + 8 = 71 | 72 + 9 = 81 |
+| 2025 | 72 + 10 = 82 | 84 + 11 = 95 |
+
+At G = 3.5, k = 2, 37 of 406 neutralised exclusions (9%) are sustained slow running; 2021 has none.
+
+**Early decision laps.** No attempt at L = 4 or L = 5 is labelled in any season (G = 3.5, k = 2). The 25 candidates
+at L = 4 are all excluded first as `in_pit` (15), `neutralised` (5), `teammates` (3) or `defender_stayed_out` (2);
+the 19 at L = 5 as `defender_stayed_out` (11), `neutralised` (4) or other reasons. The earliest labelled L is 6
+(2023, 2024) or 8-9 (2021, 2022, 2025).
+
 **`excluded_early_lap` varies by season** (G = 3.5: 76, 21, 50, 3, 39 for 2021-2025; it does not depend on k). The
 rule excludes an attempt whose stop lap L is below 4. A stop on lap 1 is never a candidate (there is no decision
 lap 0), so every early-lap exclusion is a stop on lap 2 or 3 with a car directly ahead within G at the end of

@@ -36,7 +36,7 @@ from f1sa.etl.spark import build_spark, configure_session
 from f1sa.features import schemas as FS
 from f1sa.features.build import FULL_COUNTS_FILE, BuildError, check_results_dir, read_feature
 from f1sa.features.lineage import LINEAGE, STABLE_CONSTRUCTORS
-from f1sa.features.undercut import OUTCOME_CATEGORIES
+from f1sa.features.undercut import OUTCOME_CATEGORIES, labels_checksum
 from f1sa.features.undercut_rule import DEFAULT_GAP_S, DEFAULT_WINDOW_LAPS
 from f1sa.model import features as MF
 from f1sa.model.dataset import SplitSpec, build_dataset, load_attempts
@@ -419,6 +419,7 @@ def run_report(
         "provenance": [{**asdict(c), "passed": c.passed} for c in provenance],
         "real_feature_set": real,
         "neutralisation": neutralisation_outliers(neutralisation),
+        "labels_checksum": labels_checksum(features["undercut_attempts"]),
         "default_setting": {"g": DEFAULT_GAP_S, "k": DEFAULT_WINDOW_LAPS},
         "labelled_by_split": split_counts(counts, DEFAULT_GAP_S, DEFAULT_WINDOW_LAPS),
         "seasons_below_minimum": seasons_below(
@@ -463,6 +464,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     finally:
         spark.stop()
     ok = report_ok(report)
+    print(f"labels checksum (undercut_attempts): {report['labels_checksum']}")
     print(f"full report: {'PASS' if ok else 'FAIL'} -> {args.results_dir / REPORT_FILE}")
     return 0 if ok else 1
 

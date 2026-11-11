@@ -423,20 +423,14 @@ def add_pit_flags(timings: DataFrame, pitstops: DataFrame) -> DataFrame:
     )
 
 
-def heuristic_track_flags(laps: DataFrame) -> DataFrame:
-    """Per (season, round, lap) flags from lap times only (no FastF1).
+def track_ratios(laps: DataFrame) -> DataFrame:
+    """Per (season, round, lap) timing ratios behind the track-status heuristic.
 
-    Lap 1 and pit in/out laps are excluded. ``ratio`` = field-median lap time / the race's median
-    green lap time; ``slow_share`` = share of the lap's cars slower than SLOW_LAP_RATIO x that
-    median. ``field_ratio`` = median lap time of **all** cars on the lap (lap 1 and pit laps
-    included) / the same race median.
-
-    * red flag: ratio > RED_FLAG_RATIO or field_ratio > RED_FLAG_RATIO (the field-wide test
-      catches red-flag laps, which Jolpica records as a pit stop for every car);
-    * neutralised: red flag, or ratio > NEUTRALISED_RATIO, or slow_share >= NEUTRALISED_SHARE
-      (SC or VSC: indistinguishable, so ``is_sc_lap`` / ``is_vsc_lap`` stay null).
-
-    FastF1 TrackStatus replaces these flags per lap when present.
+    Lap 1 and pit in/out laps are excluded from the race median and from ``ratio``. ``ratio`` =
+    field-median lap time / the race's median green lap time; ``slow_share`` = share of the
+    lap's cars slower than SLOW_LAP_RATIO x that median. ``field_ratio`` = median lap time of
+    **all** cars on the lap (lap 1 and pit laps included) / the same race median. Ratios are null
+    when no car qualifies (e.g. every car pits).
     """
     racing = laps.where(
         (F.col("lap") > 1)
@@ -453,6 +447,7 @@ def heuristic_track_flags(laps: DataFrame) -> DataFrame:
             (F.median("lap_time_s") / F.col("race_median")).alias("ratio"),
             F.avg(slow).alias("slow_share"),
         )
+        .drop("race_median")
     )
     field = (
         laps.where(F.col("lap_time_s").isNotNull())
@@ -462,7 +457,20 @@ def heuristic_track_flags(laps: DataFrame) -> DataFrame:
         .drop("race_median")
     )
     all_laps = laps.select(*_RACE, "lap").distinct()
-    j = all_laps.join(per_lap, [*_RACE, "lap"], "left").join(field, [*_RACE, "lap"], "left")
+    return all_laps.join(per_lap, [*_RACE, "lap"], "left").join(field, [*_RACE, "lap"], "left")
+
+
+def heuristic_track_flags(laps: DataFrame) -> DataFrame:
+    """Per (season, round, lap) flags from lap times only (no FastF1), from ``track_ratios``.
+
+    * red flag: ratio > RED_FLAG_RATIO or field_ratio > RED_FLAG_RATIO (the field-wide test
+      catches red-flag laps, which Jolpica records as a pit stop for every car);
+    * neutralised: red flag, or ratio > NEUTRALISED_RATIO, or slow_share >= NEUTRALISED_SHARE
+      (SC or VSC: indistinguishable, so ``is_sc_lap`` / ``is_vsc_lap`` stay null).
+
+    FastF1 TrackStatus replaces these flags per lap when present.
+    """
+    j = track_ratios(laps)
     red = F.coalesce(F.col("ratio") > RED_FLAG_RATIO, F.lit(False)) | F.coalesce(
         F.col("field_ratio") > RED_FLAG_RATIO, F.lit(False)
     )

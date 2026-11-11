@@ -23,7 +23,7 @@ import argparse
 import hashlib
 import sys
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,6 +48,7 @@ from f1sa.etl.sql_jobs import run_sql_views
 from f1sa.features import schemas as FS
 from f1sa.features.gaps import gaps_from_enriched
 from f1sa.features.lineage import unknown_constructor_ids
+from f1sa.features.neutral_split import neutralised_kinds
 from f1sa.features.outlap import outlap_features
 from f1sa.features.pitloss import pit_loss_features, race_summary_features, team_outlap_features
 from f1sa.features.stints import stint_features
@@ -198,10 +199,12 @@ def run_build(
         result.checksums[name] = table_checksum(stored.drop(*_map_columns(name)))
         if name == "undercut_attempts" and source == "sample":
             path = (results_dir / COUNTS_FILE).resolve()
-            write_counts_csv(undercut_counts(stored, source), path, smoke_test=True)
+            kinds = neutralised_kinds(stored, clean["laps"], clean["pitstops"])
+            write_counts_csv(undercut_counts(stored, source, kinds), path, smoke_test=True)
             result.counts_csv = path
         if name == "undercut_attempts" and full_counts:
-            result.counts_csv = write_full_counts(stored, results_dir)
+            kinds = neutralised_kinds(stored, clean["laps"], clean["pitstops"])
+            result.counts_csv = write_full_counts(stored, results_dir, kinds)
         stored.unpersist()
         if result.partitions[name] != expected[name]:
             raise BuildError(
@@ -233,8 +236,13 @@ def expected_partitions(
     return sorted(targets)
 
 
-def write_full_counts(attempts: DataFrame, results_dir: Path) -> Path:
-    """Write the real undercut counts, refusing attempts that carry a synthetic compound."""
+def write_full_counts(
+    attempts: DataFrame,
+    results_dir: Path,
+    neutral_kinds: Mapping[tuple[int, int, int, str, str, float, int], str] | None = None,
+) -> Path:
+    """Write the real undercut counts, refusing attempts that carry a synthetic compound.
+    ``neutral_kinds`` fills the reporting-only split of ``n_excluded_neutralised``."""
     flagged = attempts.where(F.coalesce(F.col("compound_is_synthetic"), F.lit(True))).count()
     if flagged:
         raise BuildError(
@@ -242,7 +250,7 @@ def write_full_counts(attempts: DataFrame, results_dir: Path) -> Path:
             f"refusing to write {FULL_COUNTS_FILE} from them"
         )
     path = (results_dir / FULL_COUNTS_FILE).resolve()
-    write_counts_csv(undercut_counts(attempts, "full"), path, smoke_test=False)
+    write_counts_csv(undercut_counts(attempts, "full", neutral_kinds), path, smoke_test=False)
     return path
 
 

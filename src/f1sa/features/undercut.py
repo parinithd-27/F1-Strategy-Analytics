@@ -32,7 +32,7 @@ from typing import Any
 from pyspark.sql import Column, DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 
-from f1sa.etl.clean import conform
+from f1sa.etl.clean import conform, table_checksum
 from f1sa.features import schemas as FS
 from f1sa.features.lineage import history_key_col
 from f1sa.features.undercut_rule import (
@@ -209,6 +209,19 @@ def _neutral_laps(race: RaceData) -> dict[int, bool]:
     for r in race.laps:
         out[r.lap] = out.get(r.lap, False) or r.track_neutral
     return out
+
+
+def defender_response_lap(lap: int, k: int, d_pits: Iterable[int]) -> int | None:
+    """D's first stop in L+1 .. L+k (the response window), or None."""
+    return next((p for p in sorted(d_pits) if lap + 1 <= p <= lap + k), None)
+
+
+def attempt_window(lap: int, k: int, d_pits: Iterable[int]) -> range:
+    """Laps checked for track status: L-1 through D's out-lap (D's stop + 1), or L+k when D
+    does not respond within the window."""
+    d_pit = defender_response_lap(lap, k, d_pits)
+    end = d_pit + 1 if d_pit is not None else lap + k
+    return range(lap - 1, end + 1)
 
 
 def _red_flag_laps(race: RaceData) -> frozenset[int]:
@@ -421,13 +434,13 @@ def _evaluate(ctx: _RaceContext, pair: CandidatePair, k: int) -> dict[str, Any]:
     a_pits = ctx.pit_laps.get(a_id, frozenset())
     if lap in d_pits:
         reasons.add("same_lap_stop")
-    d_pit = next((p for p in sorted(d_pits) if lap + 1 <= p <= lap + k), None)
-    end = d_pit + 1 if d_pit is not None else lap + k
+    d_pit = defender_response_lap(lap, k, d_pits)
+    window = attempt_window(lap, k, d_pits)
+    end = window[-1]
     if race.race_laps is None or race.race_laps - lap < k + 2:
         reasons.add("race_end")
     if any(race.row(x, j) is None for x in (a_id, d_id) for j in range(lap, end + 1)):
         reasons.add("retired")
-    window = range(lap - 1, end + 1)
     if any(ctx.neutral.get(j, False) or _is_restart(ctx.neutral, j, ctx.red_flag) for j in window):
         reasons.add("neutralised")
     if any(_lapped_in_window(ctx, x, j) for x in (a_id, d_id) for j in range(lap, end + 1)):
@@ -836,17 +849,54 @@ COUNT_COLUMNS: tuple[str, ...] = (
     "success_rate",
     "success_rate_excl_slow_stop",
     *(f"n_{c}" for c in OUTCOME_CATEGORIES),
+    "n_excluded_neutralised_sc_vsc_red_flag",
+    "n_excluded_neutralised_sustained_slow",
 )
+"""The last two columns split ``n_excluded_neutralised`` for reporting only
+(``features.neutral_split``); they are empty when the split was not computed."""
+
+
+LABEL_COLUMNS: tuple[str, ...] = (
+    "season",
+    "round",
+    "lap",
+    "attacker_id",
+    "defender_id",
+    "gap_threshold_s",
+    "response_window_laps",
+    "outcome_category",
+    "label",
+    "exclusion_reasons",
+    "detector_eligible",
+)
+"""What decides labelling: the attempt key, its category, label, reasons and rule eligibility."""
+
+
+def labels_checksum(attempts: DataFrame) -> str:
+    """Order-independent checksum of ``LABEL_COLUMNS`` (feature columns are ignored)."""
+    return table_checksum(attempts.select(*LABEL_COLUMNS))
 
 
 def _rate(num: int, den: int) -> str:
     return f"{num / den:.4f}" if den else ""
 
 
-def undercut_counts(attempts: DataFrame, source: str) -> list[dict[str, Any]]:
-    """Per (season, G, k): attempt counts, success rates and one count per outcome category."""
+def undercut_counts(
+    attempts: DataFrame,
+    source: str,
+    neutral_kinds: Mapping[tuple[int, int, int, str, str, float, int], str] | None = None,
+) -> list[dict[str, Any]]:
+    """Per (season, G, k): attempt counts, success rates and one count per outcome category.
+
+    ``neutral_kinds`` (``features.neutral_split.neutralised_kinds``) only fills the two
+    reporting columns that split ``n_excluded_neutralised``; no other value depends on it.
+    """
     rows = attempts.select(
         "season",
+        "round",
+        "lap",
+        "attacker_id",
+        "defender_id",
         "gap_threshold_s",
         "response_window_laps",
         "outcome_category",
@@ -882,6 +932,26 @@ def undercut_counts(attempts: DataFrame, source: str) -> list[dict[str, Any]]:
         }
         for c in OUTCOME_CATEGORIES:
             row[f"n_{c}"] = cats.count(c)
+        if neutral_kinds is not None:
+            kinds = [
+                neutral_kinds.get(
+                    (
+                        r["season"],
+                        r["round"],
+                        r["lap"],
+                        r["attacker_id"],
+                        r["defender_id"],
+                        float(r["gap_threshold_s"]),
+                        r["response_window_laps"],
+                    )
+                )
+                for r in group
+                if r["outcome_category"] == "excluded_neutralised"
+            ]
+            if None in kinds:
+                raise ValueError(f"{season} G={g} k={k}: a neutralised attempt has no kind")
+            row["n_excluded_neutralised_sc_vsc_red_flag"] = kinds.count("sc_vsc_red_flag")
+            row["n_excluded_neutralised_sustained_slow"] = kinds.count("sustained_slow")
         out.append(row)
     return out
 
