@@ -41,16 +41,16 @@ test-int: ## Integration tests (needs infra); exit 5 = none collected is OK
 
 # ---------------------------------------------------------------- infrastructure (Docker Compose)
 COMPOSE := docker compose
-CORE_SERVICES := kafka redis app
+CORE_SERVICES := kafka redis app api
 FULL_SERVICES := $(CORE_SERVICES) namenode datanode httpfs spark-master spark-worker-1 spark-worker-2
 
 .PHONY: up up-full down ps logs nuke
 
-up: ## Start core infra (kafka, redis, app) and wait until healthy
+up: api-dirs ## Start core infra (kafka, redis, app, api) and wait until healthy
 	$(COMPOSE) --profile core up -d --build
 	scripts/wait_for.sh -t 240 $(CORE_SERVICES)
 
-up-full: ## Start core + hdfs + spark and wait until healthy
+up-full: api-dirs ## Start core + hdfs + spark and wait until healthy
 	$(COMPOSE) --profile full up -d --build
 	scripts/wait_for.sh -t 300 $(FULL_SERVICES)
 
@@ -156,13 +156,14 @@ nuke: ## DESTRUCTIVE: remove containers AND volumes (requires CONFIRM=yes)
 # stream-demo never starts, stops or rebuilds services: it needs `make up` (kafka, redis) already
 # running. Sample mode runs producer, stream job and subscriber on the host (the first run fetches
 # the pinned Kafka connector into data/cache/ivy); FULL=1 runs all three in the app container.
+# Outputs go to data/demo/<run_id>/; only RECORD=1 (the Step 16 recorded run) writes to results/.
 SEASON ?= 2024
 ROUND ?= 5
 SPEED ?= 10
-STREAM_DEMO_ARGS = --season $(SEASON) --round $(ROUND) --speed $(SPEED)
+STREAM_DEMO_ARGS = --season $(SEASON) --round $(ROUND) --speed $(SPEED)$(if $(filter 1,$(RECORD)), --record,)
 
 .PHONY: stream-demo stream-parity-full
-stream-demo: ## Replay one race: Kafka -> Structured Streaming -> Redis + latency CSV (SEASON ROUND SPEED [FULL=1]; needs make up)
+stream-demo: ## Replay one race: Kafka -> Streaming -> Redis, outputs in data/demo/<run_id> (SEASON ROUND SPEED [FULL=1] [RECORD=1 -> results/])
 ifeq ($(FULL),)
 	@test -d data/lake/features/pit_loss -a -d data/lake/clean/laps || { echo "Missing data/lake: run 'make etl-sample features-sample' first." >&2; exit 1; }
 	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python experiments/streaming_latency.py $(STREAM_DEMO_ARGS)
@@ -172,3 +173,37 @@ endif
 
 stream-parity-full: ## Batch vs stream feature parity over 2021-2024 (app container, HDFS lake; 2025 never read)
 	$(APP_EXEC) python experiments/stream_parity.py --seasons 2021-2024
+
+# ---------------------------------------------------------------- API (Step 13)
+# `make api` runs the FastAPI backend on the host (uvicorn, 127.0.0.1:$(API_PORT)) against the file
+# lake; it needs `make up` for Redis and Kafka. API_PORT defaults to 8001 because the compose `api`
+# service holds 8000. `make api-up` recreates only the compose `api` service with the chosen mode
+# and flags (--no-deps --no-build: no other service restarts, no image build, no volume touched).
+API_PORT ?= 8001
+API_HDFS_LAKE := hdfs://namenode:8020/f1
+API_FILE_LAKE := file:///workspace/data/lake
+flag01 = $(if $(filter 1,$(1)),1,0)
+
+.PHONY: api api-up api-dirs demo-clean test-api
+api: ## FastAPI on the host at 127.0.0.1:$(API_PORT) (default 8001; docs /api/docs; needs make up)
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake API_PORT=$(API_PORT) $(UV) run python -m f1sa.api
+
+api-up: api-dirs ## Recreate only the api container: FULL=1 (HDFS lake; needs make up-full) REPLAY=1 DEBUG=1 TEST_SEASON=1
+ifeq ($(call flag01,$(FULL)),1)
+	@scripts/wait_for.sh -t 5 namenode datanode httpfs >/dev/null 2>&1 || { echo "FULL=1 needs the hdfs profile (namenode, datanode, httpfs healthy): run 'make up-full' first." >&2; exit 1; }
+endif
+	API_DATA_LAKE_URI=$(if $(filter 1,$(FULL)),$(API_HDFS_LAKE),$(API_FILE_LAKE)) \
+	ENABLE_REPLAY=$(call flag01,$(REPLAY)) ENABLE_DEBUG=$(call flag01,$(DEBUG)) \
+	ALLOW_TEST_SEASON=$(call flag01,$(TEST_SEASON)) \
+	$(COMPOSE) --profile core up -d --no-deps --no-build --force-recreate api
+	scripts/wait_for.sh -t 120 api
+	@echo "api: lake=$(if $(filter 1,$(FULL)),hdfs (full),file (sample)) replay=$(call flag01,$(REPLAY)) debug=$(call flag01,$(DEBUG)) test_season=$(call flag01,$(TEST_SEASON))"
+
+api-dirs: # host folders of the api's read-write mounts (Docker would create them root-owned)
+	@mkdir -p data/demo data/checkpoints
+
+demo-clean: ## Delete demo outputs data/demo/<run_id> and demo/replay checkpoints (CONFIRM=yes; lists first)
+	$(UV) run python -m f1sa.demo_runs $(if $(filter yes,$(CONFIRM)),--yes,)
+
+test-api: ## API unit tests (fakeredis, no infra)
+	$(UV) run pytest tests/unit/test_api_*.py tests/unit/test_makefile_api.py tests/unit/test_demo_outputs.py tests/unit/test_demo_clean.py -q

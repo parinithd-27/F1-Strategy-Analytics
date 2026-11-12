@@ -663,7 +663,127 @@
     or a P crossing 0.5 upward, `attempt` (P at L-1) when the attacker pits; hashes, rule, scorer, parity
     unchanged. 2024 R5: 409 -> 141 alerts (113 new, 19 crossed, 9 attempts = batch detector-eligible attempts,
     labelled hulkenberg/bottas L-1=7 included); `parity.check_alerts` in the unit and integration tests.
+- Step 13 (W6): FastAPI backend `src/f1sa/api/` (#25, API half)
+  - User decisions: the clean zone is read over file:// **and** HttpFS (read-only: LISTSTATUS and OPEN over
+    GET only, `{lake}/clean/{races,results,laps}` only, `season=2025` never listed or opened unless
+    `ALLOW_TEST_SEASON=1`); one replay at a time (`API_MAX_REPLAYS=1`).
+  - Endpoints, all under `/api`, docs at `/api/docs`:
+    - `GET /health`: Redis PING, Kafka topic describe, and the deployed model loaded with the stream job's own
+      `load_model`. It reports version, git sha, dirty flag and the scorer sha256 (`0a9b7dfb…`). 200, or 503
+      naming the failed check.
+    - `GET /races`: replayable races from the clean zone, using the producer's race-distance rule.
+    - `GET /races/{s}/{r}/state`: the 9-field `DriverStateOut` (`""` → null), plus the order; 404, 422,
+      500 and 503.
+    - `GET /races/{s}/{r}/events`: SSE, with event = type and id = `payload.event_id` (or a deterministic
+      uuid5 for alerts and `session_end`, which carry no id). It adds `sse_sent_at_ms`, sends a heartbeat
+      every 15 s, unsubscribes on disconnect (both ASGI spec paths) and closes after `session_end`.
+    - `POST /races/{s}/{r}/replay {speed: 1|10|60}`: a producer subprocess, only with `ENABLE_REPLAY=1`.
+      Gives 409 for the same race or at the limit, and refuses 2025 with the producer's own `check_season`.
+    - `POST /debug/latency`: only with `ENABLE_DEBUG=1`. It joins the client's render time with the
+      server-side timings of the event it sent and appends to `results/ui_latency.csv`.
+  - Settings (`config.py`, `.env.example`): `API_HOST` (127.0.0.1), `API_PORT`, `API_CORS_ORIGIN` (one
+    origin, `*` refused), `ENABLE_REPLAY`, `ENABLE_DEBUG`, `ALLOW_TEST_SEASON`, `API_MAX_REPLAYS`,
+    `API_SSE_HEARTBEAT_S`, `API_RACES_CACHE_S`, `API_KAFKA_TIMEOUT_S`, `API_MODEL_DIR`, `API_UI_LATENCY_CSV`.
+  - JSON-lines logging: one access line per request with no query string; exceptions are logged by class
+    name only; no settings appear in responses or logs (tested with a password in the Redis URL).
+  - Compose `api` service (core profile, app image, `python -m f1sa.api`, mem_limit 1536m):
+    - published on `127.0.0.1:${API_HOST_PORT:-8000}` only;
+    - mounts the repo, `./data` and `./models` read-only, and `./results` read-write;
+    - its healthcheck accepts 200 or 503;
+    - `make up` now waits for it.
+  - Makefile: `make api` (host, file lake) and `make test-api`. `pyproject.toml`: a `f1sa-api` script, and
+    pyarrow added to mypy's untyped modules. No new dependency.
+  - No change to `streaming/`, `serving/`, `features/`, `model/`, `lake/`, `ingest/`, `scorer.json` or the
+    label definition and model specs (`git diff` empty there).
+  - Verified live (core and full profiles up; only the new `api` container was created, with `--no-deps`):
+    - Host `make api` gives health 200, races 2023 R5 (57 laps) and 2024 R5 (56), bound to 127.0.0.1.
+    - Container SSE during `make stream-demo SEASON=2024 ROUND=5 SPEED=60`: 1,252 frames (1,030 lap, 40
+      pit_in, 40 pit_out, 141 undercut_alert, 1 session_end, the same counts as the Step 12 run), all ids
+      unique. The stream closed after `session_end`. Redis write → SSE send took p50 2 / p95 5 / max 332 ms.
+      State: 20 drivers with exactly the 9 fields.
+    - Container replay: 202, then 409 (running), 409 (limit), 403 (2025) and 422 (speed 7). The producer
+      delivered 1,113 events and exited 0, which freed the slot. Peak container memory 775 MiB.
+    - HttpFS catalog on the real HDFS lake (app container): 90 races (2021–2024) in 3.2 s. Only GET
+      LISTSTATUS (195) and OPEN (180), all under `/f1/clean/{races,results,laps}`, and 0 paths with
+      `season=2025`. With `ALLOW_TEST_SEASON=1`: 114 races.
+    - The `make stream-demo` check overwrote the three recorded Step 12 results files. They were restored
+      from git, and their sha256 equals the before-values.
+  - Tests:
+    - 10 unit files: `test_api_{config,health,races,state,events,replay,debug,app}.py`,
+      `test_makefile_api.py` and `_api_fixtures.py`.
+    - They cover every status code; the state model's exact fields; SSE frames, heartbeat and close; raw
+      ASGI disconnect for spec 2.3 and 2.4; the replay 409s, cap, concurrency, 2025 and a real subprocess;
+      the ENABLE flags; CORS; and logs.
+    - The three HttpFS guards (read-only, clean zone only, 2025) each have a test.
+    - `tests/integration/test_api.py` runs uvicorn over TCP on real Redis and Kafka: health 200, state,
+      live SSE with heartbeat, unsubscribe after a real disconnect, and close after `session_end`.
+- Step 13 follow-up (user's three fixes, plus the whole-pipeline replay the user chose)
+  - **Full-lake api container.** `make api-up [FULL=1] [REPLAY=1] [DEBUG=1] [TEST_SEASON=1]` recreates only
+    the `api` service (`up -d --no-deps --no-build --force-recreate api`: no other service restarts, no
+    volume touched). `FULL=1` sets `API_DATA_LAKE_URI=hdfs://namenode:8020/f1` (HttpFS `http://httpfs:14000`)
+    and refuses unless the hdfs profile is healthy. The default stays sample mode, and `make up` restores it.
+    README "API" documents it.
+  - **Port clash.** `make api` uses `API_PORT=8001` by default; the container keeps 8000. If the port is
+    taken, `python -m f1sa.api` exits 2 naming the holder (psutil, else the Docker container publishing
+    it) and the remedy. Verified live: "port 127.0.0.1:8000 is already in use by Docker container
+    f1sa-api-1 …".
+  - **Demo outputs.** `make stream-demo` and API replays write to `data/demo/<run_id>/`; only
+    `RECORD=1` writes to `results/` (`experiments/streaming_latency.py --record`, new `demo_runs.py`,
+    `DEMO_DIR`). `streaming/` is unchanged: `demo.py` and `stream_job.py` already took `--results-dir`.
+  - **Replay = the whole pipeline** (user choice):
+    - order: stream job, ready file, producer, then the stream job stops after `session_end`;
+    - outputs in `data/demo/<run_id>/`;
+    - 60 s readiness timeout (`API_REPLAY_READY_TIMEOUT_S`) and 180 s end timeout; on a timeout or failure
+      both processes are killed and the slot is idle again;
+    - state and error in the new `GET /api/replays`;
+    - process groups with SIGTERM, then SIGKILL and a final sweep, so no orphan JVMs.
+    - Bug found by the real-subprocess test and fixed: Python 3.12's `asyncio` `wait()` also waits for
+      the pipes to close, so a leftover child holding stdout hung the replay. Waiting now uses the
+      leader's exit code.
+  - Compose `api` (final, user-approved):
+    - `mem_limit` is 2048m (the user is raising WSL to 14 GB);
+    - mounts: `./data` read-only, with `./data/demo` and `./data/checkpoints` read-write on top;
+      `./models` read-only; `./results` read-write;
+    - `make up`, `up-full` and `api-up` create the two host folders first, so Docker does not create them
+      root-owned.
+    - Checked live: inside the container, `>> /workspace/data/manifest.json` gives "Read-only file
+      system" (EROFS), and the host file's sha256 is unchanged. `/app/data` does not exist in this image;
+      the app works under `/workspace`. `models/` is read-only too.
+    - A sample replay of 2024 R5 at 60× `finished` (0/0) in 2 min 2 s with 1,252 SSE events. Afterwards
+      only uvicorn runs in the container, `results/` is identical, and peak memory was 1.49 GiB.
+  - `make demo-clean [CONFIRM=yes]` (`python -m f1sa.demo_runs`):
+    - deletes only the `<run_id>` folders of `./data/demo` and the `api_<run_id>` / `demo_<S>_<R>_<unix>`
+      checkpoints (and their `.ready` files), and prints what it deleted;
+    - without CONFIRM it lists and exits 1;
+    - it refuses (exit 2) any other root (`..`, absolute paths, a symlinked root, `DEMO_DIR`
+      elsewhere), and keeps other names and symlinked entries.
+    - Live dry run: 19 entries listed, nothing deleted.
+    - Tests: `test_demo_clean.py` (17), covering 10 refused paths, the symlinked root, a symlinked
+      entry, the listing, and the make target.
+  - Live (`make api-up FULL=1 REPLAY=1`, only the api container recreated):
+    - `/api/races` gives 90 races, from 2021 R1 Bahrain (56 laps) to 2024 R24 Abu Dhabi (58).
+    - Replay of 2023 R10 at 60×: the first SSE lap events came about 23 s after the POST. It
+      `finished` with exit codes 0/0 in 106 s, and Redis holds 20 drivers.
+    - Afterwards only tini and uvicorn run in the container. Outputs are in `data/demo/<run_id>/`, every
+      `results/` file is byte-identical, and `git status results/` is empty.
+    - Peak api container memory: 1.33 GiB (the limit was 1.5 GiB then; it is now 2 GiB).
+  - Tests:
+    - `test_api_replay.py`, rewritten (26 tests): the pipeline order and argv; the timeout path
+      (killed, failed, slot idle, error in `/api/replays`); SIGTERM ignored then SIGKILL; exit before
+      ready; producer failure; no stop after the producer; shutdown; and two real-subprocess tests
+      checking that the stream job's child (a stand-in JVM) is gone after the timeout and after a
+      normal finish.
+    - `test_demo_outputs.py`: a default demo run leaves `results/` unchanged (sha256), `RECORD=1`
+      writes it, the argv rules, the run ids, and the make targets.
+    - Port-clash and `main` tests in `test_api_app.py`; the `api-up` make tests.
 ## Next
+- User: raise the WSL VM to 14 GB (`memory=14GB` in `%UserProfile%\.wslconfig`, then `wsl --shutdown`).
+  The full profile's limits now add up to about 10 GiB.
+- Step 14 `web/`: the Next.js dashboard on http://localhost:3000 against the S13 API. Load `/state` on
+  connect and reconnect, then apply the SSE events; post `ui_rendered_at_ms` to `/api/debug/latency` when
+  `ENABLE_DEBUG=1`.
+- Step 15: add `api/routes/whatif.py` and one entry in `app.ROUTERS`.
+- S16: UI latency from `results/ui_latency.csv` (needs a dashboard run with `ENABLE_DEBUG=1`).
 - User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
   `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
   no bytes or checksums change.
@@ -684,6 +804,25 @@
 - S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
   run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
 ## Known issues
+- Step 13 follow-up: a replay of 2025 needs `make api-up TEST_SEASON=1`. The demo script
+  (`make stream-demo`) still has no `--allow-test-season` (unchanged `streaming/demo.py`).
+- Step 13 follow-up: a replay peaks at about 1.5 GiB (two JVMs) of the api container's 2 GiB. An OOM kill
+  would take the API process down with it.
+- Step 13 follow-up: demo outputs and replay checkpoints build up until `make demo-clean CONFIRM=yes`, which
+  must not be run during a demo or a replay.
+- Step 13: Pub/Sub has no history. An SSE client sees only events published after it subscribed;
+  `Last-Event-ID` is ignored, and a reconnecting dashboard must reload `/state`. A client that connects after
+  `session_end` gets heartbeats until it disconnects.
+- Step 13: with ASGI spec ≥ 2.4 (uvicorn), a client disconnect is noticed at the next write, so the
+  subscription can outlive the client by up to one heartbeat (15 s).
+- Step 13: a replay only feeds Kafka. The dashboard sees changes only while a stream job runs
+  (`make stream-demo` starts its own producer, so it does not use the API replay).
+- Step 13: the latency join and the duplicate check live in the memory of one API process (the last
+  10,000 events). After a restart, earlier event ids give 404. Run a single uvicorn worker.
+- Step 13: memory limits for the full profile now add up to about 10 GiB. Until WSL is raised to 14 GB they
+  exceed the ~9 GiB VM (limits are ceilings, not reservations).
+- Step 13: the shutdown path that terminates a running replay is tested in unit tests only. The container
+  logs of the recreate that exercised it live were replaced by the new container.
 - Step 12: `track_neutral`, `track_red_flag` and `race_laps` on the lap events are hindsight values (whole-race
   heuristic, winner's lap count); live they would come from race control and the scheduled distance.
 - Step 12: `redis_written_at_ms` is the client time just before the batch's single pipeline is sent (a PUBLISH
@@ -840,3 +979,10 @@ Step 12 (needs `make up`; `make up-full` for FULL=1 and parity): `make stream-de
 (add `FULL=1` for HDFS), `make stream-parity-full` (expect `mismatching races: 0`), then
 `uv run pytest tests/unit/test_stream_parity.py tests/unit/test_live_features.py tests/unit/test_stream_job.py -q`
 and `uv run pytest tests/integration/test_streaming.py -q -m integration`.
+
+Step 13: `make test-api` (API tests plus `test_demo_outputs.py`), then
+with `make up`: `uv run pytest tests/integration/test_api.py -q -m integration`, `curl -s localhost:8000/api/health`,
+`curl -s localhost:8000/api/races`, and `curl -N localhost:8000/api/races/2024/5/events` during
+`make stream-demo SEASON=2024 ROUND=5 SPEED=60` (writes `data/demo/<run_id>/`; `results/` unchanged). Full lake:
+`make api-up FULL=1 REPLAY=1`, POST a replay, then `curl -s localhost:8000/api/replays` until `finished`. On the host:
+`make api` (port 8001) and the same curls.

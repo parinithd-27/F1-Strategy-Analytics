@@ -47,16 +47,18 @@ Defined in `docker-compose.yml`, project name `f1sa`. `make up` starts `core`; `
 | core | kafka-init (one-shot: creates `f1.race.events`, 3 partitions) | `apache/kafka:4.3.2` | n/a | n/a |
 | core | redis (no persistence, `maxmemory 256mb`, `volatile-ttl`) | `redis:8.10.3` | 6379 | `redis:6379` |
 | core | app (Python 3.12 + locked deps + Spark Kafka connector) | `f1sa-app:dev` (from `docker/spark/Dockerfile`) | n/a | n/a |
+| core | api (FastAPI, `python -m f1sa.api`, Step 13) | `f1sa-app:dev` | 127.0.0.1:8000 only (`API_HOST_PORT`) | `api:8000` |
 | hdfs | namenode | `f1sa-hadoop:3.4.3` (from `apache/hadoop:3.4.3`) | 9870 (web UI) | `hdfs://namenode:8020` |
 | hdfs | datanode | `f1sa-hadoop:3.4.3` | n/a | `datanode:9864` |
 | hdfs | httpfs (HDFS REST gateway that proxies bytes, used by the HDFS sink) | `f1sa-hadoop:3.4.3` | 14000 | `http://httpfs:14000/webhdfs/v1` |
 | spark | spark-master (standalone) | `f1sa-app:dev` | 8080 (UI) | `spark://spark-master:7077` |
 | spark | spark-worker-1, spark-worker-2 | `f1sa-app:dev` | 8081, 8082 (UI) | n/a |
 
-- Host ports 3000 and 8000 are reserved for the web app and the API (later steps). Every host port can be overridden in `.env` (see `.env.example`). If you change `KAFKA_HOST_PORT` or `REDIS_HOST_PORT`, update `KAFKA_BOOTSTRAP` and `REDIS_URL` to match.
+- Host port 3000 is reserved for the web app (S14). The API publishes 8000 on the host's 127.0.0.1 only. Every host port can be overridden in `.env` (see `.env.example`). If you change `KAFKA_HOST_PORT` or `REDIS_HOST_PORT`, update `KAFKA_BOOTSTRAP` and `REDIS_URL` to match.
 - The app image installs `spark-sql-kafka-0-10_2.13:4.2.1` (plus `kafka-clients`, `spark-token-provider-kafka` and `commons-pool2`) into `$SPARK_HOME/jars` at build time, so Structured Streaming needs no network at runtime. Inside containers, Kafka is `kafka:29092`. From the host, it is `localhost:9092`.
 - HDFS is a single-node dev setup: `dfs.replication=1` and permissions disabled (`docker/hadoop/`). The NameNode is formatted on first start only.
 - The app container mounts the repo read-only at `/workspace`, with `data/`, `results/` and `models/` (Step 9c) mounted read-write over it.
+- The api container mounts the repo and `data/` read-only, with `data/demo` and `data/checkpoints` read-write on top (a replay's outputs and stream-job state), `results/` read-write (`ui_latency.csv`) and `models/` read-only. `make up`, `up-full` and `api-up` create the two host folders first, because Docker would otherwise create them owned by root. A write anywhere else under `/workspace/data` fails with EROFS (checked: `manifest.json`).
 
 ### Memory budget
 The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserProfile%\.wslconfig`. On the dev machine the VM currently has about 9 GiB and 6 CPUs (`free -g`, `nproc`). Each container has a hard `mem_limit`:
@@ -67,13 +69,14 @@ The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserPro
 | kafka-init | 512 MiB | exits after creating the topic |
 | redis | 384 MiB | dataset capped at 256 MiB (`maxmemory`) |
 | app | 1.5 GiB | driver for local Spark jobs |
+| api | 2 GiB | uvicorn (≈ 100 MiB) + one replay: stream job JVM + producer JVM (measured peaks 1.33 and 1.49 GiB) |
 | namenode | 768 MiB | heap ≤ 512 MiB |
 | datanode | 768 MiB | heap ≤ 512 MiB |
 | httpfs | 384 MiB | heap ≤ 256 MiB |
 | spark-master | 512 MiB | daemon heap 256 MiB |
 | spark-worker-1, -2 | 1.5 GiB each | `SPARK_WORKER_MEMORY=1g` for executors + 256 MiB daemon |
-| **core total** | **≈ 2.6 GiB** | |
-| **full total** | **≈ 8.0 GiB** (limits) | measured idle use is ≈ 1.6 GiB (before httpfs) |
+| **core total** | **≈ 4.6 GiB** | ≈ 2.6 GiB before the api service (Step 13) |
+| **full total** | **≈ 10.0 GiB** (limits) | needs the WSL VM raised to 14 GB (`memory=14GB` in `.wslconfig`, being done by the user); measured idle use is ≈ 1.6 GiB (before httpfs and api) |
 
 These are ceilings, not reservations. If the full profile runs into memory pressure, lower `SPARK_WORKER_MEMORY` and `SPARK_WORKER_CONTAINER_MEM` in `.env`, or raise `memory=` in `.wslconfig` and run `wsl --shutdown`.
 
@@ -626,3 +629,109 @@ or feature tables apart from the earlier-race priors and the entry list.
   `results/streaming_latency.csv` with three segments plus end to end, and the alert `reason` and `trigger`.
   The producer, the job and the subscriber run on one host (the WSL host, or all in the app container with
   `FULL=1`), so all times come from one clock.
+
+## API (`api/`, Step 13)
+```
+browser (http://localhost:3000) --CORS--> FastAPI (uvicorn, 127.0.0.1:8000)
+  GET  /api/health                         redis PING | Kafka topic describe | deployed model
+  GET  /api/races                          clean zone (file:// pyarrow | hdfs:// HttpFS LISTSTATUS+OPEN)
+  GET  /api/races/{s}/{r}/state            AsyncRaceStore: SCAN race:{s}:{r}:* + HGETALL pipeline + ZRANGE
+  GET  /api/races/{s}/{r}/events           SUBSCRIBE race:{s}:{r}:events -> text/event-stream
+  POST /api/races/{s}/{r}/replay           subprocesses: stream_job, then producer (ENABLE_REPLAY=1)
+  GET  /api/replays                        running replays + the last 20 with state / error
+  POST /api/debug/latency                  results/ui_latency.csv (ENABLE_DEBUG=1)
+```
+Run modes (README "API"):
+- `make up`: the compose `api` service (core profile, app image) in sample mode on 127.0.0.1:8000.
+- `make api-up [FULL=1] [REPLAY=1] [DEBUG=1] [TEST_SEASON=1]`: recreates **only** the `api` container
+  (`up -d --no-deps --no-build --force-recreate api`). `FULL=1` sets `API_DATA_LAKE_URI=hdfs://namenode:8020/f1`
+  (read over `http://httpfs:14000`) and refuses unless namenode, datanode and httpfs are healthy. Only `1`
+  enables a flag. `make up` returns the container to sample mode.
+- `make api`: uvicorn on the host, file lake, `API_PORT` 8001 by default (the container holds 8000). If the
+  port is taken, `python -m f1sa.api` exits 2 and names the holder (psutil, else the Docker container
+  publishing it) and the remedy, instead of uvicorn's bare "address already in use".
+
+Docs: `/api/docs`, `/api/openapi.json`.
+
+| Endpoint | Status codes |
+|---|---|
+| `GET /api/health` | 200 all checks pass; 503 with `checks.{redis,kafka,model}.ok/error` naming the failure |
+| `GET /api/races` | 200 `[{season, round, name, laps}]`; 503 clean zone unavailable |
+| `GET …/state` | 200; 404 the race has no keys; 422 bad season/round; 500 a hash breaks the contract; 503 Redis down |
+| `GET …/events` | 200 `text/event-stream`; 422 bad season/round |
+| `POST …/replay` `{speed: 1\|10\|60}` | 202 (with `run_id`, `state`); 403 disabled or 2025; 404 not in the clean zone; 409 running / limit; 422; 500 launch failed; 503 |
+| `GET /api/replays` | 200 `{enabled, max_running, running, recent}` (state `starting/running/finished/failed`, error, exit codes) |
+| `POST /api/debug/latency` `{event_id, ui_rendered_at_ms}` | 201; 403 disabled; 404 unknown id; 409 already recorded; 422 |
+
+- **Path parameters** use the key rules of `serving/keys.py` (season 1950–2100, round 1–30, ints only), so a
+  request that could not name a Redis key gets 422 before Redis is touched. The 403 of a disabled flag wins
+  over body validation (it is a route dependency).
+- **State** (`models.DriverStateOut`) has exactly the 9 fields of `keys.DRIVER_FIELDS`, decoded with
+  `redis_store.decode_state`: `""` becomes `null`, `undercut_flag` a boolean, `updated_at` the stored ISO
+  string. Drivers are keyed by driverId; `order` is the sorted set by position. A key that expires between
+  SCAN and HGETALL is skipped.
+- **SSE framing** (`sse.py`): subscribe, then `retry: 3000` and `: connected`; per message
+  `event: <type>`, `id: <event_id>`, `data: <stored JSON + event_id + sse_sent_at_ms>`; `: heartbeat` every
+  `API_SSE_HEARTBEAT_S` (15 s) regardless of traffic; the stream ends after `session_end`. Non-JSON, unknown
+  types and other races' messages are skipped and counted.
+  - `event_id` is `payload.event_id` (the producer's uuid4) for lap / pit_in / pit_out. `undercut_alert`
+    and `session_end` have no id in the Step 12 payload (streaming/ is unchanged), so they get
+    `uuid5(ns, raw message)`: deterministic, unique per message (`published_at` has ms).
+  - Pub/Sub keeps no history: a reconnecting client misses what was published meanwhile and reloads
+    `/state`. `Last-Event-ID` is ignored.
+  - **Disconnect.** Starlette does not close the body iterator, so `SSEResponse.__call__` closes the
+    subscription in a `finally` shielded from cancellation. With ASGI spec < 2.4 the disconnect cancels the
+    stream at once; with ≥ 2.4 (uvicorn) it is noticed at the next write, at the latest the next heartbeat.
+    Both paths are tested (raw ASGI in unit tests, uvicorn over TCP in `tests/integration/test_api.py`).
+- **Replay** (`replay.py`) runs the whole pipeline, like `make stream-demo`, so a replay appears in
+  `/state` and on `/events`:
+  1. `python -m f1sa.streaming.stream_job --checkpoint data/checkpoints/api_<run_id> --stop-after-session-end S:R
+     --ready-file … --results-dir data/demo/<run_id>`. It must write its ready file (its first trigger has
+     run, so `startingOffsets=latest` is resolved) within `API_REPLAY_READY_TIMEOUT_S` (60 s). Otherwise it is
+     killed and the replay fails with "stream job not ready within 60 s". Exiting before that also fails.
+  2. `python -m f1sa.streaming.producer --season S --round R --speed V`; a non-zero exit fails the replay.
+  3. The stream job stops by itself after processing `session_end`. It must do so within
+     `API_REPLAY_END_TIMEOUT_S` (180 s) of the producer's exit.
+
+  **No orphans.** Each subprocess is started with `start_new_session`, so it leads its own process group,
+  and the Spark JVM it launches is in that group. Every outcome (finished, failure, timeout, API shutdown)
+  ends with SIGTERM to each group, SIGKILL after 10 s, and a final SIGKILL sweep of the group even after a
+  normal exit. Waiting uses the leader's exit code, not pipe closure: with Python 3.12, a straggler holding
+  stdout would block `asyncio`'s `wait()`. Tested with real subprocesses whose child sleeps on (the
+  timeout path and the finished path), and checked live: only uvicorn is left in the container after a
+  replay.
+
+  The slot is then idle again, and the outcome stays in `GET /api/replays`. One replay at a time
+  (`API_MAX_REPLAYS=1`): the same race gives 409 "is running", another race 409 "limit reached". 2025 is
+  refused with the producer's `check_season` unless `ALLOW_TEST_SEASON=1`, which passes `--allow-test-season`
+  to both. Child output is logged line by line, which also keeps the pipes drained. A replay writes only
+  `data/checkpoints/api_<run_id>*` and `data/demo/<run_id>/`, never `results/`.
+- **Demo outputs** (`demo_runs.py`). `make stream-demo` and API replays write to `data/demo/<run_id>/`
+  (`DEMO_DIR`). `run_id` is `<season>_<round>_<UTC yyyymmddThhmmss.mmmZ>`. Only `make stream-demo RECORD=1`
+  (`--record`, the Step 16 recorded run) writes to `results/`. `tests/unit/test_demo_outputs.py` checks with
+  hashes that a default run leaves `results/` unchanged.
+  `make demo-clean [CONFIRM=yes]` (`python -m f1sa.demo_runs [--yes]`) deletes the `<run_id>` folders in
+  `./data/demo` and the `api_<run_id>` / `demo_<S>_<R>_<unix>` checkpoints (and their `.ready` files) in
+  `./data/checkpoints`, and prints each deletion with its size. Without CONFIRM it only lists them and
+  exits 1. It refuses (exit 2) any root other than exactly `./data/demo` and `./data/checkpoints`, including
+  `..`, absolute paths, a symlinked root or a `DEMO_DIR` pointing elsewhere. Entries with other names
+  (`stream_job`) and symlinked entries are kept. Run it while no demo or replay is running.
+- **Races** (`catalog.py`): a race is listed when its `races` and `laps` partitions exist; `laps` is the
+  producer's distance rule (winner's laps, else the highest lap). Cached in memory for `API_RACES_CACHE_S`
+  (300 s); the full lake over HttpFS takes about 3 s (90 races 2021–2024).
+  - **HttpFS reader limits:** only `LISTSTATUS` and `OPEN`, always HTTP GET; every path is normalised and must
+    lie in `{lake}/clean/{races,results,laps}` (never `/f1/raw`); `season=2025` directories are never listed
+    into or opened unless `ALLOW_TEST_SEASON=1`. The file reader applies the same table and season limits.
+- **Debug latency** (`latency.py`): with `ENABLE_DEBUG=1` the SSE stream remembers the timings of the last
+  10,000 events it sent. A posted `ui_rendered_at_ms` is joined with them server-side and appended to
+  `results/ui_latency.csv` (`event_id, event_type, season, round, produced_at_ms, batch_received_at_ms,
+  redis_written_at_ms, sse_sent_at_ms, ui_rendered_at_ms, recorded_at_ms`), so the client supplies only its
+  own render time.
+- **Security:** binds 127.0.0.1 by default (the container binds 0.0.0.0 and is published on the host's
+  127.0.0.1 only); CORS allows exactly `API_CORS_ORIGIN` (`*` refused), GET/POST, no credentials; replay and
+  debug are off by default; `models/` and `data/` (except `data/demo`, `data/checkpoints`) are mounted read-only. Responses and logs never carry
+  the Redis URL or other settings: checks report the exception class and a fixed text.
+- **Logging** (`log.py`): JSON lines on stderr (`ts, level, logger, msg` + fields). One access line per request
+  (`method, path, status, duration_ms`; no query string), written when the response ends, so an SSE line
+  carries the stream's duration. Exceptions are logged by class name only.
+- **Step 15** adds `routes/whatif.py` and one entry in `app.ROUTERS`.

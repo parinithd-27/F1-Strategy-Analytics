@@ -35,6 +35,7 @@ f1sa-clean = "f1sa.etl.clean:main"
 f1sa-features = "f1sa.features.build:main"
 f1sa-ingest-ti = "f1sa.ingest.tracinginsights_loader:main"
 f1sa-clean-ti = "f1sa.etl.clean_tracinginsights:main"
+f1sa-api = "f1sa.api.__main__:main"
 
 [project.optional-dependencies]
 dev = [
@@ -69,8 +70,8 @@ mypy_path = "src"
 files = ["src"]
 
 [[tool.mypy.overrides]]
-# fastf1 and pandas ship no type information (pandas-stubs is not a dependency).
-module = ["fastf1", "fastf1.*", "pandas", "pandas.*"]
+# fastf1, pandas and pyarrow ship no type information (pandas-stubs is not a dependency).
+module = ["fastf1", "fastf1.*", "pandas", "pandas.*", "pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]

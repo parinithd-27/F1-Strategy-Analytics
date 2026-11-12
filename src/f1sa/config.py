@@ -69,6 +69,35 @@ class Settings(BaseSettings):
     f1_username: SecretStr | None = None
     f1_password: SecretStr | None = None
 
+    # ---------------------------------------------------------------- API (Step 13)
+    api_host: str = "127.0.0.1"
+    """Bind address of ``python -m f1sa.api``; only the compose service sets 0.0.0.0 (inside its
+    container, published on the host's 127.0.0.1 only)."""
+    api_port: int = Field(default=8000, ge=1, le=65535)
+    api_cors_origin: str = "http://localhost:3000"
+    """The one browser origin allowed by CORS (the Next.js dashboard)."""
+    enable_replay: bool = False
+    """``ENABLE_REPLAY=1`` enables ``POST /api/races/{s}/{r}/replay``."""
+    enable_debug: bool = False
+    """``ENABLE_DEBUG=1`` enables ``POST /api/debug/latency``."""
+    allow_test_season: bool = False
+    """``ALLOW_TEST_SEASON=1`` lists and replays the sealed test season (2025) in the API."""
+    api_max_replays: int = Field(default=1, ge=1, le=4)
+    """Replays running at the same time (each starts a Spark JVM in the API container)."""
+    api_sse_heartbeat_s: float = Field(default=15.0, gt=0, le=300)
+    api_races_cache_s: float = Field(default=300.0, ge=0)
+    api_kafka_timeout_s: float = Field(default=2.0, gt=0, le=60)
+    api_model_dir: Path = Path("models/undercut/deploy_real_G3.5_k2")
+    """The deployed model reported by ``/api/health`` (the stream job's default model)."""
+    api_ui_latency_csv: Path = Path("results/ui_latency.csv")
+    api_replay_ready_timeout_s: float = Field(default=60.0, gt=0, le=600)
+    """A replay's stream job must be ready (first trigger done) within this; else it is killed."""
+    api_replay_end_timeout_s: float = Field(default=180.0, gt=0, le=3600)
+    """After the producer exits, the stream job must stop (session_end processed) within this."""
+    demo_dir: Path = Path("data/demo")
+    """Outputs of demo runs (``make stream-demo``, API replays): ``data/demo/<run_id>/``. Only
+    ``RECORD=1`` writes to ``results/``."""
+
     @field_validator("data_lake_uri")
     @classmethod
     def _check_lake_uri(cls, value: str) -> str:
@@ -128,6 +157,32 @@ class Settings(BaseSettings):
         if parsed.scheme not in _HTTP_SCHEMES or not parsed.netloc or parsed.path not in ("", "/"):
             raise ValueError(f"hdfs_httpfs_url must be http(s)://host:port, got {value!r}")
         return value.strip().rstrip("/")
+
+    @field_validator("api_cors_origin")
+    @classmethod
+    def _check_cors_origin(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        parsed = urlparse(value)
+        if (
+            parsed.scheme not in _HTTP_SCHEMES
+            or not parsed.hostname
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or "*" in value
+        ):
+            raise ValueError(
+                f"api_cors_origin must be one http(s)://host[:port] origin, got {value!r}"
+            )
+        return value
+
+    @field_validator("api_host")
+    @classmethod
+    def _check_api_host(cls, value: str) -> str:
+        value = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9.\-:]+", value):
+            raise ValueError(f"invalid api_host {value!r}")
+        return value
 
     @field_validator("hdfs_user")
     @classmethod
