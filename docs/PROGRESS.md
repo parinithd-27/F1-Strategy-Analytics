@@ -489,12 +489,107 @@
     - `results/*`, `data/manifest.json`, `data/manifest_tracinginsights.json`, `data/lake`, `data/sample`;
     - the HDFS listings and file checksums of `/f1/raw`, `/f1/clean` and `/f1/features`;
     - 25 Spark table checksums (10 v1 clean, 10 features, 5 TI), plus `labels_checksum` and the 9 labelled sets.
+- Step 4C → model: feature set `real_ti` (TracingInsights compound, tyre age and telemetry), development mode only
+  - `model/features.py`:
+    - new provenance `tracinginsights`;
+    - `FEATURE_SETS["real_ti"]` = `real` + 19 inputs (46 assembled columns, 98 in total), appended last, so the
+      `real` (52) and `with_synthetic` (94) columns are unchanged;
+    - `DEV_ONLY_FEATURE_SETS`.
+  - `model/dataset.with_ti_inputs`:
+    - compound and tyre age at L−1 from the `stints_tracinginsights` stint covering L−1. The age is null when the
+      tyre life is unknown (never assumed new).
+    - Telemetry plus a `telemetry_partial` flag come only through `jolpica laps LEFT JOIN telemetry_lap_real`.
+    - `DatasetError` on any fan-out (lap count or attempt count changes).
+  - Also in `model/dataset.py`:
+    - `read_clean_seasons` reads only the requested `season=` directories;
+    - `missing_rates` gives per season and feature: n_attempts, n_missing, missing_rate, n_telemetry_partial.
+  - Coverage policy (user rule): every null becomes 0.0 + `_missing`, or `__unknown` for the compound. Partial
+    laps keep their values plus the flag. No race or attempt is dropped, excluded or down-weighted. Class weights
+    are unchanged.
+  - `model/pipeline.py`:
+    - `real_ti` only with `--source full --no-test` (or `sample`). It is refused with `--allow-test-season`, because
+      `docs/model_spec.md` is frozen to `real`, and refused for `rehearsal`.
+    - Its files carry `_real_ti`; the `real` names are unchanged (pinned by a test).
+    - A new `model_dev_missing_rates_real_ti*.csv`, and `coverage_policy` plus `missing_rates` in the metadata.
+  - `make model-dev-ti-full` (both settings) ran in 2021-2024 only. The console log was lost when the user
+    interrupted the session; the output files are complete for both settings.
+    - The counts and class weights equal `real` (108/32 + 49/16; 184/50 + 64/22). Every TI input has missing rate
+      0.0 in every season with 0 partial flags.
+    - 2021 R12 has no labelled attempt. 2022 R11's 3 attempts are kept and none sits in a compound-null stint.
+  - v1 unchanged, compared with the before-values recorded at the start of the step:
+    - 37 local files (`results/*` v1, both manifests, deployment model json);
+    - `data/lake` and `data/sample` aggregates;
+    - the HDFS listings and checksums (`/f1/raw` 3,542 files, `/f1/clean`, `/f1/features`);
+    - 35 Spark checksums (incl. `labels_checksum` and the 9 labelled sets).
+
+    No model file changed after the step started. New files: only `results/model_dev_*real_ti*` (20).
+  - Tests: `test_model_ti_inputs.py` (9), plus 2 `real_ti` guard/name tests and a `real_ti` dev run in
+    `test_model_pipeline.py`, plus a Makefile dry run.
+- Step 4C → model, part 2: `real_tyre`, the leakage test, permutation importance for both models, and the reruns
+  - `real_tyre` = `real` + `{attacker,defender}_{compound,tyre_age_laps}_ti` (68 columns at the time; part 3 adds
+    the tyre-age delta). It uses `features.FEATURE_SET_ONLY`, with the same guards, missing rules and loader
+    as `real_ti`, and its files carry `_real_tyre`. `make model-dev-tyre-full`.
+    - `real` is still 52 columns, equal to the deployed `lr/scorer.json` list. `scorer.json` sha256 is
+      `0a9b7dfb…`, unchanged.
+  - Leakage test (new):
+    `test_model_ti_inputs.py::test_ti_inputs_unchanged_when_future_laps_and_later_races_are_scaled_x100[real_tyre|real_ti]`.
+    Every value after L−1 in the race and every value of a later race ×100 (future compounds WET, telemetry
+    partial) leaves the decision-time inputs identical.
+    - Probe: the whole-stint TI compound equals the compound from laps ≤ L−1 for 0 differing of 157 / 248
+      labelled decision laps.
+  - `model/permutation_dev.py` + `make model-dev-permutation-ti-full`: permutation importance for LR and GBT on
+    calibrated (and raw) scores. It refits and checks the dev run (reproduction MATCH at both settings), writes
+    `results/model_dev_permutation_real_ti*.csv`, and leaves the pipeline outputs untouched.
+    `explain.permutation_importance` gains an optional `transform`; the default is unchanged.
+  - Reruns in tmux, logged to `data/model_dev_ti.log`: `real_tyre`, `real_ti` and the permutation, both settings.
+    All exit 0, and only `season=2021..2024` partitions were read.
+    - The 20 rerun `real_ti` files are byte-identical to the first run (`data/real_ti_before.sha`).
+    - New: 20 `real_tyre` files and 2 permutation files.
+  - The comparison tables are reported in chat, stamped DEVELOPMENT, with no winner picked. They come from the
+    `model_dev_eval*`, `model_dev_loso*` and `model_dev_permutation*` files.
+  - v1 unchanged:
+    - 37 local files, the `models/` aggregate, `data/lake` and `data/sample`;
+    - the HDFS listings and checksums;
+    - 35 Spark checksums.
+- Step 4C → model, part 3: strict decision-time compound, determinism for `real_ti`/`real_tyre`, delta in `real_tyre`
+  - Compound from laps ≤ L−1 only: `dataset.lap_compounds` (raw TracingInsights per-lap labels, mapped to driver_id
+    through the stints) and `dataset.tyre_at_decision` (the single known label over start_lap..L−1 of the stint
+    covering L−1). The leakage test gains a case where same-stint laps after L−1 carry `SOFT` or null and the
+    whole-stint compound is null; the decision-time compound is unchanged. The old known issue is closed.
+  - Determinism: `dataset.canonical_order` puts train and validation in 1 partition, sorted by (season, round,
+    attacker_id, defender_id, lap), for the TracingInsights sets only, inside `build_dataset`, so the dev run and
+    `permutation_dev` use the identical path. `real`'s plan is unchanged (tested).
+    - Why: after the compound change the same code gave GBT validation PR-AUC 0.72970 in the dev run and 0.73216 in
+      the permutation refit (row-order nondeterminism in GBT; LR unchanged). 19 of the 42 development files
+      changed, so the permutation self-check stopped (exit 4).
+    - **The earlier 19 files were replaced.** Their hashes are in `data/dev_ti_tyre_before.sha` only. The new
+      reference is `data/dev_ti_tyre_reference.sha`.
+    - The size of the change: the Part 1 rerun moved GBT by up to 0.0025 PR-AUC, but the fix itself (a different,
+      now fixed, row order) moved it more. Validation GBT PR-AUC: `real_ti` G=3.5 0.7322 → 0.6893 (−0.043; chosen
+      stepSize 0.1 → 0.05), G=5.0 0.642 → 0.632; `real_tyre` G=3.5 0.591 → 0.621, G=5.0 0.611 → 0.617. LR is
+      unchanged in every file.
+  - Plan fix: `with_ti_inputs` builds each side's tyre lookup from `attempts` (not the growing frame) and caches
+    its result. Without this, dynamic partition pruning nested exponentially under the (G, k) filter (a 32 MB
+    physical plan, out of memory on the sample-lake fixtures in `test_model_pipeline` and `test_permutation_dev`).
+  - Runs (tmux, `data/model_dev_ti.log`), only `season=2021..2024` read:
+    - `model-dev-tyre-full`, `model-dev-ti-full`, `model-dev-permutation-ti-full`, twice: all 42 files
+      byte-identical between the two rounds. The permutation refit gave reproduction MATCH at both settings in
+      both rounds.
+    - `real` read-only check: `model-dev-full` twice. All 18 `real` development files equal the committed hashes
+      both times (`data/real_dev_committed.sha`), so `real` is reproducible as is; its code was not changed.
+  - `real_tyre` gains `tyre_age_delta_laps_ti` (defender − attacker): 70 columns, and it differs from `real_ti`
+    only by the telemetry inputs and the partial flag (tested). `model-dev-tyre-full` run twice: 20/20 files
+    byte-identical. Counts unchanged (108/32 and 49/16; 184/50 and 64/22).
+    - Validation PR-AUC: LR 0.604 → 0.650 (G=3.5), 0.710 → 0.720 (G=5.0); GBT 0.621 → 0.674, 0.617 → 0.636.
+    - LR LOSO mean 0.398 → 0.402 (G=3.5), 0.468 → 0.468 (G=5.0).
+  - Unchanged: `real` 52 columns, `scorer.json`, the `real_ti` files after the reference run, and v1.
 ## Next
 - User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
   `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
   no bytes or checksums change.
-- Use `telemetry_lap_real` / `stints_tracinginsights` / `race_control` in a later, explicitly versioned feature
-  step (v1 does not read them, by design). Decide then whether `real` mode may use TracingInsights compounds.
+- `real_ti` is development only. Evaluating it on 2025 needs a new dated `docs/model_spec.md` version committed
+  before the test run (user decision). The Step 16 ablation can compare `real` with `real_ti`. `race_control` is
+  not a model input yet.
 - User: commit `docs/model_spec.md` (the freeze). Then `make model-test-full CONFIRM=yes` (opens 2025 once per
   setting) when the user says so.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
@@ -507,6 +602,17 @@
 - Step 12: load `lr/scorer.json` with `LRScorer.load` in the stream job; compute the inputs exactly as
   `features/undercut.py` does at L-1.
 ## Known issues
+- GBT is sensitive to row order. Fixing the order of the TracingInsights sets moved `real_ti` GBT validation
+  PR-AUC by 0.043 at G=3.5, which is larger than the gaps between some feature sets in the tables. `real` is
+  reproducible run to run (its plan gives a stable order), but its GBT numbers also hold for one row order only.
+  Worth noting before any model is chosen from GBT validation numbers.
+- LOSO in the comparison tables uses raw scores at the fixed first grid point (as in Step 9b), not the calibrated
+  models of the validation columns.
+- `real_ti`: every TracingInsights input is present on every labelled attempt in 2021-2024, so its `_missing`
+  columns are constant 0 in development. The fill path is exercised only by the unit tests. 2025 attempt-level
+  missing rates are unknown until a spec v2 test run.
+- The categorical missing indicator is named `__unknown`, not `_missing`. Renaming it would change `real`'s
+  columns and the deployed `scorer.json`.
 - TracingInsights (Step 4C):
   - Two races are below 95% compound coverage outside 2025: 2021 R12 (Belgium, 3 laps behind the SC, every
     compound UNKNOWN) and 2022 R11 (Austria, 77.4%). In 2025, 2 races are below 95%: R6 Miami (55.6%) and R13
@@ -619,3 +725,8 @@ samples), then `make etl-ti-full`, then `make test-ti` and
 `docker compose exec namenode hdfs dfs -stat %r /f1/clean/stints_tracinginsights/season=2024/round=5/*` (expect 1).
 
 Step 4C wrap-up (needs `make up-full`): `make reconcile-ti-full` (read-only, expect `result: PASS`), then `make test-ti`.
+
+Step 4C → model (needs `make up-full`): `make model-dev-tyre-full model-dev-ti-full model-dev-permutation-ti-full`, then `uv run pytest tests/unit/test_permutation_dev.py -q` and
+`uv run pytest tests/unit/test_model_ti_inputs.py tests/unit/test_model_pipeline.py tests/unit/test_makefile_full.py -q`.
+Determinism: run those three make targets twice and compare `sha256sum` of the 42 files with
+`data/dev_ti_tyre_reference.sha` (expect all OK); `make model-dev-full` then `sha256sum -c data/real_dev_committed.sha`.

@@ -1,0 +1,86 @@
+# DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and to fit the calibrator. The 2025 test season was not loaded
+source,smoke_test,feature_set,g,k,model,split,metric,value,ci_kind,ci_low,ci_high,n_valid,n_attempts,n_races,note,decision_threshold
+full,false,real_ti,3.5,2,lr,validation,f1_positive,0.615385,race_cluster,0.444444,0.740741,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr,validation,f1_positive,0.615385,attempt,0.411765,0.780488,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr,validation,macro_f1,0.680574,race_cluster,0.566209,0.779971,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr,validation,macro_f1,0.680574,attempt,0.535295,0.808344,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr,validation,pr_auc,0.646464,race_cluster,0.534239,0.786853,1000,49,18,,
+full,false,real_ti,3.5,2,lr,validation,pr_auc,0.646464,attempt,0.412975,0.863305,1000,49,18,,
+full,false,real_ti,3.5,2,lr,validation,roc_auc,0.751894,race_cluster,0.632141,0.867208,1000,49,18,,
+full,false,real_ti,3.5,2,lr,validation,roc_auc,0.751894,attempt,0.585714,0.895668,1000,49,18,,
+full,false,real_ti,3.5,2,lr,validation,brier,0.207212,race_cluster,0.153321,0.251653,1000,49,18,,
+full,false,real_ti,3.5,2,lr,validation,brier,0.207212,attempt,0.149382,0.273225,1000,49,18,,
+full,false,real_ti,3.5,2,lr,validation,ece,0.175257,race_cluster,0.127284,0.285862,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,lr,validation,ece,0.175257,attempt,0.120480,0.306173,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,lr_calibrated,validation,f1_positive,0.538462,race_cluster,0.300000,0.695761,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr_calibrated,validation,f1_positive,0.538462,attempt,0.296032,0.740741,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr_calibrated,validation,macro_f1,0.685897,race_cluster,0.575230,0.782085,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr_calibrated,validation,macro_f1,0.685897,attempt,0.528846,0.812055,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,lr_calibrated,validation,pr_auc,0.646464,race_cluster,0.534239,0.786853,1000,49,18,,
+full,false,real_ti,3.5,2,lr_calibrated,validation,pr_auc,0.646464,attempt,0.412975,0.863305,1000,49,18,,
+full,false,real_ti,3.5,2,lr_calibrated,validation,roc_auc,0.751894,race_cluster,0.632141,0.867208,1000,49,18,,
+full,false,real_ti,3.5,2,lr_calibrated,validation,roc_auc,0.751894,attempt,0.585714,0.895668,1000,49,18,,
+full,false,real_ti,3.5,2,lr_calibrated,validation,brier,0.180978,race_cluster,0.129388,0.225440,1000,49,18,,
+full,false,real_ti,3.5,2,lr_calibrated,validation,brier,0.180978,attempt,0.128259,0.239633,1000,49,18,,
+full,false,real_ti,3.5,2,lr_calibrated,validation,ece,0.079854,race_cluster,0.065264,0.221102,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,lr_calibrated,validation,ece,0.079854,attempt,0.081043,0.234947,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt,validation,f1_positive,0.600000,race_cluster,0.333333,0.769231,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt,validation,f1_positive,0.600000,attempt,0.357143,0.785768,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt,validation,macro_f1,0.711765,race_cluster,0.573475,0.817853,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt,validation,macro_f1,0.711765,attempt,0.567605,0.840093,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt,validation,pr_auc,0.689279,race_cluster,0.418981,0.881099,1000,49,18,,
+full,false,real_ti,3.5,2,gbt,validation,pr_auc,0.689279,attempt,0.471233,0.867920,1000,49,18,,
+full,false,real_ti,3.5,2,gbt,validation,roc_auc,0.755682,race_cluster,0.558935,0.901482,1000,49,18,,
+full,false,real_ti,3.5,2,gbt,validation,roc_auc,0.755682,attempt,0.604067,0.891563,1000,49,18,,
+full,false,real_ti,3.5,2,gbt,validation,brier,0.196764,race_cluster,0.128969,0.250652,1000,49,18,,
+full,false,real_ti,3.5,2,gbt,validation,brier,0.196764,attempt,0.111757,0.286473,1000,49,18,,
+full,false,real_ti,3.5,2,gbt,validation,ece,0.166098,race_cluster,0.098344,0.255173,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt,validation,ece,0.166098,attempt,0.084327,0.294110,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt_calibrated,validation,f1_positive,0.600000,race_cluster,0.333333,0.769231,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt_calibrated,validation,f1_positive,0.600000,attempt,0.357143,0.785768,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt_calibrated,validation,macro_f1,0.711765,race_cluster,0.573475,0.817853,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt_calibrated,validation,macro_f1,0.711765,attempt,0.567605,0.840093,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,gbt_calibrated,validation,pr_auc,0.689279,race_cluster,0.418981,0.881099,1000,49,18,,
+full,false,real_ti,3.5,2,gbt_calibrated,validation,pr_auc,0.689279,attempt,0.471233,0.867920,1000,49,18,,
+full,false,real_ti,3.5,2,gbt_calibrated,validation,roc_auc,0.755682,race_cluster,0.558935,0.901482,1000,49,18,,
+full,false,real_ti,3.5,2,gbt_calibrated,validation,roc_auc,0.755682,attempt,0.604067,0.891563,1000,49,18,,
+full,false,real_ti,3.5,2,gbt_calibrated,validation,brier,0.176860,race_cluster,0.128684,0.214664,1000,49,18,,
+full,false,real_ti,3.5,2,gbt_calibrated,validation,brier,0.176860,attempt,0.119722,0.239554,1000,49,18,,
+full,false,real_ti,3.5,2,gbt_calibrated,validation,ece,0.073357,race_cluster,0.048218,0.207176,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt_calibrated,validation,ece,0.073357,attempt,0.059014,0.209605,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,majority,validation,f1_positive,0.000000,race_cluster,0.000000,0.000000,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,majority,validation,f1_positive,0.000000,attempt,0.000000,0.000000,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,majority,validation,macro_f1,0.402439,race_cluster,0.356318,0.443502,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,majority,validation,macro_f1,0.402439,attempt,0.346667,0.443182,1000,49,18,,0.500000
+full,false,real_ti,3.5,2,majority,validation,pr_auc,0.326531,race_cluster,0.203047,0.446438,1000,49,18,,
+full,false,real_ti,3.5,2,majority,validation,pr_auc,0.326531,attempt,0.204082,0.469388,1000,49,18,,
+full,false,real_ti,3.5,2,majority,validation,roc_auc,0.500000,race_cluster,0.500000,0.500000,1000,49,18,,
+full,false,real_ti,3.5,2,majority,validation,roc_auc,0.500000,attempt,0.500000,0.500000,1000,49,18,,
+full,false,real_ti,3.5,2,majority,validation,brier,0.220822,race_cluster,0.170514,0.269674,1000,49,18,,
+full,false,real_ti,3.5,2,majority,validation,brier,0.220822,attempt,0.170936,0.279024,1000,49,18,,
+full,false,real_ti,3.5,2,majority,validation,ece,0.030234,race_cluster,0.001576,0.150526,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,majority,validation,ece,0.030234,attempt,0.009826,0.173091,1000,49,18,"primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,rule,validation,f1_positive,0.210526,race_cluster,0.000000,0.470588,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,0.500000
+full,false,real_ti,3.5,2,rule,validation,f1_positive,0.210526,attempt,0.000000,0.444697,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,0.500000
+full,false,real_ti,3.5,2,rule,validation,macro_f1,0.510326,race_cluster,0.376207,0.667830,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,0.500000
+full,false,real_ti,3.5,2,rule,validation,macro_f1,0.510326,attempt,0.382398,0.648325,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,0.500000
+full,false,real_ti,3.5,2,rule,validation,pr_auc,0.578519,race_cluster,0.378798,0.789737,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,
+full,false,real_ti,3.5,2,rule,validation,pr_auc,0.578519,attempt,0.373818,0.797101,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,
+full,false,real_ti,3.5,2,rule,validation,roc_auc,0.742424,race_cluster,0.600686,0.857021,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,
+full,false,real_ti,3.5,2,rule,validation,roc_auc,0.742424,attempt,0.595889,0.880566,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,
+full,false,real_ti,3.5,2,rule,validation,brier,0.221291,race_cluster,0.146776,0.295497,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,
+full,false,real_ti,3.5,2,rule,validation,brier,0.221291,attempt,0.138143,0.312850,1000,49,18,rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963,
+full,false,real_ti,3.5,2,rule,validation,ece,0.177013,race_cluster,0.105266,0.311134,1000,49,18,"rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963; primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,rule,validation,ece,0.177013,attempt,0.096834,0.321974,1000,49,18,"rule baseline: decision-time rule probability on 49 of 49 rows; 0 fall back to the training positive rate 0.2963; primary 10-bin ECE; bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,lr,validation,ece_5bin,0.164531,race_cluster,0.092043,0.267485,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,lr,validation,ece_5bin,0.164531,attempt,0.087012,0.285196,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,lr_calibrated,validation,ece_5bin,0.069850,race_cluster,0.031920,0.201033,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,lr_calibrated,validation,ece_5bin,0.069850,attempt,0.043157,0.206010,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt,validation,ece_5bin,0.141356,race_cluster,0.071920,0.211875,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt,validation,ece_5bin,0.141356,attempt,0.054775,0.259884,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt_calibrated,validation,ece_5bin,0.047025,race_cluster,0.029266,0.188268,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,gbt_calibrated,validation,ece_5bin,0.047025,attempt,0.039890,0.185619,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,majority,validation,ece_5bin,0.030234,race_cluster,0.001576,0.150526,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,majority,validation,ece_5bin,0.030234,attempt,0.009826,0.173091,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,rule,validation,ece_5bin,0.168286,race_cluster,0.081910,0.295606,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",
+full,false,real_ti,3.5,2,rule,validation,ece_5bin,0.168286,attempt,0.079298,0.317982,1000,49,18,"supplementary (5 bins; primary ECE uses 10); bootstrap ECE intervals are biased upward (resampling duplicates rows into bins), so the interval can lie above the point value",

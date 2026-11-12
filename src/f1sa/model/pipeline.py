@@ -17,7 +17,11 @@ Sources:
   with both bootstraps, the per-season class balance and a leave-one-season-out check
   (``model.loso``). Every output is stamped DEVELOPMENT and named ``model_dev_*`` (``_G5.0_k3``
   etc. for a non-primary setting); no model binaries are saved. ``no_test`` and
-  ``allow_test_season`` are mutually exclusive.
+  ``allow_test_season`` are mutually exclusive. Development mode also accepts the
+  development-only feature set ``real_ti`` (TracingInsights tyre and telemetry inputs from the
+  2021-2024 clean partitions; ``features.DEV_ONLY_FEATURE_SETS``). Its files carry ``_real_ti``
+  (``model_dev_eval_real_ti.csv``) plus ``model_dev_missing_rates_real_ti.csv``, so the ``real``
+  files are never overwritten. ``real`` file names are unchanged.
 
 Outputs (``{results_dir}/<name>{suffix}.<ext>``): ``model_eval``, ``calibration``,
 ``feature_importance`` (``.csv`` / ``.png``), ``reliability.png`` and ``confusion_matrix.png``. The
@@ -59,12 +63,15 @@ from f1sa.model.baselines import MajorityBaseline, RuleBaseline
 from f1sa.model.calibrate import PLATT_BELOW_N, Calibrator, choose
 from f1sa.model.dataset import (
     LABELLED,
+    MISSING_RATE_COLUMNS,
+    TI_CLEAN_TABLES,
     DatasetError,
     ModelDataset,
     SplitSpec,
     build_dataset,
     load_attempts,
     load_attempts_for_seasons,
+    missing_rates,
     season_partition_paths,
 )
 from f1sa.model.evaluate import (
@@ -173,8 +180,17 @@ class RunConfig:
                 "--source full evaluates the 2025 test season once; pass --allow-test-season only "
                 "after the label definition is signed off, or --no-test for a development run"
             )
-        if self.source == "full" and self.feature_set != "real":
-            raise RunError("--source full uses the 'real' feature set only")
+        dev_only = self.feature_set in MF.DEV_ONLY_FEATURE_SETS
+        if self.source == "full" and self.feature_set != "real" and not (dev_only and self.no_test):
+            raise RunError(
+                "--source full uses the 'real' feature set only (docs/model_spec.md); the "
+                f"development-only sets {sorted(MF.DEV_ONLY_FEATURE_SETS)} need --no-test"
+            )
+        if self.source == "rehearsal" and MF.uses_tracinginsights(self.feature_set):
+            raise RunError(
+                f"--source rehearsal has no TracingInsights inputs; {self.feature_set!r} needs "
+                "--source sample or full"
+            )
         if self.n_boot < 1:
             raise RunError("n_boot must be >= 1")
 
@@ -200,17 +216,25 @@ class RunConfig:
             self.models_dir / "undercut" / f"{self.source}_{self.feature_set}_G{self.g}_k{self.k}"
         )
 
+    @property
+    def feature_set_suffix(self) -> str:
+        """'' for ``real`` (every existing file name is unchanged), else ``_{feature_set}``."""
+        return "" if self.feature_set == "real" else f"_{self.feature_set}"
+
     def output(self, name: str, ext: str) -> Path:
+        fs = self.feature_set_suffix
         if self.no_test:
             short = name.removeprefix("model_")
-            return self.results_dir / f"model_dev_{short}{self.setting_suffix}.{ext}"
+            return self.results_dir / f"model_dev_{short}{fs}{self.setting_suffix}.{ext}"
         if self.source == "full":
-            return self.results_dir / f"{name}{self.full_suffix}.{ext}"
-        return self.results_dir / f"{name}{SUFFIX[self.source]}.{ext}"
+            return self.results_dir / f"{name}{fs}{self.full_suffix}.{ext}"
+        return self.results_dir / f"{name}{fs}{SUFFIX[self.source]}.{ext}"
 
     def result_paths(self) -> list[Path]:
         """Every file this run writes (result files and the saved metadata)."""
         paths = [self.output(name, ext) for name, ext in RESULT_FILES]
+        if MF.uses_tracinginsights(self.feature_set):
+            paths.append(self.output("missing_rates", "csv"))
         if self.no_test:
             paths += [self.output(n, e) for n, e in DEV_EXTRA_FILES]
         else:
@@ -256,15 +280,20 @@ def load_frame(spark: SparkSession, cfg: RunConfig) -> DataFrame:
     if cfg.source == "rehearsal":
         return rehearsal.generate(spark, **dict(cfg.rehearsal_kwargs))
     settings = get_settings()
-    _clean, features_root = resolve_feature_roots(settings)
+    clean_root, features_root = resolve_feature_roots(settings)
+    ti_root = clean_root if MF.uses_tracinginsights(cfg.feature_set) else None
     if cfg.no_test:
         seasons = (*DEV_SPLIT.train, *DEV_SPLIT.validation)
         for table in ("undercut_attempts", "stints", "telemetry_lap_features"):
             paths = season_partition_paths(spark, features_root, table, seasons)
             print(f"reading {table} partitions: {[p.rsplit('/', 1)[-1] for p in paths]}")
-        return load_attempts_for_seasons(spark, features_root, seasons)
+        if ti_root is not None:
+            for table in TI_CLEAN_TABLES:
+                paths = season_partition_paths(spark, ti_root, table, seasons)
+                print(f"reading clean {table} partitions: {[p.rsplit('/', 1)[-1] for p in paths]}")
+        return load_attempts_for_seasons(spark, features_root, seasons, ti_root)
     races = set(sample_races(settings)) if cfg.source == "sample" else None
-    return load_attempts(spark, features_root, races)
+    return load_attempts(spark, features_root, races, ti_root)
 
 
 # ------------------------------------------------------------------ outputs
@@ -382,6 +411,13 @@ def run(
     split = DEV_SPLIT if cfg.no_test else None
     ds = build_dataset(df, g=cfg.g, k=cfg.k, feature_set=cfg.feature_set, split=split)
     say(f"dataset G={ds.g} k={ds.k} feature_set={ds.feature_set}: {ds.counts}")
+    rates = (
+        missing_rates(df, cfg.feature_set, cfg.g, cfg.k)
+        if MF.uses_tracinginsights(cfg.feature_set)
+        else []
+    )
+    for line in missing_rate_lines(rates):
+        say(line)
     balance = class_balance(ds) if cfg.no_test else []
     for b in balance:
         say(
@@ -443,6 +479,11 @@ def run(
     plot_split = test if test is not None else val
     outputs = _write_outputs(cfg, rows, calib_rows, importance, plot_split, selected)
     metadata = _metadata(cfg, ds, models, calibrators, selected, test is not None)
+    if rates:
+        metadata["coverage_policy"] = COVERAGE_POLICY
+        metadata["missing_rates"] = rates
+        outputs["missing_rates"] = cfg.output("missing_rates", "csv")
+        write_csv(outputs["missing_rates"], rates, MISSING_RATE_COLUMNS, cfg.stamp)
     if cfg.no_test:
         outputs["class_balance"] = cfg.output("class_balance", "csv")
         write_csv(outputs["class_balance"], balance, BALANCE_COLUMNS, cfg.stamp)
@@ -462,6 +503,31 @@ def run(
     return RunResult(
         ds, models, calibrators, selected, val, test, rows, outputs, metadata, messages
     )
+
+
+COVERAGE_POLICY = (
+    "fill_0.0_plus_missing; categorical unknown level = missing; partial telemetry keeps values "
+    "plus telemetry_partial_ti; no race or attempt dropped, excluded or down-weighted for coverage"
+)
+
+
+def missing_rate_lines(rates: Sequence[Mapping[str, Any]]) -> list[str]:
+    """One line per season: TracingInsights inputs with any missing value, and partial laps."""
+    by_season: dict[int, list[Mapping[str, Any]]] = {}
+    for r in rates:
+        if r["provenance"] == MF.TRACINGINSIGHTS:
+            by_season.setdefault(int(r["season"]), []).append(r)
+    lines = []
+    for season, rows in sorted(by_season.items()):
+        parts = [
+            f"{r['feature']} {r['n_missing']}/{r['n_attempts']}" for r in rows if r["n_missing"]
+        ]
+        partial = sum(int(r["n_telemetry_partial"] or 0) for r in rows)
+        lines.append(
+            f"missing (TracingInsights) {season}: "
+            f"{', '.join(parts) if parts else 'none'}; partial telemetry flags {partial}"
+        )
+    return lines
 
 
 def class_balance(ds: ModelDataset) -> list[dict[str, Any]]:

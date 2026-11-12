@@ -425,6 +425,90 @@ choose a setting.
 | `results/model_dev_loso*.csv` | fold (`hold_out_<season>`), train_seasons, held_out_season, model (`lr`, `gbt`, `majority`, `rule`), metric, value, n_attempts, n_positive, n_races, params, note. Leave one season out of 2021-2024 (never 2025); fixed first grid point, raw scores, class weights from the fold's training seasons. F1, macro-F1, PR-AUC and ROC-AUC are NaN with a note when the held-out season has fewer than 5 positives or negatives |
 | `results/model_dev_metadata*.json` | the run metadata (split with an empty test, counts, chosen parameters, calibrators, class balance, versions) |
 
+### Feature set `real_ti` (development mode only; `make model-dev-ti-full`)
+This is `real` (52 assembled columns, unchanged) plus 19 TracingInsights inputs (46 assembled columns, 98 in
+total). It is accepted only by `--source full --no-test` and by `--source sample` (smoke test). It is refused
+with `--allow-test-season`, because `docs/model_spec.md` is frozen to `real`; evaluating it on 2025 needs a new
+dated spec version first. It is refused for `rehearsal`. Its files carry `_real_ti`
+(`model_dev_eval_real_ti.csv`, `model_dev_eval_real_ti_G5.0_k3.csv`, …), so the `real` files are never
+overwritten.
+
+| Input (attacker and defender, at decision lap L−1) | Derivation (`model/dataset.with_ti_inputs`) |
+|---|---|
+| `{side}_compound_ti` | The single known per-lap compound label (raw TracingInsights laps, upper-cased dry/wet only; `dataset.lap_compounds`) over laps start_lap..L−1 of the `stints_tracinginsights` stint with start_lap ≤ L−1 ≤ end_lap (`dataset.tyre_at_decision`). Null if there is no label or the labels disagree. **Labels after L−1 are never read** |
+| `{side}_tyre_age_laps_ti`, `tyre_age_delta_laps_ti` | tyre_age_at_start + L−1 − start_lap + 1 (the `df_jobs.tyre_age` formula); null if tyre_age_at_start is null (**never assumed new**); delta = defender − attacker |
+| `{side}_{mean_speed_kph, max_speed_kph, pct_full_throttle, brake_fraction, gear_changes, mean_rpm}_ti` | `telemetry_lap_real` **only through `jolpica laps LEFT JOIN telemetry_lap_real`** on (season, round, driver_id, lap) |
+| `{side}_telemetry_partial_ti` | 1.0 if that lap's `telemetry_coverage` is `partial`, 0.0 if `full` or `none`, null if there is no TracingInsights row |
+
+**Feature set `real_tyre`** (`make model-dev-tyre-full`; the same guards, rules and loader as `real_ti`):
+- `real` plus `{attacker,defender}_compound_ti`, `{attacker,defender}_tyre_age_laps_ti` and
+  `tyre_age_delta_laps_ti` (defender − attacker): 70 assembled columns.
+- `real_tyre` and `real_ti` differ only by the telemetry inputs and the partial flag (tested).
+- `features.FEATURE_SET_ONLY` narrows the `tracinginsights` provenance to those 5 inputs. Files carry
+  `_real_tyre`.
+
+**Leakage check:** `tests/unit/test_model_ti_inputs.py::test_ti_inputs_unchanged_when_future_laps_and_later_races_are_scaled_x100`,
+for both `real_tyre` and `real_ti`.
+- Every value after lap L−1 in the race is multiplied by 100: lap numbers, stint bounds, tyre ages and
+  telemetry; those laps' telemetry also becomes `partial` and their compounds `WET`.
+- Every value of a later race is treated the same way.
+- A second variant relabels the same-stint laps after L−1 (`SOFT` for one driver, null for the other) and nulls
+  the whole-stint compound. The decision-time compound must stay as it was (attacker HARD, defender MEDIUM).
+- The assembled decision-time inputs of the target race must be identical, and the later race's must change.
+- The compound is built from per-lap labels on laps ≤ L−1 only, so a later label in the same stint cannot reach
+  it (previously a whole-stint aggregate; on the real data the two agreed on 157/157 and 248/248 labelled decision
+  laps).
+
+**Determinism** (`dataset.canonical_order`, TracingInsights sets only; `real`'s plan is unchanged and tested):
+- Train and validation are put in one partition, sorted by (season, round, attacker_id, defender_id, lap); a
+  duplicate key raises `DatasetError`. The development run and the permutation refit use the same path
+  (`build_dataset`).
+- The reason: the TracingInsights joins and group-bys return rows in a run-dependent order, and GBT is
+  order-sensitive. Before the fix the same code gave GBT validation PR-AUC 0.72970 and 0.73216 on two runs.
+- `with_ti_inputs` caches its result. A (G, k) filter pushed into its joins over season/round-partitioned scans
+  made dynamic partition pruning nest exponentially (a 32 MB physical plan and an out-of-memory error on the
+  sample lake).
+
+**Permutation importance for both models** (`make model-dev-permutation-ti-full`,
+`model/permutation_dev.py`):
+- The development pipeline computes permutation importance only for the selected model, on raw scores. This
+  entry point refits LR and GBT on the same 2021-2024 data, grid and seed.
+- It checks the refit against the run's metadata (counts, parameters, validation PR-AUC) and against the selected
+  model's rows. On a mismatch it exits 4 and writes nothing.
+- It writes `results/model_dev_permutation_real_ti*.csv`: model, scores (`calibrated` with the run's saved
+  calibrator, and `raw`), feature, value (mean validation PR-AUC drop over 5 repeats), std, note.
+- A Platt calibrator with a > 0 keeps the ranking, so the calibrated and raw drops are equal.
+
+**Coverage policy** (also in the metadata as `coverage_policy`):
+- Every null becomes 0.0 plus its `_missing` indicator = 1. For a compound, every one-hot level is 0 and
+  `__unknown` = 1; `__unknown` is the categorical's missing indicator.
+- A `partial` lap keeps its aggregates and sets the partial flag. A `none` lap has null aggregates, so they become
+  0.0 + `_missing`, with the partial flag 0.0.
+- **No race or attempt is dropped, excluded or down-weighted for low coverage, in any season.** Class weights stay
+  `n / (2·n_class)` over the training rows, with no coverage term.
+- Fan-out guards: `DatasetError` if the left join changes the Jolpica lap count, or if the stint join changes the
+  attempt count.
+- The clean TracingInsights partitions are read per season directory, like the feature tables: development mode
+  lists and reads only `season=2021..2024`.
+
+| File | Columns |
+|---|---|
+| `results/model_dev_missing_rates_real_ti*.csv`, `model_dev_missing_rates_real_tyre*.csv` | season, feature, provenance, n_attempts, n_missing, missing_rate, n_telemetry_partial (filled only for the partial flags). Labelled attempts at (G, k), every feature of the set, 2021-2024. Counts and shares only |
+
+**Real run (2026-11-12, 2021-2024; the reference outputs are from the canonical-order runs, each repeated
+and byte-identical):**
+- The dataset counts equal `real` at both settings: train 108 (32 positive), validation 49 (16) at G=3.5, k=2;
+  184 (50) and 64 (22) at G=5.0, k=3. The class weights are identical too.
+- Every TracingInsights input has missing rate **0.0** in every season at both settings, and 0 partial-telemetry
+  flags. The coverage holes do not reach any labelled decision lap:
+  - 2021 R12 (Belgium) has no labelled attempt.
+  - 2022 R11 (Austria) has 3 labelled attempts at G=3.5, k=2. All 3 are kept, and none sits in one of its 12
+    compound-null stints.
+- The non-TracingInsights inputs keep the rates of `real` (for example `rejoin_nearest_ahead_s` 0.59–0.81,
+  `gap_ahead_change_3l` 0.16–0.36).
+- 2025 attempt-level rates are not computed, because development mode never reads 2025. The lap-level 2025 shares
+  are in `results/tracinginsights_coverage_full.csv`.
+
 
 ## Full-data quality notes (Step 8b)
 

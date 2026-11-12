@@ -534,3 +534,146 @@ def test_decision_threshold_is_fixed_and_reported(rehearsal_run: dict[str, Any])
         r["decision_threshold"] for r in rows if r["metric"] not in ("f1_positive", "macro_f1")
     } == {""}
     assert result.metadata["decision_threshold"] == 0.5
+
+
+# ------------------------------------------------------------------ feature set real_ti (dev only)
+def test_real_ti_guards_and_names(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(P.RunError, match="need --no-test"):
+        P.RunConfig(source="full", allow_test_season=True, feature_set="real_ti")
+    with pytest.raises(P.RunError, match="--allow-test-season"):
+        P.RunConfig(source="full", feature_set="real_ti")
+    with pytest.raises(P.RunError, match="no TracingInsights inputs"):
+        P.RunConfig(source="rehearsal", feature_set="real_ti")
+    assert P.main(["--source", "full", "--allow-test-season", "--feature-set", "real_ti"]) == 2
+    assert "'real' feature set only" in capsys.readouterr().err
+    dev = P.RunConfig(source="full", no_test=True, feature_set="real_ti")
+    sens = P.RunConfig(source="full", no_test=True, feature_set="real_ti", g=5.0, k=3)
+    assert dev.output("model_eval", "csv").name == "model_dev_eval_real_ti.csv"
+    assert sens.output("model_eval", "csv").name == "model_dev_eval_real_ti_G5.0_k3.csv"
+    assert dev.output("missing_rates", "csv").name == "model_dev_missing_rates_real_ti.csv"
+    sample = P.RunConfig(source="sample", feature_set="real_ti")
+    assert sample.output("model_eval", "csv").name == "model_eval_real_ti_sample.csv"
+    real_dev = P.RunConfig(source="full", no_test=True)
+    real_paths = set(real_dev.result_paths()) | set(
+        P.RunConfig(source="full", no_test=True, g=5.0, k=3).result_paths()
+    )
+    assert not real_paths & (set(dev.result_paths()) | set(sens.result_paths()))
+    assert {p.name for p in real_dev.result_paths()} == {
+        "model_dev_eval.csv",
+        "model_dev_calibration.csv",
+        "model_dev_feature_importance.csv",
+        "model_dev_feature_importance.png",
+        "model_dev_reliability.png",
+        "model_dev_confusion_matrix.png",
+        "model_dev_class_balance.csv",
+        "model_dev_loso.csv",
+        "model_dev_metadata.json",
+    }
+    assert dev.output("missing_rates", "csv") in dev.result_paths()
+    assert P.missing_rate_lines([]) == []
+
+
+@pytest.fixture(scope="module")
+def dev_ti_run(
+    spark: SparkSession,
+    sample_clean_lake: SampleLake,
+    sample_features_root: str,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[dict[str, Any]]:
+    """``--no-test --feature-set real_ti`` on a copy of the sample lake (features + clean laps).
+    The sample has no TracingInsights tables, so every TI input is missing; every 2025
+    partition (features and clean) is unreadable junk."""
+    import shutil
+
+    base = tmp_path_factory.mktemp("dev_ti")
+    lake = base / "data" / "lake"
+    shutil.copytree(Path(sample_features_root.removeprefix("file://")), lake / "features")
+    shutil.copytree(sample_clean_lake.lake / "clean" / "laps", lake / "clean" / "laps")
+    junk_dirs = [
+        lake / "features" / t for t in ("undercut_attempts", "stints", "telemetry_lap_features")
+    ]
+    junk_dirs += [
+        lake / "clean" / t for t in ("laps", "stints_tracinginsights", "telemetry_lap_real")
+    ]
+    for d in junk_dirs:
+        junk = d / "season=2025" / "round=1"
+        junk.mkdir(parents=True)
+        (junk / "part-00000-junk.parquet").write_bytes(b"not parquet: the test season")
+    paths: list[str] = []
+    original_parquet = DataFrameReader.parquet
+
+    def parquet_spy(self: Any, *p: str, **kw: Any) -> Any:
+        paths.extend(str(x) for x in p)
+        return original_parquet(self, *p, **kw)
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(DataFrameReader, "parquet", parquet_spy)
+    mp.setattr(P, "evaluate_test", lambda *a, **k: pytest.fail("test season evaluated"))
+    mp.setenv("DATA_LAKE_URI", f"file://{lake}")
+    cwd = os.getcwd()
+    os.chdir(base)
+    lines: list[str] = []
+    try:
+        from f1sa.config import get_settings
+
+        get_settings.cache_clear()
+        cfg = P.RunConfig(
+            source="full", no_test=True, feature_set="real_ti", n_boot=20, train=SMALL
+        )
+        result = P.run(spark, cfg, out=lines.append)
+        real = P.run(
+            spark,
+            P.RunConfig(source="full", no_test=True, n_boot=20, train=SMALL),
+            out=lambda _m: None,
+        )
+    finally:
+        os.chdir(cwd)
+        mp.undo()
+    yield {"result": result, "real": real, "paths": paths, "base": base, "lines": lines}
+
+
+def test_real_ti_dev_run_reads_2021_2024_only_and_drops_nothing(dev_ti_run: dict[str, Any]) -> None:
+    paths = dev_ti_run["paths"]
+    assert any("/clean/laps/season=" in p for p in paths)
+    assert not [p for p in paths if "2025" in p]
+    ds, real = dev_ti_run["result"].dataset, dev_ti_run["real"].dataset
+    assert ds.feature_set == "real_ti" and len(ds.columns) == 98
+    assert ds.counts == real.counts and ds.class_weights == real.class_weights
+
+
+def test_real_ti_dev_run_reports_missing_rates(dev_ti_run: dict[str, Any]) -> None:
+    results = dev_ti_run["base"] / "results"
+    text = (results / "model_dev_missing_rates_real_ti.csv").read_text().splitlines()
+    assert text[0].startswith("# DEVELOPMENT")
+    assert text[1] == ",".join(P.MISSING_RATE_COLUMNS)
+    meta = json.loads((results / "model_dev_metadata_real_ti.json").read_text())
+    assert meta["feature_set"] == "real_ti" and meta["coverage_policy"] == P.COVERAGE_POLICY
+    ti = [r for r in meta["missing_rates"] if r["provenance"] == "tracinginsights"]
+    assert ti and all(r["missing_rate"] == 1.0 for r in ti)  # the sample has no TI tables
+    assert any(x.startswith("missing (TracingInsights) 2024:") for x in dev_ti_run["lines"])
+    assert (results / "model_dev_eval_real_ti.csv").is_file()
+    assert (results / "model_dev_eval.csv").is_file()  # the real run kept its own names
+    eval_text = (results / "model_dev_eval_real_ti.csv").read_text()
+    assert ",real_ti," in eval_text
+
+
+def test_real_tyre_guards_and_names() -> None:
+    with pytest.raises(P.RunError, match="need --no-test"):
+        P.RunConfig(source="full", allow_test_season=True, feature_set="real_tyre")
+    with pytest.raises(P.RunError, match="no TracingInsights inputs"):
+        P.RunConfig(source="rehearsal", feature_set="real_tyre")
+    tyre = P.RunConfig(source="full", no_test=True, feature_set="real_tyre")
+    sens = P.RunConfig(source="full", no_test=True, feature_set="real_tyre", g=5.0, k=3)
+    assert tyre.output("model_eval", "csv").name == "model_dev_eval_real_tyre.csv"
+    assert sens.output("loso", "csv").name == "model_dev_loso_real_tyre_G5.0_k3.csv"
+    assert tyre.output("missing_rates", "csv") in tyre.result_paths()
+    others = [
+        P.RunConfig(source="full", no_test=True, feature_set=fs, g=g, k=k)
+        for fs in ("real", "real_ti")
+        for g, k in ((3.5, 2), (5.0, 3))
+    ]
+    taken = {p for cfg in others for p in cfg.result_paths()}
+    assert not taken & (set(tyre.result_paths()) | set(sens.result_paths()))

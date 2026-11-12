@@ -1,0 +1,124 @@
+# DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and to fit the calibrator. The 2025 test season was not loaded
+model,method,feature,value,std,note
+gbt,gbt_importance,defender_expected_outlap_pace_residual_s,0.247290,0.000000,
+gbt,gbt_importance,gap_s,0.211786,0.000000,
+gbt,gbt_importance,attacker_tyre_age_laps_ti,0.131336,0.000000,
+gbt,gbt_importance,gap_ahead_change_1l,0.107677,0.000000,
+gbt,gbt_importance,defender_deg_slope_s_per_lap,0.078797,0.000000,
+gbt,gbt_importance,attacker_deg_slope_s_per_lap,0.060171,0.000000,
+gbt,gbt_importance,gap_ahead_change_3l,0.044272,0.000000,
+gbt,gbt_importance,tyre_age_delta_laps_ti,0.041516,0.000000,
+gbt,gbt_importance,deg_slope_delta_s_per_lap,0.031655,0.000000,
+gbt,gbt_importance,pit_loss_prior_s,0.027795,0.000000,
+gbt,gbt_importance,attacker_compound_ti,0.017706,0.000000,
+gbt,gbt_importance,attacker_expected_outlap_pace_residual_s,0.000000,0.000000,
+gbt,gbt_importance,attacker_expected_outlap_pace_source,0.000000,0.000000,
+gbt,gbt_importance,attacker_expected_stop_delta_s,0.000000,0.000000,
+gbt,gbt_importance,attacker_position,0.000000,0.000000,
+gbt,gbt_importance,attacker_stint_laps,0.000000,0.000000,
+gbt,gbt_importance,defender_compound_ti,0.000000,0.000000,
+gbt,gbt_importance,defender_expected_outlap_pace_source,0.000000,0.000000,
+gbt,gbt_importance,defender_expected_stop_delta_s,0.000000,0.000000,
+gbt,gbt_importance,defender_stint_laps,0.000000,0.000000,
+gbt,gbt_importance,defender_tyre_age_laps_ti,0.000000,0.000000,
+gbt,gbt_importance,laps_remaining,0.000000,0.000000,
+gbt,gbt_importance,pace_delta_last3_s,0.000000,0.000000,
+gbt,gbt_importance,pit_loss_source,0.000000,0.000000,
+gbt,gbt_importance,rejoin_nearest_ahead_s,0.000000,0.000000,
+gbt,gbt_importance,rejoin_traffic_cars,0.000000,0.000000,
+lr,lr_std_coefficient,gap_s,-0.641010,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_1l,-0.325872,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_deg_slope_s_per_lap,0.298411,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_residual_s,0.293586,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_deg_slope_s_per_lap,0.253771,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,tyre_age_delta_laps_ti,0.181234,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_stop_delta_s,-0.175160,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_3l,-0.156840,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_stint_laps,-0.145556,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_compound_ti__hard,0.141599,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_compound_ti__soft,-0.132297,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,laps_remaining,-0.130860,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_1l_missing,0.114558,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_prior_s,-0.107067,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_tyre_age_laps_ti,-0.104770,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_stint_laps,-0.103241,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__team,0.101477,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_compound_ti__medium,-0.095504,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_nearest_ahead_s_missing,0.088259,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,deg_slope_delta_s_per_lap,0.088230,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__driver_team,-0.085900,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_nearest_ahead_s,-0.084347,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_compound_ti__soft,0.067565,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__driver_team,-0.055269,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__circuit_prior,-0.051377,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__global_prior,0.048199,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_tyre_age_laps_ti,-0.046100,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__driver_team_shrunk,0.043469,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_compound_ti__intermediate,0.039007,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_compound_ti__intermediate,0.039007,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_residual_s,-0.034232,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__team,0.033902,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_traffic_cars,0.028625,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pace_delta_last3_s,-0.021972,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_compound_ti__hard,0.021577,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__driver_team_shrunk,0.013902,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_stop_delta_s,0.012626,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_residual_s_missing,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__none,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_stop_delta_s_missing,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_residual_s_missing,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__none,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_stop_delta_s_missing,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_prior_s_missing,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__none,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,rejoin_traffic_cars_missing,0.012445,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_compound_ti__medium,-0.006643,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_ahead_change_3l_missing,-0.001279,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_position,0.000838,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_compound_ti__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_compound_ti__wet,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_deg_slope_s_per_lap_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__global,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_expected_outlap_pace_source__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_position_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_stint_laps_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,attacker_tyre_age_laps_ti_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_compound_ti__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_compound_ti__wet,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_deg_slope_s_per_lap_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__global,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_expected_outlap_pace_source__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_stint_laps_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,defender_tyre_age_laps_ti_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,deg_slope_delta_s_per_lap_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,gap_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,laps_remaining_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pace_delta_last3_s_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,pit_loss_source__unknown,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+lr,lr_std_coefficient,tyre_age_delta_laps_ti_missing,0.000000,0.000000,coefficient on the standardised column (log-odds per 1 sd)
+gbt,permutation_pr_auc_drop,gap_s,0.258281,0.037741,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_tyre_age_laps_ti,0.141397,0.023441,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,defender_deg_slope_s_per_lap,0.094924,0.048658,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,gap_ahead_change_3l,0.032967,0.039277,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_deg_slope_s_per_lap,0.031090,0.027285,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,tyre_age_delta_laps_ti,0.021102,0.021748,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,gap_ahead_change_1l,0.012378,0.059151,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_compound_ti,0.003864,0.008180,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,pit_loss_prior_s,0.003674,0.009928,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_expected_outlap_pace_residual_s,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_expected_outlap_pace_source,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_expected_stop_delta_s,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_position,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,attacker_stint_laps,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,defender_compound_ti,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,defender_expected_outlap_pace_source,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,defender_expected_stop_delta_s,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,defender_stint_laps,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,defender_tyre_age_laps_ti,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,laps_remaining,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,pace_delta_last3_s,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,pit_loss_source,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,rejoin_nearest_ahead_s,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,rejoin_traffic_cars,0.000000,0.000000,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,defender_expected_outlap_pace_residual_s,-0.002133,0.003790,"validation PR-AUC 0.6736, 5 repeats"
+gbt,permutation_pr_auc_drop,deg_slope_delta_s_per_lap,-0.015542,0.019454,"validation PR-AUC 0.6736, 5 repeats"

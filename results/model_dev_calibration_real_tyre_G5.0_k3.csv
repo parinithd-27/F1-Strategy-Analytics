@@ -1,0 +1,4 @@
+# DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and to fit the calibrator. The 2025 test season was not loaded
+model,split,chosen_method,brier_raw,brier_isotonic,brier_platt,brier_calibrated,ece_raw,ece_calibrated,ece_5bin_raw,ece_5bin_calibrated,n_attempts,reason
+lr,validation,platt,0.213330,0.152803,0.179071,0.179071,0.207404,0.117722,0.179140,0.062135,64,platt: validation has 64 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples
+gbt,validation,platt,0.203392,0.163222,0.189096,0.189096,0.187040,0.045119,0.105238,0.031870,64,platt: validation has 64 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples

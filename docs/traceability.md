@@ -13,7 +13,7 @@
 | 9 | RDD API demonstrated | S6 | `etl/rdd_jobs.py` |
 | 10 | DataFrame API demonstrated | S6 | `etl/df_jobs.py` |
 | 11 | Spark SQL demonstrated | S6 | `etl/sql/*.sql`, `etl/sql_jobs.py` |
-| 12 | Feature tables: gap change, tyre age, out-lap pace, pit loss | S6, S7, S4C | `features/gaps.py`, `stints.py`, `outlap.py`, `pitloss.py`, `telemetry_agg.py`; real tyre age/compound and telemetry inputs: `etl/clean_tracinginsights.py` (`stints_tracinginsights`, `telemetry_lap_real`), `features/telemetry_agg_ti.py` |
+| 12 | Feature tables: gap change, tyre age, out-lap pace, pit loss | S6, S7, S4C | `features/gaps.py`, `stints.py`, `outlap.py`, `pitloss.py`, `telemetry_agg.py`; real tyre age/compound and telemetry inputs: `etl/clean_tracinginsights.py` (`stints_tracinginsights`, `telemetry_lap_real`), `features/telemetry_agg_ti.py`; model inputs: feature set `real_ti` (`model/features.py`, `model/dataset.with_ti_inputs`, development mode) |
 | 13 | Undercut detection | S8 | `features/undercut.py`, `docs/label_definition.md` |
 | 14 | MLlib undercut-success model | S9 | `model/train.py` |
 | 15 | Explain main factors | S9 | `model/explain.py` |
@@ -31,7 +31,7 @@
 | 27 | Experiment: runtime for 1/3/5 seasons | S10 | `experiments/scalability.py` |
 | 28 | Experiment: unpartitioned vs. partitioned, with and without caching | S10 | `experiments/partitioning.py`; large input: raw 2024 telemetry samples `raw/tracinginsights/telemetry/season=2024/round=/driver=/` (S4C) |
 | 29 | Experiment: model evaluation (chronological split) | S9 | `experiments/model_eval.py` |
-| 30 | Experiment: ablation with vs. without telemetry/out-lap features | S16 | `experiments/ablation.py`; telemetry input `clean/telemetry_lap_real` (all 2021-2025 races, S4C) |
+| 30 | Experiment: ablation with vs. without telemetry/out-lap features | S16 | `experiments/ablation.py`; telemetry input `clean/telemetry_lap_real` (all 2021-2025 races, S4C); development comparison `real` vs `real_tyre` vs `real_ti` (`make model-dev-tyre-full`, `make model-dev-ti-full`, `make model-dev-permutation-ti-full`; `model/permutation_dev.py`); leakage test `test_model_ti_inputs.py::test_ti_inputs_unchanged_when_future_laps_and_later_races_are_scaled_x100`. Development only (2024 validation, 2021-2024 LOSO); the S16 test-season ablation needs a dated model_spec version |
 | 31 | Experiment: replay one race, event-to-result delay | S12, S16 | `experiments/streaming_latency.py` |
 | 32 | Experiment: what-if comparisons from the same state | S15 | `experiments/whatif_consistency.py` |
 | 33 | Metric: Spark runtime and scaling trend | S10 | `results/scalability.*` |

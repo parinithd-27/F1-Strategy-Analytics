@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import numpy as np
@@ -83,8 +83,12 @@ def permutation_importance(
     *,
     repeats: int = PERMUTATION_REPEATS,
     seed: int = 42,
+    transform: Callable[[Any], Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Mean and sd of the validation PR-AUC drop per registry feature."""
+    """Mean and sd of the validation PR-AUC drop per registry feature.
+
+    ``transform`` (e.g. ``Calibrator.apply``) maps the raw scores before PR-AUC; the pipeline
+    calls this without it (raw scores), so its outputs are unchanged."""
     if repeats < 1:
         raise ValueError("repeats must be >= 1")
     base: Any = validation.select("label", LABEL, WEIGHT, *columns).toPandas()
@@ -125,6 +129,8 @@ def permutation_importance(
         .select("_perm", "label", vector_to_array(F.col("probability"))[1].alias("score"))
         .toPandas()
     )
+    if transform is not None:
+        scored["score"] = np.asarray(transform(scored["score"].to_numpy()), dtype=np.float64)
     by = {k: g for k, g in scored.groupby("_perm")}
     ref = M.pr_auc(by[-1]["label"], by[-1]["score"])
     drops: dict[str, list[float]] = defaultdict(list)

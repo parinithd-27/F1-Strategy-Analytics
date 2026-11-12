@@ -108,6 +108,20 @@ model-dev-full: ## DEVELOPMENT model run on the full features (2021-2024 only; 2
 	$(APP_EXEC) python experiments/model_eval.py --source full --no-test
 	$(APP_EXEC) python experiments/model_eval.py --source full --no-test --g 5.0 --k 3
 
+.PHONY: model-dev-ti-full
+model-dev-ti-full: ## DEVELOPMENT run of feature set real_ti (TracingInsights tyre + telemetry; 2021-2024 only)
+	$(APP_EXEC) python experiments/model_eval.py --source full --no-test --feature-set real_ti
+	$(APP_EXEC) python experiments/model_eval.py --source full --no-test --feature-set real_ti --g 5.0 --k 3
+
+.PHONY: model-dev-tyre-full model-dev-permutation-ti-full
+model-dev-tyre-full: ## DEVELOPMENT run of feature set real_tyre (real + TracingInsights compound/tyre age; 2021-2024 only)
+	$(APP_EXEC) python experiments/model_eval.py --source full --no-test --feature-set real_tyre
+	$(APP_EXEC) python experiments/model_eval.py --source full --no-test --feature-set real_tyre --g 5.0 --k 3
+
+model-dev-permutation-ti-full: ## DEVELOPMENT permutation importance of LR and GBT (calibrated) for real_ti; needs model-dev-ti-full
+	$(APP_EXEC) python experiments/model_dev_permutation.py --feature-set real_ti
+	$(APP_EXEC) python experiments/model_dev_permutation.py --feature-set real_ti --g 5.0 --k 3
+
 .PHONY: model-save-full
 # Recursively expanded: git runs only when the target is used (the app container has no git).
 GIT_SHA = $(shell git rev-parse HEAD 2>/dev/null)

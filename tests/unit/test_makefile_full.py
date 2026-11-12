@@ -15,6 +15,9 @@ TARGETS = (
     "report-full",
     "pipeline-full",
     "model-dev-full",
+    "model-dev-ti-full",
+    "model-dev-tyre-full",
+    "model-dev-permutation-ti-full",
     "model-save-full",
 )
 
@@ -72,6 +75,34 @@ def test_model_dev_full_runs_primary_then_sensitivity_without_the_test_season() 
     assert len(lines) == 2
     assert all("--source full --no-test" in x and "--allow-test-season" not in x for x in lines)
     assert all("DATA_LAKE_URI=hdfs://namenode:8020/f1" in x for x in lines)
+    assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")
+
+
+def test_model_dev_ti_full_is_development_only_real_ti() -> None:
+    lines = [x for x in _dry_run("model-dev-ti-full").splitlines() if "model_eval.py" in x]
+    assert len(lines) == 2
+    assert all(
+        "--source full --no-test --feature-set real_ti" in x and "--allow-test-season" not in x
+        for x in lines
+    )
+    assert all("DATA_LAKE_URI=hdfs://namenode:8020/f1" in x for x in lines)
+    assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")
+
+
+@pytest.mark.parametrize(
+    ("target", "script", "feature_set"),
+    [
+        ("model-dev-tyre-full", "model_eval.py --source full --no-test", "real_tyre"),
+        ("model-dev-permutation-ti-full", "model_dev_permutation.py", "real_ti"),
+    ],
+)
+def test_dev_feature_set_targets_run_both_settings_without_the_test_season(
+    target: str, script: str, feature_set: str
+) -> None:
+    lines = [x for x in _dry_run(target).splitlines() if script.split()[0] in x]
+    assert len(lines) == 2
+    assert all(script in x and f"--feature-set {feature_set}" in x for x in lines)
+    assert all("--allow-test-season" not in x for x in lines)
     assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")
 
 

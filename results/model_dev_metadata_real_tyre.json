@@ -1,0 +1,1307 @@
+{
+  "assembled_columns": [
+    "f_gap_s",
+    "f_gap_s_missing",
+    "f_gap_ahead_change_1l",
+    "f_gap_ahead_change_1l_missing",
+    "f_gap_ahead_change_3l",
+    "f_gap_ahead_change_3l_missing",
+    "f_attacker_position",
+    "f_attacker_position_missing",
+    "f_pace_delta_last3_s",
+    "f_pace_delta_last3_s_missing",
+    "f_attacker_deg_slope_s_per_lap",
+    "f_attacker_deg_slope_s_per_lap_missing",
+    "f_defender_deg_slope_s_per_lap",
+    "f_defender_deg_slope_s_per_lap_missing",
+    "f_deg_slope_delta_s_per_lap",
+    "f_deg_slope_delta_s_per_lap_missing",
+    "f_laps_remaining",
+    "f_laps_remaining_missing",
+    "f_pit_loss_prior_s",
+    "f_pit_loss_prior_s_missing",
+    "f_pit_loss_source__circuit_prior",
+    "f_pit_loss_source__global_prior",
+    "f_pit_loss_source__none",
+    "f_pit_loss_source__unknown",
+    "f_rejoin_traffic_cars",
+    "f_rejoin_traffic_cars_missing",
+    "f_rejoin_nearest_ahead_s",
+    "f_rejoin_nearest_ahead_s_missing",
+    "f_attacker_expected_outlap_pace_residual_s",
+    "f_attacker_expected_outlap_pace_residual_s_missing",
+    "f_attacker_expected_outlap_pace_source__driver_team",
+    "f_attacker_expected_outlap_pace_source__driver_team_shrunk",
+    "f_attacker_expected_outlap_pace_source__team",
+    "f_attacker_expected_outlap_pace_source__global",
+    "f_attacker_expected_outlap_pace_source__none",
+    "f_attacker_expected_outlap_pace_source__unknown",
+    "f_defender_expected_outlap_pace_residual_s",
+    "f_defender_expected_outlap_pace_residual_s_missing",
+    "f_defender_expected_outlap_pace_source__driver_team",
+    "f_defender_expected_outlap_pace_source__driver_team_shrunk",
+    "f_defender_expected_outlap_pace_source__team",
+    "f_defender_expected_outlap_pace_source__global",
+    "f_defender_expected_outlap_pace_source__none",
+    "f_defender_expected_outlap_pace_source__unknown",
+    "f_attacker_expected_stop_delta_s",
+    "f_attacker_expected_stop_delta_s_missing",
+    "f_defender_expected_stop_delta_s",
+    "f_defender_expected_stop_delta_s_missing",
+    "f_attacker_stint_laps",
+    "f_attacker_stint_laps_missing",
+    "f_defender_stint_laps",
+    "f_defender_stint_laps_missing",
+    "f_attacker_compound_ti__soft",
+    "f_attacker_compound_ti__medium",
+    "f_attacker_compound_ti__hard",
+    "f_attacker_compound_ti__intermediate",
+    "f_attacker_compound_ti__wet",
+    "f_attacker_compound_ti__unknown",
+    "f_defender_compound_ti__soft",
+    "f_defender_compound_ti__medium",
+    "f_defender_compound_ti__hard",
+    "f_defender_compound_ti__intermediate",
+    "f_defender_compound_ti__wet",
+    "f_defender_compound_ti__unknown",
+    "f_attacker_tyre_age_laps_ti",
+    "f_attacker_tyre_age_laps_ti_missing",
+    "f_defender_tyre_age_laps_ti",
+    "f_defender_tyre_age_laps_ti_missing",
+    "f_tyre_age_delta_laps_ti",
+    "f_tyre_age_delta_laps_ti_missing"
+  ],
+  "bootstrap_n": 1000,
+  "calibrators": {
+    "gbt": {
+      "method": "platt",
+      "params": {
+        "a": 0.514742315404049,
+        "b": -0.36560296936653186
+      },
+      "reason": "platt: validation has 49 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples"
+    },
+    "lr": {
+      "method": "platt",
+      "params": {
+        "a": 0.8711451934959499,
+        "b": -0.554316170255349
+      },
+      "reason": "platt: validation has 49 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples"
+    }
+  },
+  "class_balance": [
+    {
+      "n_labelled": 32,
+      "n_negative": 24,
+      "n_positive": 8,
+      "n_races": 16,
+      "positive_rate": 0.25,
+      "season": 2021,
+      "split": "train"
+    },
+    {
+      "n_labelled": 32,
+      "n_negative": 21,
+      "n_positive": 11,
+      "n_races": 16,
+      "positive_rate": 0.34375,
+      "season": 2022,
+      "split": "train"
+    },
+    {
+      "n_labelled": 44,
+      "n_negative": 31,
+      "n_positive": 13,
+      "n_races": 15,
+      "positive_rate": 0.29545454545454547,
+      "season": 2023,
+      "split": "train"
+    },
+    {
+      "n_labelled": 49,
+      "n_negative": 33,
+      "n_positive": 16,
+      "n_races": 18,
+      "positive_rate": 0.32653061224489793,
+      "season": 2024,
+      "split": "validation"
+    }
+  ],
+  "class_weights": {
+    "0": 0.7105263157894737,
+    "1": 1.6875
+  },
+  "counts": {
+    "train": {
+      "n": 108,
+      "positive": 32,
+      "races": 47
+    },
+    "validation": {
+      "n": 49,
+      "positive": 16,
+      "races": 18
+    }
+  },
+  "coverage_policy": "fill_0.0_plus_missing; categorical unknown level = missing; partial telemetry keeps values plus telemetry_partial_ti; no race or attempt dropped, excluded or down-weighted for coverage",
+  "decision_threshold": 0.5,
+  "feature_set": "real_tyre",
+  "features": [
+    "gap_s",
+    "gap_ahead_change_1l",
+    "gap_ahead_change_3l",
+    "attacker_position",
+    "pace_delta_last3_s",
+    "attacker_deg_slope_s_per_lap",
+    "defender_deg_slope_s_per_lap",
+    "deg_slope_delta_s_per_lap",
+    "laps_remaining",
+    "pit_loss_prior_s",
+    "pit_loss_source",
+    "rejoin_traffic_cars",
+    "rejoin_nearest_ahead_s",
+    "attacker_expected_outlap_pace_residual_s",
+    "attacker_expected_outlap_pace_source",
+    "defender_expected_outlap_pace_residual_s",
+    "defender_expected_outlap_pace_source",
+    "attacker_expected_stop_delta_s",
+    "defender_expected_stop_delta_s",
+    "attacker_stint_laps",
+    "defender_stint_laps",
+    "attacker_compound_ti",
+    "defender_compound_ti",
+    "attacker_tyre_age_laps_ti",
+    "defender_tyre_age_laps_ti",
+    "tyre_age_delta_laps_ti"
+  ],
+  "g": 3.5,
+  "k": 2,
+  "missing_rates": [
+    {
+      "feature": "gap_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "gap_ahead_change_1l",
+      "missing_rate": 0.0625,
+      "n_attempts": 32,
+      "n_missing": 2,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "gap_ahead_change_3l",
+      "missing_rate": 0.1875,
+      "n_attempts": 32,
+      "n_missing": 6,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_position",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "pace_delta_last3_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "defender_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "deg_slope_delta_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "laps_remaining",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "pit_loss_prior_s",
+      "missing_rate": 0.0625,
+      "n_attempts": 32,
+      "n_missing": 2,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "pit_loss_source",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "rejoin_traffic_cars",
+      "missing_rate": 0.0625,
+      "n_attempts": 32,
+      "n_missing": 2,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "rejoin_nearest_ahead_s",
+      "missing_rate": 0.5938,
+      "n_attempts": 32,
+      "n_missing": 19,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0625,
+      "n_attempts": 32,
+      "n_missing": 2,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "defender_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0625,
+      "n_attempts": 32,
+      "n_missing": 2,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "defender_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_expected_stop_delta_s",
+      "missing_rate": 0.0625,
+      "n_attempts": 32,
+      "n_missing": 2,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "defender_expected_stop_delta_s",
+      "missing_rate": 0.0625,
+      "n_attempts": 32,
+      "n_missing": 2,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2021
+    },
+    {
+      "feature": "defender_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2021
+    },
+    {
+      "feature": "defender_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2021
+    },
+    {
+      "feature": "attacker_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2021
+    },
+    {
+      "feature": "defender_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2021
+    },
+    {
+      "feature": "tyre_age_delta_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2021
+    },
+    {
+      "feature": "gap_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "gap_ahead_change_1l",
+      "missing_rate": 0.125,
+      "n_attempts": 32,
+      "n_missing": 4,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "gap_ahead_change_3l",
+      "missing_rate": 0.25,
+      "n_attempts": 32,
+      "n_missing": 8,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_position",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "pace_delta_last3_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "defender_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "deg_slope_delta_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "laps_remaining",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "pit_loss_prior_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "pit_loss_source",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "rejoin_traffic_cars",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "rejoin_nearest_ahead_s",
+      "missing_rate": 0.8125,
+      "n_attempts": 32,
+      "n_missing": 26,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "defender_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "defender_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_expected_stop_delta_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "defender_expected_stop_delta_s",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2022
+    },
+    {
+      "feature": "defender_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2022
+    },
+    {
+      "feature": "defender_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2022
+    },
+    {
+      "feature": "attacker_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2022
+    },
+    {
+      "feature": "defender_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2022
+    },
+    {
+      "feature": "tyre_age_delta_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 32,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2022
+    },
+    {
+      "feature": "gap_s",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "gap_ahead_change_1l",
+      "missing_rate": 0.1364,
+      "n_attempts": 44,
+      "n_missing": 6,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "gap_ahead_change_3l",
+      "missing_rate": 0.3636,
+      "n_attempts": 44,
+      "n_missing": 16,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_position",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "pace_delta_last3_s",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "defender_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "deg_slope_delta_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "laps_remaining",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "pit_loss_prior_s",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "pit_loss_source",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "rejoin_traffic_cars",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "rejoin_nearest_ahead_s",
+      "missing_rate": 0.6818,
+      "n_attempts": 44,
+      "n_missing": 30,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "defender_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "defender_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_expected_stop_delta_s",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "defender_expected_stop_delta_s",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2023
+    },
+    {
+      "feature": "defender_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2023
+    },
+    {
+      "feature": "defender_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2023
+    },
+    {
+      "feature": "attacker_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2023
+    },
+    {
+      "feature": "defender_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2023
+    },
+    {
+      "feature": "tyre_age_delta_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 44,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2023
+    },
+    {
+      "feature": "gap_s",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "gap_ahead_change_1l",
+      "missing_rate": 0.102,
+      "n_attempts": 49,
+      "n_missing": 5,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "gap_ahead_change_3l",
+      "missing_rate": 0.1633,
+      "n_attempts": 49,
+      "n_missing": 8,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_position",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "pace_delta_last3_s",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "defender_deg_slope_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "deg_slope_delta_s_per_lap",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "laps_remaining",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "pit_loss_prior_s",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "pit_loss_source",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "rejoin_traffic_cars",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "rejoin_nearest_ahead_s",
+      "missing_rate": 0.5918,
+      "n_attempts": 49,
+      "n_missing": 29,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "defender_expected_outlap_pace_residual_s",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "defender_expected_outlap_pace_source",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_expected_stop_delta_s",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "defender_expected_stop_delta_s",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "jolpica",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2024
+    },
+    {
+      "feature": "defender_stint_laps",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "stint_boundary",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2024
+    },
+    {
+      "feature": "defender_compound_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2024
+    },
+    {
+      "feature": "attacker_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2024
+    },
+    {
+      "feature": "defender_tyre_age_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2024
+    },
+    {
+      "feature": "tyre_age_delta_laps_ti",
+      "missing_rate": 0.0,
+      "n_attempts": 49,
+      "n_missing": 0,
+      "n_telemetry_partial": "",
+      "provenance": "tracinginsights",
+      "season": 2024
+    }
+  ],
+  "models": {
+    "gbt": {
+      "grid_scores": [
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 20,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.6736454875256602
+        },
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 20,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.6243000004488976
+        },
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 50,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.57814079146316
+        },
+        {
+          "params": {
+            "maxDepth": 2,
+            "maxIter": 50,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5591143885184583
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 20,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.504559510080029
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 20,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5100453376653834
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 50,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.5365272196935221
+        },
+        {
+          "params": {
+            "maxDepth": 3,
+            "maxIter": 50,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5130909036629717
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 20,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.5642251785140356
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 20,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5846444119247911
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 50,
+            "stepSize": 0.05
+          },
+          "validation_pr_auc": 0.5791903833459684
+        },
+        {
+          "params": {
+            "maxDepth": 5,
+            "maxIter": 50,
+            "stepSize": 0.1
+          },
+          "validation_pr_auc": 0.5597334432638226
+        }
+      ],
+      "params": {
+        "maxDepth": 2,
+        "maxIter": 20,
+        "stepSize": 0.05
+      },
+      "tuning_status": "tuned on validation PR-AUC",
+      "validation_pr_auc": 0.6736454875256602
+    },
+    "lr": {
+      "grid_scores": [
+        {
+          "params": {
+            "elasticNetParam": 0.0,
+            "regParam": 0.0
+          },
+          "validation_pr_auc": 0.41152299072740645
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.5,
+            "regParam": 0.0
+          },
+          "validation_pr_auc": 0.41152299072740645
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.0,
+            "regParam": 0.01
+          },
+          "validation_pr_auc": 0.5822822595743031
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.5,
+            "regParam": 0.01
+          },
+          "validation_pr_auc": 0.5865841419491933
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.0,
+            "regParam": 0.1
+          },
+          "validation_pr_auc": 0.6498289383343501
+        },
+        {
+          "params": {
+            "elasticNetParam": 0.5,
+            "regParam": 0.1
+          },
+          "validation_pr_auc": 0.5960518773698121
+        }
+      ],
+      "params": {
+        "elasticNetParam": 0.0,
+        "regParam": 0.1
+      },
+      "tuning_status": "tuned on validation PR-AUC",
+      "validation_pr_auc": 0.6498289383343501
+    }
+  },
+  "provenances": [
+    "jolpica",
+    "stint_boundary",
+    "tracinginsights"
+  ],
+  "seed": 42,
+  "selected_model": "gbt",
+  "smoke_test": false,
+  "source": "full",
+  "split": {
+    "test": [],
+    "train": [
+      2021,
+      2022,
+      2023
+    ],
+    "validation": [
+      2024
+    ]
+  },
+  "stamp": "DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and to fit the calibrator. The 2025 test season was not loaded",
+  "test_season_evaluated": false,
+  "versions": {
+    "git_commit": null,
+    "numpy": "2.5.4",
+    "pyspark": "4.2.1",
+    "python": "3.12.3"
+  }
+}
