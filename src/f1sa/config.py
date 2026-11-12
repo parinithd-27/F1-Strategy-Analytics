@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     kafka_topic_events: str = "f1.race.events"
     redis_url: str = "redis://localhost:6379/0"
     redis_ttl_after_session_s: int = Field(default=3600, gt=0)
+    redis_safety_ttl_s: int = Field(default=21600, gt=0)
+    """TTL set on every race-key write (6 h, longer than any race including red flags), so keys of a
+    session that never sends ``session_end`` still expire. ``session_end`` then sets the shorter
+    ``redis_ttl_after_session_s``."""
     jolpica_base_url: str = "https://api.jolpi.ca/ergast/f1"
     jolpica_max_per_hour: int = Field(default=450, ge=1, le=JOLPICA_HARD_LIMIT_PER_HOUR)
     jolpica_cache_dir: Path = Path("data/cache/jolpica")

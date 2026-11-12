@@ -600,6 +600,43 @@
   - Tests: the spec marker line equals `TEST_FEATURE_SETS`; all 6 test runs write disjoint files and `real`'s names
     are unchanged; the overwrite guard for `real_tyre`/`real_ti` (each file blocks only its own run, and `real`'s files
     and the other set never block it); Makefile order, `FEATURE_SET`, refusals. No 2025 read, no training, no test run.
+- Step 11 (W5): Redis serving layer (#21–#24) and the Redis latency benchmark (#37)
+  - `serving/keys.py`: `driver_key`, `order_key`, `events_channel` and `race_pattern`, exactly the CLAUDE.md
+    names. Validation: season 1950–2100, round 1–30, driverId `[a-z0-9_]+`, ints only, else `InvalidKeyError`.
+    Also defines `DRIVER_FIELDS` (the 9 fields) and `EVENT_TYPES`.
+  - `serving/redis_store.py`, sync `RaceStore` and async `AsyncRaceStore` (`redis.asyncio`), built on the same
+    command code:
+    - `upsert_driver_state` writes all 9 fields as strings, with `""` for null (user choice) and `updated_at`
+      ISO-8601 UTC with ms;
+    - `set_order` is a ZADD with score = position;
+    - `publish_event` sends JSON with `type`, `event_ts` and `published_at`;
+    - `expire_race` SCANs `race:{s}:{r}:*` and EXPIREs every key, the order included; `end_session` publishes
+      `session_end` and then expires;
+    - `write_batch` sends a micro-batch through one `pipeline(transaction=False)` with one `execute()`;
+    - `DriverState` validation rejects NaN, inf, negatives, bad compounds and duplicate positions before anything
+      is sent;
+    - the URL comes only from `Settings.redis_url`.
+  - Settings: new `REDIS_SAFETY_TTL_S` (default 21600 s), set on every key write. `.env.example` is updated.
+  - `serving/latency_bench.py` + `experiments/redis_latency.py`. 20 drivers at 1, 10 and 60 micro-batches/s for 60 s
+    each (user choice: rate = micro-batches/s). Each tick times one pipelined write, 20 HGETALL and 1 ZRANGE.
+    The benchmark uses its own namespace `race:2100:30:*`, refuses if that namespace is occupied, and cleans up
+    afterwards.
+    - `redis-cli --latency -i 1` exits after one 1 s summary when there is no TTY (checked: 1.2 s, 97 samples).
+      It is therefore run 30 times back to back in one `docker compose exec` and the results are combined: min,
+      max, sample-weighted mean, total samples.
+  - Run (core and full profile containers up), `results/redis_latency.csv`, p50 / p95 / p99 in ms:
+
+    | rate | write (20 drivers, 1 pipeline) | HGETALL | ZRANGE | achieved, late ticks |
+    |---|---|---|---|---|
+    | 1/s | 1.31 / 2.04 / 2.24 | 0.25 / 0.49 / 0.63 | 0.28 / 0.52 / 0.68 | 1.00/s, 0 |
+    | 10/s | 2.06 / 3.48 / 25.75 | 0.41 / 0.67 / 1.42 | 0.50 / 0.82 / 4.10 | 10.00/s, 8 |
+    | 60/s | 2.10 / 9.20 / 19.77 | 0.44 / 1.09 / 8.17 | 0.54 / 1.70 / 8.77 | 51.09/s, 2876 |
+
+    In-container PING (redis-cli, 30 × 1 s): min 0.053, mean 0.282, max 10.02 ms, 2914 samples. The environment
+    fingerprint is in `results/README.md`.
+  - Tests: `test_keys.py`, `test_redis_store.py` (sync + async on fakeredis), `test_latency_bench.py`,
+    `test_config.py` (new setting), and `tests/integration/test_redis_store.py` (real Redis 8.10: batch, pubsub,
+    TTL, async).
 ## Next
 - User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
   `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
@@ -616,9 +653,28 @@
 - Step 10: scalability and partitioning experiments.
 - After committing Step 9c, optionally run `make model-save-full FORCE=1` so that `git_dirty` is false in the
   deployment metadata.
+- Step 12: write through `serving.redis_store.RaceStore.write_batch` once per micro-batch, and call `end_session`
+  on `session_end`. Stop writing a race after its `session_end` (a later write would refresh the 6 h safety TTL).
+- S16: rerun `uv run python experiments/redis_latency.py` with only the core profile up (`make down` and then
+  `make up`) and compare it with the Step 11 run (see Known issues).
 - Step 12: load `lr/scorer.json` with `LRScorer.load` in the stream job; compute the inputs exactly as
   `features/undercut.py` does at L-1.
 ## Known issues
+- Redis latency varies from run to run on this WSL2 / Docker Desktop host.
+  - An earlier run in the same session met every schedule: 60.00/s with 0 late ticks; write p99 3.0 ms at 60/s,
+    HGETALL p99 0.84 ms.
+  - That run was discarded only because its redis-cli step covered 1 s instead of 30. Its redis-py numbers were
+    valid.
+  - The recorded run fell behind at 60/s: 51.09/s achieved, 2876 late ticks, write p99 19.8 ms. It also had
+    p99 outliers at 10/s.
+  - The full profile (HDFS and Spark) was running during both runs. Report the S16 number from a core-only
+    run, with the variance stated.
+- The benchmark is a single-client, sequential loop: write, then reads, in one thread. At 60/s each tick spends
+  about 5.5 ms (first run) to 11.4 ms (recorded run) at the medians on its 22 round trips, out of a 16.7 ms
+  period. Latency spikes therefore make ticks late, and the achieved rate measures the client loop as well as
+  Redis.
+- `redis-cli --latency` measures inside the container, so it is a floor with no host or Docker network hop.
+  The redis-py numbers include the Docker Desktop port forward.
 - The v2 selection rule says "calibrated LR", but the LOSO rows it was applied to are raw LR at the first grid
   point (no per-fold calibrator). PR-AUC is unchanged by a strictly increasing calibration map. Disclosed in
   `docs/model_spec_v2.md` §2.

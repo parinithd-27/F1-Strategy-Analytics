@@ -17,6 +17,7 @@ def test_defaults() -> None:
     assert s.kafka_topic_events == "f1.race.events"
     assert s.redis_url == "redis://localhost:6379/0"
     assert s.redis_ttl_after_session_s == 3600
+    assert s.redis_safety_ttl_s == 21600
     assert s.jolpica_base_url == "https://api.jolpi.ca/ergast/f1"
     assert s.jolpica_max_per_hour == 450
     assert s.fastf1_cache_dir == Path("data/cache/fastf1")
@@ -74,6 +75,7 @@ def test_env_var_beats_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         ("DATA_LAKE_URI", "file://"),
         ("REDIS_TTL_AFTER_SESSION_S", "0"),
         ("REDIS_TTL_AFTER_SESSION_S", "-5"),
+        ("REDIS_SAFETY_TTL_S", "0"),
         ("JOLPICA_MAX_PER_HOUR", "0"),
         ("JOLPICA_MAX_PER_HOUR", str(JOLPICA_HARD_LIMIT_PER_HOUR + 1)),
         ("REDIS_URL", "http://localhost:6379"),

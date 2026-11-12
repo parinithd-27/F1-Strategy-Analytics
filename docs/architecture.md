@@ -482,3 +482,34 @@ undercut_attempts + stints + telemetry_lap_features --dataset.load_attempts--> o
   `lr/scorer.json` without Spark. The container has no git, so the Makefile passes `F1SA_GIT_SHA` /
   `F1SA_GIT_DIRTY`; without a sha the run refuses.
 
+
+## Redis serving (`serving/keys.py`, `serving/redis_store.py`, Step 11)
+The key contract in CLAUDE.md is the only key layout. `keys.py` builds the names and checks every part (season
+1950-2100, round 1-30, driverId `[a-z0-9_]+`, ints only), so a malformed key never reaches Redis.
+
+- **Driver hash** `race:{s}:{r}:driver:{driverId}`. All 9 fields are written on every update, and every value
+  is a string: ints as decimals, floats as `repr`, `undercut_flag` as `"0"`/`"1"`, and `updated_at` as ISO-8601 UTC
+  with milliseconds (`2024-05-05T20:14:03.125Z`, set by the store). A missing value is `""` (for example,
+  the leader's `gap_ahead_s`, or `undercut_prob` before the car is scored). `tyre_compound` is one of
+  SOFT/MEDIUM/HARD/INTERMEDIATE/WET/UNKNOWN, never `""`. `decode_state` is the exact inverse.
+- **Order** `race:{s}:{r}:order`: ZADD, member = driverId, score = position (unique ints ≥ 1). Drivers stay in
+  the set for the whole session (a DNF keeps its classified position), so the upsert is the complete update.
+- **Events** on the channel `race:{s}:{r}:events`: JSON with `type` (lap, pit_in, pit_out, undercut_alert,
+  session_end), `season`, `round`, `event_ts` (the caller's event time or null), `published_at` (the store's
+  time) and `payload`. NaN or inf in the payload is refused.
+- **One pipeline per micro-batch.** `RaceStore.write_batch` / `AsyncRaceStore.write_batch` queue every HSET,
+  ZADD, EXPIRE and PUBLISH of the batch on one `pipeline(transaction=False)` and call `execute()` once. All
+  validation happens while queueing, so an invalid batch sends nothing.
+- **TTL.** Every key write is followed by `EXPIRE REDIS_SAFETY_TTL_S` (6 h by default), so a race without
+  `session_end` still expires. `end_session` publishes `session_end`, then `expire_race` SCANs
+  `race:{s}:{r}:*` (COUNT 500, never KEYS) and sets `EXPIRE REDIS_TTL_AFTER_SESSION_S` on every key, the sorted
+  set included. A write after `session_end` would refresh the safety TTL, so the stream job must stop writing a
+  race after its `session_end` (S12). Channels are not keys and have no TTL.
+- The sync store serves the Spark `foreachBatch` sink (S12) and the benchmark. The async store (`redis.asyncio`)
+  serves FastAPI (S13). Both queue the same commands through the same code and differ only in `await
+  execute()`. The URL comes only from `Settings.redis_url`.
+- **Latency benchmark** (`serving/latency_bench.py`, `experiments/redis_latency.py`, #37): 20 drivers at 1, 10 and
+  60 micro-batches/s for 60 s each. Each run times the pipelined batch write, 20 HGETALL and 1 ZRANGE. The
+  in-container floor comes from `redis-cli --latency -i 1` repeated 30 times, because without a TTY it exits after
+  one 1 s summary. Results go to `results/redis_latency.csv`, and the environment fingerprint is appended to
+  `results/README.md`.

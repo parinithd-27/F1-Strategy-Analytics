@@ -22,10 +22,10 @@
 | 18 | Probability calibration | S9 | `model/calibrate.py` |
 | 19 | Kafka carries race events | S12 | `streaming/producer.py`, topic `f1.race.events` |
 | 20 | Structured Streaming replay and opportunity detection | S12 | `streaming/stream_job.py`, `streaming/detector.py` |
-| 21 | Redis hash `race:{season}:{round}:driver:{driverId}` with 9 exact fields | S11 | `serving/keys.py`, `serving/redis_store.py` |
-| 22 | Sorted set `race:{season}:{round}:order`, score = position | S11 | `serving/redis_store.py` |
-| 23 | Pub/Sub `race:{season}:{round}:events` (lap, pit, undercut alert) | S11, S12 | `streaming/redis_sink.py` |
-| 24 | Namespaced keys with TTL after session ends | S11 | `serving/redis_store.py` (`expire_race`) |
+| 21 | Redis hash `race:{season}:{round}:driver:{driverId}` with 9 exact fields | S11 | `serving/keys.py` (`driver_key`, `DRIVER_FIELDS`), `serving/redis_store.py` (`upsert_driver_state`, `encode_state`/`decode_state`, sync `RaceStore` + async `AsyncRaceStore`); tests `tests/unit/test_keys.py`, `tests/unit/test_redis_store.py`, `tests/integration/test_redis_store.py` |
+| 22 | Sorted set `race:{season}:{round}:order`, score = position | S11 | `serving/keys.order_key`, `serving/redis_store.py` (`set_order`, `get_order`) |
+| 23 | Pub/Sub `race:{season}:{round}:events` (lap, pit, undercut alert) | S11, S12 | `serving/keys.events_channel`, `serving/redis_store.publish_event` (JSON; types lap, pit_in, pit_out, undercut_alert, session_end); S12 caller `streaming/redis_sink.py` |
+| 24 | Namespaced keys with TTL after session ends | S11 | `serving/redis_store.py` (`expire_race`: SCAN `race:{s}:{r}:*` + EXPIRE `REDIS_TTL_AFTER_SESSION_S`; `end_session`; safety TTL `REDIS_SAFETY_TTL_S` on every write, `config.py`) |
 | 25 | Redis-backed dashboard: state, gaps, tyres, events, predictions, comparison | S13, S14, S15 | `api/`, `web/` |
 | 26 | What-if: pit now / pit next lap / stay out | S15 | `sim/race_sim.py`, `sim/whatif.py`, `api/routes/whatif.py` |
 | 27 | Experiment: runtime for 1/3/5 seasons | S10 | `experiments/scalability.py` |
@@ -38,7 +38,7 @@
 | 34 | Metric: speed-up from partitioning and caching vs. baseline | S10 | `results/partitioning.*` |
 | 35 | Metric: streaming latency | S16 | `results/streaming_latency.*` |
 | 36 | Metric: event throughput | S16 | `results/streaming_latency.*` |
-| 37 | Metric: Redis read/write latency at streaming rate | S11, S16 | `experiments/redis_latency.py` |
+| 37 | Metric: Redis read/write latency at streaming rate | S11, S16 | `experiments/redis_latency.py`, `serving/latency_bench.py`; `results/redis_latency.csv`, fingerprint in `results/README.md` |
 | 38 | Metric: resource usage | S10, S16 | `experiments/_resources.py` |
 | 39 | Metric: calibration | S9 | `results/calibration.*` |
 | 40 | Metric: useful and consistent what-if comparisons | S15 | `results/whatif_consistency.*` |
