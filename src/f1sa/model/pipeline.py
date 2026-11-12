@@ -8,9 +8,11 @@ Sources:
 * ``rehearsal``: the GENERATED table (``model.rehearsal``) for 2021-2025. The whole pipeline runs,
   including the test season of the generated data; outputs are stamped ``REHEARSAL`` and suffixed
   ``_rehearsal``. It never reads the lake.
-* ``full``: every race in the lake. Needs ``allow_test_season`` (the 2025 season is opened once);
-  synthetic-valued features are refused (``train.check_feature_policy``) and only the ``real``
-  feature set is allowed.
+* ``full``: every race in the lake. Needs ``allow_test_season`` (the 2025 season is opened once
+  per feature set and setting); synthetic-valued features are refused
+  (``train.check_feature_policy``) and only the feature sets of ``docs/model_spec_v2.md``
+  (``features.TEST_FEATURE_SETS``: ``real`` primary, ``real_tyre`` and ``real_ti`` ablation) are
+  allowed.
 * ``full`` with ``no_test`` (``--no-test``, DEVELOPMENT): reads only the 2021-2024 feature
   partitions (``dataset.load_attempts_for_seasons``; the 2025 directories are never listed or
   opened), trains on 2021-2023, selects and calibrates on 2024, and reports validation metrics
@@ -25,10 +27,11 @@ Sources:
 
 Outputs (``{results_dir}/<name>{suffix}.<ext>``): ``model_eval``, ``calibration``,
 ``feature_importance`` (``.csv`` / ``.png``), ``reliability.png`` and ``confusion_matrix.png``. The
-suffix is ``_sample`` / ``_rehearsal`` for those sources. For the full test run it is the setting,
-``_G3.5_k2`` (primary) or ``_G5.0_k3`` (sensitivity), so the two settings never share a file, and
-a full test run refuses to start when any of its result files or its saved metadata already exists
-(the first complete run is the reported one). Models
+suffix is ``_sample`` / ``_rehearsal`` for those sources. For the full test run it is the feature
+set (none for ``real``, ``_real_tyre``, ``_real_ti``) plus the setting, ``_G3.5_k2`` (primary) or
+``_G5.0_k3`` (sensitivity), so no two runs share a file, and a full test run refuses to start when
+any of its result files or its saved metadata already exists (the first complete run is the
+reported one). Models
 and ``metadata.json`` go to ``{models_dir}/undercut/{source}_{feature_set}_G{g}_k{k}/``.
 """
 
@@ -180,11 +183,12 @@ class RunConfig:
                 "--source full evaluates the 2025 test season once; pass --allow-test-season only "
                 "after the label definition is signed off, or --no-test for a development run"
             )
-        dev_only = self.feature_set in MF.DEV_ONLY_FEATURE_SETS
-        if self.source == "full" and self.feature_set != "real" and not (dev_only and self.no_test):
+        if self.source == "full" and not self._full_feature_set_allowed():
             raise RunError(
-                "--source full uses the 'real' feature set only (docs/model_spec.md); the "
-                f"development-only sets {sorted(MF.DEV_ONLY_FEATURE_SETS)} need --no-test"
+                "--source full uses the 'real' feature set, or with --no-test the development sets "
+                f"{sorted(MF.DEV_ONLY_FEATURE_SETS)}; --allow-test-season accepts only "
+                f"{list(MF.TEST_FEATURE_SETS)} (docs/model_spec.md, docs/model_spec_v2.md); "
+                f"got {self.feature_set!r}"
             )
         if self.source == "rehearsal" and MF.uses_tracinginsights(self.feature_set):
             raise RunError(
@@ -193,6 +197,14 @@ class RunConfig:
             )
         if self.n_boot < 1:
             raise RunError("n_boot must be >= 1")
+
+    def _full_feature_set_allowed(self) -> bool:
+        """Test season: only the sets of ``docs/model_spec_v2.md``. Development: ``real`` and the
+        development sets."""
+        fs = self.feature_set
+        if self.allow_test_season:
+            return fs in MF.TEST_FEATURE_SETS
+        return fs == "real" or (self.no_test and fs in MF.DEV_ONLY_FEATURE_SETS)
 
     @property
     def stamp(self) -> str:

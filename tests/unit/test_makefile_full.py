@@ -106,33 +106,59 @@ def test_dev_feature_set_targets_run_both_settings_without_the_test_season(
     assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")
 
 
-def test_model_test_full_needs_confirm_and_runs_both_settings_once() -> None:
-    refused = subprocess.run(
-        ["make", "--no-print-directory", "-C", str(REPO_ROOT), "model-test-full"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
+def _test_full(*args: str, dry: bool = True) -> subprocess.CompletedProcess[str]:
+    cmd = ["make", *(["-n"] if dry else []), "--no-print-directory", "-C", str(REPO_ROOT)]
+    return subprocess.run(
+        [*cmd, "model-test-full", *args], capture_output=True, text=True, timeout=60, check=False
     )
-    assert refused.returncode != 0 and "Refusing" in refused.stderr
-    out = subprocess.run(
-        [
-            "make",
-            "-n",
-            "--no-print-directory",
-            "-C",
-            str(REPO_ROOT),
-            "model-test-full",
-            "CONFIRM=yes",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=True,
-    ).stdout
-    lines = [x for x in out.splitlines() if "model_eval.py" in x]
-    assert len(lines) == 2 and all("--source full --allow-test-season" in x for x in lines)
-    assert "--g" not in lines[0] and lines[1].endswith("--g 5.0 --k 3")
+
+
+def _eval_lines(out: str) -> list[str]:
+    return [x.split(" app ", 1)[1] for x in out.splitlines() if "model_eval.py" in x]
+
+
+REAL_V1 = [
+    "python experiments/model_eval.py --source full --allow-test-season",
+    "python experiments/model_eval.py --source full --allow-test-season --g 5.0 --k 3",
+]
+
+
+def _set_lines(fs: str) -> list[str]:
+    base = f"python experiments/model_eval.py --source full --allow-test-season --feature-set {fs}"
+    return [base, f"{base} --g 5.0 --k 3"]
+
+
+def test_model_test_full_needs_confirm() -> None:
+    for args in ((), ("CONFIRM=no",), ("FEATURE_SET=real",)):
+        refused = _test_full(*args, dry=False)
+        assert refused.returncode != 0 and "Refusing" in refused.stderr
+        assert "model_spec_v2.md" in refused.stderr
+
+
+def test_model_test_full_runs_the_three_spec_v2_sets_at_both_settings_once() -> None:
+    out = _test_full("CONFIRM=yes")
+    assert out.returncode == 0
+    lines = _eval_lines(out.stdout)
+    assert lines == REAL_V1 + _set_lines("real_tyre") + _set_lines("real_ti")
+    assert all(
+        "DATA_LAKE_URI=hdfs://namenode:8020/f1" in x
+        for x in out.stdout.splitlines()
+        if "model_eval.py" in x
+    )
+
+
+@pytest.mark.parametrize("fs", ["real", "real_tyre", "real_ti"])
+def test_model_test_full_feature_set_runs_that_set_only(fs: str) -> None:
+    out = _test_full("CONFIRM=yes", f"FEATURE_SET={fs}")
+    assert out.returncode == 0
+    assert _eval_lines(out.stdout) == (REAL_V1 if fs == "real" else _set_lines(fs))
+
+
+@pytest.mark.parametrize("fs", ["with_synthetic", "bogus", "real real_ti"])
+def test_model_test_full_refuses_feature_sets_outside_spec_v2(fs: str) -> None:
+    refused = _test_full("CONFIRM=yes", f"FEATURE_SET={fs}", dry=False)
+    assert refused.returncode != 0 and "Refusing: FEATURE_SET" in refused.stderr
+    assert "model_eval.py" not in refused.stdout
 
 
 def test_model_save_full_runs_the_deployment_entry_point_without_the_test_season() -> None:

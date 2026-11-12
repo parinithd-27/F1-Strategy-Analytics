@@ -131,10 +131,21 @@ model-save-full: ## Deployment model (frozen spec, G=3.5 k=2, 2025 never read) i
 	$(COMPOSE) exec -T -e PYTHONPATH=/workspace/src -e DATA_LAKE_URI=$(HDFS_LAKE) -e F1SA_GIT_SHA=$(GIT_SHA) -e F1SA_GIT_DIRTY=$(GIT_DIRTY) app python experiments/model_save.py --source full$(if $(FORCE), --force,)
 
 .PHONY: model-test-full
-model-test-full: ## THE single test-season run (docs/model_spec.md): both settings, opens 2025; CONFIRM=yes
-	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: this evaluates the 2025 test season once per setting (docs/model_spec.md). Re-run as 'make model-test-full CONFIRM=yes'." >&2; exit 1; fi
-	$(APP_EXEC) python experiments/model_eval.py --source full --allow-test-season
-	$(APP_EXEC) python experiments/model_eval.py --source full --allow-test-season --g 5.0 --k 3
+# docs/model_spec_v2.md: real (primary), real_tyre and real_ti (ablation). FEATURE_SET=<set> runs one
+# set (crash recovery under the rerun rule); real's two commands are those of docs/model_spec.md.
+TEST_FEATURE_SETS := real real_tyre real_ti
+FEATURE_SET ?=
+TEST_RUN_SETS = $(if $(FEATURE_SET),$(FEATURE_SET),$(TEST_FEATURE_SETS))
+test_fs_flag = $(if $(filter real,$(1)),, --feature-set $(1))
+define test_season_runs
+	$(APP_EXEC) python experiments/model_eval.py --source full --allow-test-season$(call test_fs_flag,$(1))
+	$(APP_EXEC) python experiments/model_eval.py --source full --allow-test-season$(call test_fs_flag,$(1)) --g 5.0 --k 3
+
+endef
+model-test-full: ## THE single test-season run (docs/model_spec_v2.md): 3 feature sets x 2 settings, opens 2025; CONFIRM=yes [FEATURE_SET=]
+	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: this evaluates the 2025 test season once per feature set and setting (docs/model_spec_v2.md). Re-run as 'make model-test-full CONFIRM=yes'." >&2; exit 1; fi
+	@if [ -n "$(filter-out $(TEST_FEATURE_SETS),$(FEATURE_SET))" ] || [ "$(words $(FEATURE_SET))" -gt 1 ]; then echo "Refusing: FEATURE_SET must be one of: $(TEST_FEATURE_SETS) (docs/model_spec_v2.md)." >&2; exit 1; fi
+	$(foreach fs,$(TEST_RUN_SETS),$(call test_season_runs,$(fs)))
 
 nuke: ## DESTRUCTIVE: remove containers AND volumes (requires CONFIRM=yes)
 	@echo "WARNING: this deletes all f1sa volumes (Kafka log data, HDFS namenode/datanode data)."

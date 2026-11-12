@@ -41,12 +41,15 @@ PROVENANCES = (JOLPICA, STINT_BOUNDARY, TYRE_STATE, TELEMETRY, FASTF1, TRACINGIN
 FEATURE_SETS: dict[str, frozenset[str]] = {
     "real": frozenset({JOLPICA, STINT_BOUNDARY}),
     "with_synthetic": frozenset({JOLPICA, STINT_BOUNDARY, TYRE_STATE, TELEMETRY}),
-    # Development mode only (docs/model_spec.md is frozen to ``real`` for the 2025 test run).
+    # TracingInsights sets: development mode, and the 2025 ablation of docs/model_spec_v2.md.
     "real_ti": frozenset({JOLPICA, STINT_BOUNDARY, TRACINGINSIGHTS}),
 }
 FEATURE_SETS["real_tyre"] = frozenset({JOLPICA, STINT_BOUNDARY, TRACINGINSIGHTS})
 DEV_ONLY_FEATURE_SETS = frozenset({"real_ti", "real_tyre"})
-"""Feature sets that ``--source full`` accepts only with ``--no-test`` (never evaluated on 2025)."""
+"""Feature sets beyond ``real`` that ``--source full --no-test`` (development mode) accepts."""
+TEST_FEATURE_SETS: tuple[str, ...] = ("real", "real_tyre", "real_ti")
+"""The only feature sets ``--allow-test-season`` accepts: the list in ``docs/model_spec_v2.md``
+(``real`` primary, ``real_tyre`` and ``real_ti`` ablation). A unit test keeps the two equal."""
 DEFAULT_FEATURE_SET = "real"
 
 SYNTHETIC_FLAGS: dict[str, tuple[str, ...]] = {

@@ -583,15 +583,32 @@
     - Validation PR-AUC: LR 0.604 → 0.650 (G=3.5), 0.710 → 0.720 (G=5.0); GBT 0.621 → 0.674, 0.617 → 0.636.
     - LR LOSO mean 0.398 → 0.402 (G=3.5), 0.468 → 0.468 (G=5.0).
   - Unchanged: `real` 52 columns, `scorer.json`, the `real_ti` files after the reference run, and v1.
+- Step 9e: pre-registered model spec v2 `docs/model_spec_v2.md` (frozen once committed and tagged `model-spec-v2`)
+  - It adds to v1 and replaces nothing. On 2025: `real` (PRIMARY, 52 columns), with `real_tyre` (70) and `real_ti` (98) as
+    ABLATION for #30. Each gets LR and GBT, raw and calibrated, at G=3.5 k=2 (primary) and G=5.0 k=3. The majority
+    and rule baselines are fixed references. Deployment stays `real` calibrated LR (`scorer.json` `0a9b7dfb…`, unchanged).
+  - Selection rule (v2 playbook, 12 Nov 2026) applied to `results/model_dev_loso{,_real_tyre,_real_ti}.csv`: mean LOSO
+    LR PR-AUC is 0.413 / 0.402 / 0.374, so `real` stays primary for any margin ≥ 0.
+  - It also covers the v1 rules (unchanged), the paired race-cluster ablation intervals with no significance claim,
+    the ORACLE label, determinism (GBT is row-order sensitive up to 0.043), missing data (Miami R6 55.6%, Belgium R13
+    93.5%) and what was seen before the freeze (no model beat the rule on LOSO at the primary setting: 0.533 vs 0.559).
+  - Code: `features.TEST_FEATURE_SETS = ("real", "real_tyre", "real_ti")`. `RunConfig` accepts `--allow-test-season` only
+    for these, so `with_synthetic` is still refused. The overwrite guard already covers the `_real_tyre`/`_real_ti`
+    names, and this is now tested.
+  - `make model-test-full CONFIRM=yes` makes 6 runs (`real`'s two commands are byte-identical to v1), and
+    `FEATURE_SET=<set>` runs one set (crash recovery). Any other value is refused.
+  - Tests: the spec marker line equals `TEST_FEATURE_SETS`; all 6 test runs write disjoint files and `real`'s names
+    are unchanged; the overwrite guard for `real_tyre`/`real_ti` (each file blocks only its own run, and `real`'s files
+    and the other set never block it); Makefile order, `FEATURE_SET`, refusals. No 2025 read, no training, no test run.
 ## Next
 - User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
   `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
   no bytes or checksums change.
-- `real_ti` is development only. Evaluating it on 2025 needs a new dated `docs/model_spec.md` version committed
-  before the test run (user decision). The Step 16 ablation can compare `real` with `real_ti`. `race_control` is
-  not a model input yet.
-- User: commit `docs/model_spec.md` (the freeze). Then `make model-test-full CONFIRM=yes` (opens 2025 once per
-  setting) when the user says so.
+- User: commit Step 9e and `git tag model-spec-v2` (the v2 freeze). Then, only when the user says so,
+  `make model-test-full CONFIRM=yes` (opens 2025 once per feature set and setting: 6 runs).
+- Step 16 `experiments/ablation.py`: the paired race-cluster bootstrap intervals of the feature-set differences
+  (`docs/model_spec_v2.md` §4), plus the 2025 missing rates from `results/missing_rates_{real_tyre,real_ti}_G*.csv`.
+  `race_control` is not a model input yet.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
 - Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
@@ -602,6 +619,10 @@
 - Step 12: load `lr/scorer.json` with `LRScorer.load` in the stream job; compute the inputs exactly as
   `features/undercut.py` does at L-1.
 ## Known issues
+- The v2 selection rule says "calibrated LR", but the LOSO rows it was applied to are raw LR at the first grid
+  point (no per-fold calibrator). PR-AUC is unchanged by a strictly increasing calibration map. Disclosed in
+  `docs/model_spec_v2.md` §2.
+- The v2 playbook (12 Nov 2026) that states the selection rule is not in the repo. The spec cites it.
 - GBT is sensitive to row order. Fixing the order of the TracingInsights sets moved `real_ti` GBT validation
   PR-AUC by 0.043 at G=3.5, which is larger than the gaps between some feature sets in the tables. `real` is
   reproducible run to run (its plan gives a stable order), but its GBT numbers also hold for one row order only.
@@ -610,7 +631,7 @@
   models of the validation columns.
 - `real_ti`: every TracingInsights input is present on every labelled attempt in 2021-2024, so its `_missing`
   columns are constant 0 in development. The fill path is exercised only by the unit tests. 2025 attempt-level
-  missing rates are unknown until a spec v2 test run.
+  missing rates are unknown until the spec v2 test run (`results/missing_rates_*_G*.csv`).
 - The categorical missing indicator is named `__unknown`, not `_missing`. Renaming it would change `real`'s
   columns and the deployed `scorer.json`.
 - TracingInsights (Step 4C):

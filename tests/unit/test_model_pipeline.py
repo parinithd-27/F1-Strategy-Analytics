@@ -541,14 +541,20 @@ def test_real_ti_guards_and_names(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    with pytest.raises(P.RunError, match="need --no-test"):
-        P.RunConfig(source="full", allow_test_season=True, feature_set="real_ti")
     with pytest.raises(P.RunError, match="--allow-test-season"):
         P.RunConfig(source="full", feature_set="real_ti")
     with pytest.raises(P.RunError, match="no TracingInsights inputs"):
         P.RunConfig(source="rehearsal", feature_set="real_ti")
-    assert P.main(["--source", "full", "--allow-test-season", "--feature-set", "real_ti"]) == 2
-    assert "'real' feature set only" in capsys.readouterr().err
+    test = P.RunConfig(source="full", allow_test_season=True, feature_set="real_ti")
+    test_sens = P.RunConfig(
+        source="full", allow_test_season=True, feature_set="real_ti", g=5.0, k=3
+    )
+    assert test.output("model_eval", "csv").name == "model_eval_real_ti_G3.5_k2.csv"
+    assert test_sens.output("model_eval", "csv").name == "model_eval_real_ti_G5.0_k3.csv"
+    assert test.output("missing_rates", "csv").name == "missing_rates_real_ti_G3.5_k2.csv"
+    assert test.output("missing_rates", "csv") in test.result_paths()
+    assert test.model_subdir / "metadata.json" in test.result_paths()
+    assert test.model_subdir.name == "full_real_ti_G3.5_k2"
     dev = P.RunConfig(source="full", no_test=True, feature_set="real_ti")
     sens = P.RunConfig(source="full", no_test=True, feature_set="real_ti", g=5.0, k=3)
     assert dev.output("model_eval", "csv").name == "model_dev_eval_real_ti.csv"
@@ -661,10 +667,15 @@ def test_real_ti_dev_run_reports_missing_rates(dev_ti_run: dict[str, Any]) -> No
 
 
 def test_real_tyre_guards_and_names() -> None:
-    with pytest.raises(P.RunError, match="need --no-test"):
-        P.RunConfig(source="full", allow_test_season=True, feature_set="real_tyre")
+    with pytest.raises(P.RunError, match="--allow-test-season"):
+        P.RunConfig(source="full", feature_set="real_tyre")
     with pytest.raises(P.RunError, match="no TracingInsights inputs"):
         P.RunConfig(source="rehearsal", feature_set="real_tyre")
+    test = P.RunConfig(source="full", allow_test_season=True, feature_set="real_tyre")
+    assert test.output("model_eval", "csv").name == "model_eval_real_tyre_G3.5_k2.csv"
+    assert test.output("missing_rates", "csv").name == "missing_rates_real_tyre_G3.5_k2.csv"
+    assert test.model_subdir / "metadata.json" in test.result_paths()
+    assert test.model_subdir.name == "full_real_tyre_G3.5_k2"
     tyre = P.RunConfig(source="full", no_test=True, feature_set="real_tyre")
     sens = P.RunConfig(source="full", no_test=True, feature_set="real_tyre", g=5.0, k=3)
     assert tyre.output("model_eval", "csv").name == "model_dev_eval_real_tyre.csv"
@@ -677,3 +688,90 @@ def test_real_tyre_guards_and_names() -> None:
     ]
     taken = {p for cfg in others for p in cfg.result_paths()}
     assert not taken & (set(tyre.result_paths()) | set(sens.result_paths()))
+
+
+# ---------------------------------------------------- test season (docs/model_spec_v2.md)
+SPEC_V2 = Path(__file__).resolve().parents[2] / "docs" / "model_spec_v2.md"
+SPEC_V2_MARKER = "Test-season feature sets: "
+SETTINGS = ((3.5, 2), (5.0, 3))
+
+
+def test_test_season_feature_sets_are_exactly_those_in_model_spec_v2(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    lines = [x for x in SPEC_V2.read_text().splitlines() if x.startswith(SPEC_V2_MARKER)]
+    assert len(lines) == 1
+    listed = tuple(x.strip(" `") for x in lines[0].removeprefix(SPEC_V2_MARKER).split(","))
+    assert listed == P.MF.TEST_FEATURE_SETS == ("real", "real_tyre", "real_ti")
+    for fs in P.MF.TEST_FEATURE_SETS:
+        for g, k in SETTINGS:
+            assert P.RunConfig(source="full", allow_test_season=True, feature_set=fs, g=g, k=k)
+    others = sorted(set(P.MF.FEATURE_SETS) - set(P.MF.TEST_FEATURE_SETS))
+    assert others == ["with_synthetic"]
+    for fs in others:
+        with pytest.raises(P.RunError, match="--allow-test-season accepts only"):
+            P.RunConfig(source="full", allow_test_season=True, feature_set=fs)
+    monkeypatch.chdir(tmp_path)
+    argv = ["--source", "full", "--allow-test-season", "--feature-set", "with_synthetic"]
+    assert P.main(argv) == 2
+    assert "docs/model_spec_v2.md" in capsys.readouterr().err
+
+
+def test_all_test_season_runs_write_disjoint_files() -> None:
+    runs = [
+        P.RunConfig(source="full", allow_test_season=True, feature_set=fs, g=g, k=k)
+        for fs in P.MF.TEST_FEATURE_SETS
+        for g, k in SETTINGS
+    ]
+    paths = [p for cfg in runs for p in cfg.result_paths()]
+    assert len(runs) == 6 and len(paths) == len(set(paths))
+    real = P.RunConfig(source="full", allow_test_season=True)
+    assert {p.name for p in real.result_paths()} == {  # real's v1 names are unchanged
+        "model_eval_G3.5_k2.csv",
+        "calibration_G3.5_k2.csv",
+        "feature_importance_G3.5_k2.csv",
+        "feature_importance_G3.5_k2.png",
+        "reliability_G3.5_k2.png",
+        "confusion_matrix_G3.5_k2.png",
+        "metadata.json",
+    }
+
+
+@pytest.mark.parametrize("feature_set", ["real_tyre", "real_ti"])
+def test_test_run_overwrite_guard_covers_real_tyre_and_real_ti(
+    feature_set: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def cfg(fs: str, g: float = 3.5, k: int = 2) -> P.RunConfig:
+        return P.RunConfig(source="full", allow_test_season=True, feature_set=fs, g=g, k=k)
+
+    primary, sensitivity = cfg(feature_set), cfg(feature_set, 5.0, 3)
+    assert all(f"_{feature_set}_G" in p.name for p in primary.result_paths()[:-1])
+    for path in cfg("real").result_paths() + cfg("real", 5.0, 3).result_paths():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("real result")
+    P.check_no_previous_test_run(primary)  # real's files never block the ablation runs
+    P.check_no_previous_test_run(sensitivity)
+    # each result file and the metadata blocks its own run, and only that run
+    for blocker in primary.result_paths():
+        blocker.parent.mkdir(parents=True, exist_ok=True)
+        blocker.write_text("first complete ablation run")
+        with pytest.raises(P.RunError, match=r"G=3\.5 k=2 already exist"):
+            P.check_no_previous_test_run(primary)
+        P.check_no_previous_test_run(sensitivity)
+        blocker.unlink()
+    other = "real_ti" if feature_set == "real_tyre" else "real_tyre"
+    sensitivity.output("missing_rates", "csv").write_text("sensitivity missing rates")
+    with pytest.raises(P.RunError, match=r"G=5 k=3 already exist.*never overwritten"):
+        P.check_no_previous_test_run(sensitivity)
+    P.check_no_previous_test_run(cfg(other, 5.0, 3))  # one ablation set never blocks the other
+    argv = ["--source", "full", "--allow-test-season", "--feature-set", feature_set]
+    assert P.main([*argv, "--g", "5.0", "--k", "3"]) == 2
+    assert "never overwritten" in capsys.readouterr().err
+    assert sensitivity.output("missing_rates", "csv").read_text() == "sensitivity missing rates"
+    real_files = cfg("real").result_paths() + cfg("real", 5.0, 3).result_paths()
+    assert all(p.read_text() == "real result" for p in real_files)
