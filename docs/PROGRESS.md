@@ -1081,3 +1081,6 @@ Step 14 (needs `make up`): `make web-test`, then `make api-up REPLAY=1`, then ei
 or `cd web && E2E_NO_SERVER=1 npx playwright test` against the container, and finally `git status --short results/` (expect
 empty). Python: `uv run pytest tests/unit/test_api_races.py tests/unit/test_api_health.py tests/unit/test_makefile_web.py -q`.
 
+
+## 9f approval
+- 2026-11-13: label-definition-v1, model-spec-v1 and model-spec-v2 approved for the single 2025 test run by Parinith D. on behalf of the team (Data Wranglers). No further sign-off required.
