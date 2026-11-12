@@ -45,19 +45,50 @@ async def test_docs_and_exact_routes(tmp_path: Path) -> None:
     assert {"202", "403", "404", "409", "422", "500"} <= set(replay["responses"])
 
 
-async def test_cors_allows_only_the_dashboard(tmp_path: Path) -> None:
+@pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000"])
+async def test_cors_allows_both_dashboard_origins(tmp_path: Path, origin: str) -> None:
     api = make_api(make_settings(tmp_path))
-    preflight = {"Access-Control-Request-Method": "GET"}
     async with api.client() as c:
-        ok = await c.options("/api/races", headers={"Origin": "http://localhost:3000", **preflight})
-        evil = await c.options("/api/races", headers={"Origin": "http://evil.example", **preflight})
-        simple = await c.get("/api/health", headers={"Origin": "http://evil.example"})
-    assert ok.status_code == 200
-    assert ok.headers["access-control-allow-origin"] == "http://localhost:3000"
-    assert "access-control-allow-credentials" not in ok.headers
-    assert evil.status_code == 400
-    assert "access-control-allow-origin" not in evil.headers
+        pre = await c.options(
+            "/api/races/2024/5/replay",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        simple = await c.get("/api/health", headers={"Origin": origin})
+    assert pre.status_code == 200
+    assert pre.headers["access-control-allow-origin"] == origin
+    assert "access-control-allow-credentials" not in pre.headers
+    assert simple.headers["access-control-allow-origin"] == origin
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://evil.example",
+        "http://localhost:3001",
+        "https://localhost:3000",
+        "http://127.0.0.1:8000",
+        "null",
+    ],
+)
+async def test_cors_refuses_other_origins(tmp_path: Path, origin: str) -> None:
+    api = make_api(make_settings(tmp_path))
+    preflight = {"Origin": origin, "Access-Control-Request-Method": "GET"}
+    async with api.client() as c:
+        pre = await c.options("/api/races", headers=preflight)
+        simple = await c.get("/api/health", headers={"Origin": origin})
+    assert pre.status_code == 400
+    assert "access-control-allow-origin" not in pre.headers
     assert "access-control-allow-origin" not in simple.headers
+
+
+def test_cors_origins_come_from_settings(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path, api_cors_origins="http://dash.local:3000")
+    cors = [m for m in make_api(settings).app.user_middleware if m.cls.__name__ == "CORSMiddleware"]
+    assert cors and cors[0].kwargs["allow_origins"] == ["http://dash.local:3000"]
 
 
 async def test_access_log_is_one_structured_line_per_request(

@@ -681,7 +681,7 @@
       Gives 409 for the same race or at the limit, and refuses 2025 with the producer's own `check_season`.
     - `POST /debug/latency`: only with `ENABLE_DEBUG=1`. It joins the client's render time with the
       server-side timings of the event it sent and appends to `results/ui_latency.csv`.
-  - Settings (`config.py`, `.env.example`): `API_HOST` (127.0.0.1), `API_PORT`, `API_CORS_ORIGIN` (one
+  - Settings (`config.py`, `.env.example`): `API_HOST` (127.0.0.1), `API_PORT`, `API_CORS_ORIGINS` (a list since the Step 14 follow-up; was one
     origin, `*` refused), `ENABLE_REPLAY`, `ENABLE_DEBUG`, `ALLOW_TEST_SEASON`, `API_MAX_REPLAYS`,
     `API_SSE_HEARTBEAT_S`, `API_RACES_CACHE_S`, `API_KAFKA_TIMEOUT_S`, `API_MODEL_DIR`, `API_UI_LATENCY_CSV`.
   - JSON-lines logging: one access line per request with no query string; exceptions are logged by class
@@ -776,12 +776,82 @@
     - `test_demo_outputs.py`: a default demo run leaves `results/` unchanged (sha256), `RECORD=1`
       writes it, the argv rules, the run ids, and the make targets.
     - Port-clash and `main` tests in `test_api_app.py`; the `api-up` make tests.
+- Step 14 (W7): live race dashboard `web/` (#25, #41)
+  - User decisions: the gap chart is hand-written SVG (no chart library), and Playwright uses a host
+    Chromium download.
+  - Pinned exactly, with `package-lock.json` and `save-exact`:
+    - Node 26.13.0 (LTS);
+    - Next.js 16.4.5, React 19.3.1, TypeScript 6.0.3;
+    - ESLint 9.39.5, Vitest 5.0.5, Playwright 1.64.1.
+  - No UI, CSS or schema library.
+  - Pages:
+    - `/` is a race picker grouped by season. It has a search, arrow/Home/End keys, a polite count, and a
+      tag on each synthetic race.
+    - `/race/[season]/[round]` has the timing tower (8 columns, order-set order, a "laps down" rule), a
+      15-lap gap chart, a tyre panel (text + glyph + age bar), the alert feed (grouped by pair; the
+      `aria-live` region speaks only attempts and threshold crossings), replay control (1/10/60, status
+      from `/api/replays`, failed + message), a connection indicator and the lap counter.
+    - A fixed banner strip shows SYNTHETIC DEMO DATA in sample mode.
+  - One pure reducer (`web/src/lib/reducer.ts`). Race state is pushed only: SSE events plus the API's
+    `event: snapshot` (see the follow-up below). On a reconnect the stream is opened first, then `/state`
+    is reloaded once, then the buffered events are applied.
+  - API change (user-allowed, tested): `/api/races` items gain `synthetic` (from the clean `stints`
+    `is_synthetic`; `stints` joins the read-only HttpFS table allowlist), and `/api/health` gains
+    `lake {scheme, mode, synthetic}`, which is informational and never changes the status.
+  - Docker:
+    - `docker/web/Dockerfile`: 3 stages, standalone output, runs as `node` (uid 1000);
+    - compose `web` (core and full): 127.0.0.1:3000, read-only root filesystem, `cap_drop ALL`,
+      `no-new-privileges`, 512 MiB;
+    - `make web` (dev, with a port preflight), `make web-test`, `make web-e2e`;
+    - a CI `web` job.
+  - Found and fixed with the screenshots and the e2e test:
+    - At 375 px the visually hidden chart table caused a 15 px horizontal scroll: a `<table>` ignores the
+      1 px width, so a wrapper is hidden instead.
+    - "+1 L" showed for cars that were merely behind on the line: it now needs the leader to have
+      completed the next lap first.
+    - The driver column collapsed to 0 at 375 px: all columns now get fixed widths.
+    - Chart end labels piled up at the top edge: a two-pass layout now shrinks the spacing evenly.
+    - Undercut flags stuck on every car: alerts only report new candidates. Fixed on the server with the
+      pushed `snapshot` event (see the follow-up below).
+    - Dark border and grid colours were under 3:1: caught by the contrast test and raised.
+  - Verified live (sample mode, `make api-up REPLAY=1`):
+    - the Playwright smoke test passes against `next start` (49.5 s) and against the production
+      container (19.1 s, 45.6 s);
+    - `curl -sI localhost:3000` gives 200 with the security headers; `id` in the container gives
+      uid 1000 (node);
+    - only the `api` and `web` containers were recreated;
+    - `results/` is byte-identical after every replay, and `git status results/` is empty.
+  - Tests:
+    - Vitest: 128 in 5 files (reducer 42, aria-live filter, event parser, guards, format, chart geometry
+      and label layout, params, picker and replay helpers, WCAG contrast of both themes);
+    - Playwright smoke test: 1;
+    - Python: `test_api_races.py` (synthetic per race, stints over HttpFS), `test_api_health.py`
+      (`lake` block) and `test_makefile_web.py` (6).
+- Step 14 follow-up: pushed snapshots instead of client polling, and two CORS origins
+  - The 5 s `/state` polling is removed from the client. The API now pushes `event: snapshot` (id
+    `snapshot-<lap>`), with all driver hashes plus the order zset in one pipeline (`api/state.py`, shared
+    with `GET /state`). It is sent right after connect and once per leader lap (the first `lap` event of a
+    higher lap number). Per-lap snapshots never SCAN. The client keeps the open-stream-then-reload-`/state`
+    logic for reconnects only.
+  - CORS: `API_CORS_ORIGINS` is a comma-separated list, defaulting to `http://localhost:3000` and
+    `http://127.0.0.1:3000`; `*` is refused. Checked live: both are echoed back, and `http://evil.example`
+    gets no header.
+  - Mid-race, without polling (page opened at `127.0.0.1:3000`):
+    - 28 snapshots; the UI's flagged count equals the snapshot's on all 27 laps;
+    - it also equals a direct Redis read on 26/27 laps (lap 20: Redis 13 vs UI 12, one batch later);
+    - 0 page requests to `/state`.
+  - Tests:
+    - API, 5 new SSE tests: one snapshot after connect and one per leader lap (not per event); stale flag
+      refreshed; one pipeline and no SCAN per lap; an unreadable snapshot skipped while the stream goes
+      on; snapshots are not latency samples;
+    - CORS for both origins plus 5 refused origins; the origin list from settings and env;
+    - Vitest 133: snapshot replacing stale flags, no dedupe, zset order, malformed and foreign snapshots;
+    - `make web-e2e` passes (58.7 s).
 ## Next
 - User: raise the WSL VM to 14 GB (`memory=14GB` in `%UserProfile%\.wslconfig`, then `wsl --shutdown`).
   The full profile's limits now add up to about 10 GiB.
-- Step 14 `web/`: the Next.js dashboard on http://localhost:3000 against the S13 API. Load `/state` on
-  connect and reconnect, then apply the SSE events; post `ui_rendered_at_ms` to `/api/debug/latency` when
-  `ENABLE_DEBUG=1`.
+- Step 15: the what-if panel on the race page (add `routes/whatif.py`, one `app.ROUTERS` entry and a panel
+  next to the alert feed).
 - Step 15: add `api/routes/whatif.py` and one entry in `app.ROUTERS`.
 - S16: UI latency from `results/ui_latency.csv` (needs a dashboard run with `ENABLE_DEBUG=1`).
 - User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
@@ -804,6 +874,26 @@
 - S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
   run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
 ## Known issues
+- Step 14: ESLint 9.39.5 is marked "no longer supported" by npm. ESLint 10 cannot be used until
+  `eslint-plugin-react`, `-jsx-a11y` and `-import` (pulled in by `eslint-config-next` 16.4.5) accept it. It
+  is a lint-time tool only.
+- Step 14: the gap chart shows only laps received since the page connected (Pub/Sub has no history). After
+  a reload in mid-race the chart starts at the current lap and fills from there.
+- Step 14: `NEXT_PUBLIC_API_URL` is inlined at build time, so pointing the container at another API means
+  rebuilding the `web` image. Other dashboard origins must be added to `API_CORS_ORIGINS`.
+- Step 14 follow-up: the replay control still polls `GET /api/replays` (1 s while running, 5 s otherwise),
+  because replay status (starting/failed) is not on the race channel. The race state itself is never
+  polled.
+- Step 14 follow-up: a snapshot is taken right after the leader's lap event. Redis keeps changing during
+  the lap (later cars' batches), so the UI is exact at each snapshot and event-driven in between (measured
+  UI = Redis on 26/27 laps when read right after).
+- 2026-11-12: Docker Desktop's host port forwards for Redis (6379) and Kafka (9092) broke after a failed
+  re-expose of port 3000 ("/forwards/expose returned unexpected status: 500"). TCP connects but the
+  protocol is reset; containers reach both over the compose network. Host-side integration tests need
+  the forwards back: restart the redis and kafka containers or Docker Desktop.
+- Step 14: three-letter codes come from the surname in the Jolpica id (`max_verstappen` gives VER), not
+  from the official codes, so a few differ (`mick_schumacher` gives SCH, officially MSC).
+- Step 14: the web image is about 400 MB (the Debian slim Node base); a distroless runtime could shrink it.
 - Step 13 follow-up: a replay of 2025 needs `make api-up TEST_SEASON=1`. The demo script
   (`make stream-demo`) still has no `--allow-test-season` (unchanged `streaming/demo.py`).
 - Step 13 follow-up: a replay peaks at about 1.5 GiB (two JVMs) of the api container's 2 GiB. An OOM kill
@@ -986,3 +1076,8 @@ with `make up`: `uv run pytest tests/integration/test_api.py -q -m integration`,
 `make stream-demo SEASON=2024 ROUND=5 SPEED=60` (writes `data/demo/<run_id>/`; `results/` unchanged). Full lake:
 `make api-up FULL=1 REPLAY=1`, POST a replay, then `curl -s localhost:8000/api/replays` until `finished`. On the host:
 `make api` (port 8001) and the same curls.
+
+Step 14 (needs `make up`): `make web-test`, then `make api-up REPLAY=1`, then either `docker compose stop web && make web-e2e`
+or `cd web && E2E_NO_SERVER=1 npx playwright test` against the container, and finally `git status --short results/` (expect
+empty). Python: `uv run pytest tests/unit/test_api_races.py tests/unit/test_api_health.py tests/unit/test_makefile_web.py -q`.
+

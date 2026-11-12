@@ -16,7 +16,7 @@ from starlette.requests import ClientDisconnect
 
 from f1sa.api.sse import EventStream, event_id_for, format_event
 from f1sa.serving import keys as K
-from f1sa.serving.redis_store import AsyncRaceStore, Batch, Event
+from f1sa.serving.redis_store import AsyncRaceStore, Batch, DriverState, Event
 
 pytestmark = pytest.mark.anyio
 
@@ -55,8 +55,8 @@ def _lap(eid: str = LAP_ID) -> Event:
     return Event("lap", {"event_id": eid, "driver_id": "norris", "lap": 7, "produced_at_ms": 1})
 
 
-def _pit(eid: str = PIT_ID) -> Event:
-    return Event("pit_in", {"event_id": eid, "driver_id": "norris", "lap": 8})
+def _pit(driver: str = "norris", eid: str | None = None) -> Event:
+    return Event("pit_in", {"event_id": eid or PIT_ID, "driver_id": driver, "lap": 8})
 
 
 # ------------------------------------------------------------------ pure helpers
@@ -108,8 +108,15 @@ async def test_stream_events_heartbeat_and_close_after_session_end(tmp_path: Pat
     assert resp.headers["x-accel-buffering"] == "no"
     frames = parse_sse(resp.text)
     assert frames[0] == {"retry": "3000", "comments": ["connected"]}
-    events = [f for f in frames if "event" in f]
-    assert [e["event"] for e in events] == ["lap", "pit_in", "session_end"]
+    # A snapshot follows the connect and the first lap event of each new lap (snapshot tests).
+    assert [f.get("event") for f in frames if "event" in f] == [
+        "snapshot",
+        "lap",
+        "snapshot",
+        "pit_in",
+        "session_end",
+    ]
+    events = [f for f in frames if "event" in f and f["event"] != "snapshot"]
     first, second = events[0], events[1]
     assert first["id"] == LAP_ID and second["id"] == PIT_ID
     for e in events:
@@ -144,7 +151,7 @@ async def test_malformed_and_foreign_messages_are_skipped(tmp_path: Path) -> Non
         resp, _ = await asyncio.wait_for(
             asyncio.gather(c.get("/api/races/2024/5/events"), publisher()), 10
         )
-    events = [f for f in parse_sse(resp.text) if "event" in f]
+    events = [f for f in parse_sse(resp.text) if "event" in f and f["event"] != "snapshot"]
     assert [e["event"] for e in events] == ["lap", "session_end"]
 
 
@@ -235,3 +242,167 @@ async def test_close_is_idempotent_and_safe_before_subscribe(tmp_path: Path) -> 
     assert stream.closed
     with pytest.raises(ValueError):
         EventStream(api.redis, 2024, 5, heartbeat_s=0)
+
+
+# ------------------------------------------------------------------ snapshots (pushed, not polled)
+def _state(pos: int, flag: bool = False, prob: float | None = None) -> DriverState:
+    return DriverState(
+        pos, None if pos == 1 else 1.0, 0.0 if pos == 1 else float(pos), "HARD", 5, 95.0, flag, prob
+    )
+
+
+async def _seed(api: ApiHarness, flags: dict[str, bool]) -> None:
+    ids = list(flags)
+    await _store(api).write_batch(
+        2024,
+        5,
+        Batch(
+            states={
+                d: _state(i + 1, flags[d], 0.7 if flags[d] else None) for i, d in enumerate(ids)
+            },
+            order={d: i + 1 for i, d in enumerate(ids)},
+        ),
+    )
+
+
+def _lap_event(driver: str, lap: int) -> Event:
+    return Event("lap", {"event_id": str(uuid.uuid4()), "driver_id": driver, "lap": lap})
+
+
+async def _stream(api: ApiHarness, publisher) -> list[dict[str, Any]]:  # type: ignore[no-untyped-def]
+    async with api.client() as c:
+        resp, _ = await asyncio.wait_for(
+            asyncio.gather(c.get("/api/races/2024/5/events"), publisher()), 10
+        )
+    return [f for f in parse_sse(resp.text) if "event" in f]
+
+
+async def test_snapshot_after_connect_and_once_per_leader_lap(tmp_path: Path) -> None:
+    api = make_api(make_settings(tmp_path))
+    await _seed(api, {"alpha": False, "bravo": True, "charlie": False})
+
+    async def publisher() -> None:
+        await _wait_subscribed(api)
+        for d in ("alpha", "bravo", "charlie"):  # three events of lap 1: one snapshot
+            await _publish(api, _lap_event(d, 1))
+        await _publish(api, _pit("bravo"))
+        await _publish(
+            api, Event("undercut_alert", {"attacker_id": "bravo", "defender_id": "alpha"})
+        )
+        for d in ("alpha", "bravo"):  # lap 2: one snapshot
+            await _publish(api, _lap_event(d, 2))
+        await _publish(api, _lap_event("charlie", 1))  # a late lap-1 event: no snapshot
+        await _publish(api, _lap_event("charlie", 2))  # lap 2 already snapshotted
+        await _store(api).end_session(2024, 5)
+
+    events = await _stream(api, publisher)
+    names = [e["event"] for e in events]
+    assert names == [
+        "snapshot", "lap", "snapshot", "lap", "lap", "pit_in", "undercut_alert",
+        "lap", "snapshot", "lap", "lap", "lap", "session_end",
+    ]  # fmt: skip
+    snaps = [e for e in events if e["event"] == "snapshot"]
+    assert [s["id"] for s in snaps] == ["snapshot-0", "snapshot-1", "snapshot-2"]
+    for snap, lap in zip(snaps, (0, 1, 2), strict=True):
+        data = snap["data"]
+        assert data["type"] == "snapshot" and data["lap"] == lap and data["event_id"] == snap["id"]
+        assert (data["season"], data["round"]) == (2024, 5)
+        assert isinstance(data["sse_sent_at_ms"], int) and data["sse_sent_at_ms"] > 0
+        assert sorted(data["drivers"]) == ["alpha", "bravo", "charlie"]
+        for d in data["drivers"].values():  # JSON keys are sorted on the wire
+            assert sorted(d) == sorted(K.DRIVER_FIELDS) and len(d) == 9
+        assert data["order"] == [
+            {"driver_id": "alpha", "position": 1},
+            {"driver_id": "bravo", "position": 2},
+            {"driver_id": "charlie", "position": 3},
+        ]
+    assert snaps[0]["data"]["drivers"]["alpha"]["gap_ahead_s"] is None  # "" -> null
+    assert snaps[0]["data"]["drivers"]["bravo"]["undercut_flag"] is True
+
+
+async def test_snapshot_refreshes_a_stale_undercut_flag(tmp_path: Path) -> None:
+    api = make_api(make_settings(tmp_path))
+    await _seed(api, {"alpha": False, "bravo": True})
+
+    async def publisher() -> None:
+        await _wait_subscribed(api)
+        await _publish(api, _lap_event("alpha", 10))
+        await asyncio.sleep(0.2)  # let the stream send snapshot-10 first
+        await _seed(api, {"alpha": False, "bravo": False})  # bravo is no longer a candidate
+        await _publish(api, _lap_event("alpha", 11))
+        await _store(api).end_session(2024, 5)
+
+    snaps = [e for e in await _stream(api, publisher) if e["event"] == "snapshot"]
+    assert [s["data"]["drivers"]["bravo"]["undercut_flag"] for s in snaps] == [True, True, False]
+    assert snaps[-1]["data"]["drivers"]["bravo"]["undercut_prob"] is None
+
+
+async def test_per_lap_snapshots_use_one_pipeline_and_no_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api = make_api(make_settings(tmp_path))
+    await _seed(api, {"alpha": False, "bravo": False})
+    calls = {"scan": 0, "pipeline": 0}
+    real_scan, real_pipeline = api.redis.scan, api.redis.pipeline
+
+    def scan(*a: Any, **k: Any) -> Any:
+        calls["scan"] += 1
+        return real_scan(*a, **k)
+
+    def pipeline(*a: Any, **k: Any) -> Any:
+        calls["pipeline"] += 1
+        return real_pipeline(*a, **k)
+
+    marks: list[dict[str, int]] = []
+
+    async def publisher() -> None:
+        await _wait_subscribed(api)
+        await asyncio.sleep(0.05)  # the connect snapshot is done
+        marks.append(dict(calls))
+        for lap in (1, 2, 3):
+            await _publish(api, _lap_event("alpha", lap))
+        await asyncio.sleep(0.05)
+        marks.append(dict(calls))
+        await _store(api).end_session(2024, 5)
+
+    monkeypatch.setattr(api.redis, "scan", scan)
+    monkeypatch.setattr(api.redis, "pipeline", pipeline)
+    events = await _stream(api, publisher)
+    assert [e["id"] for e in events if e["event"] == "snapshot"] == [
+        "snapshot-0",
+        "snapshot-1",
+        "snapshot-2",
+        "snapshot-3",
+    ]
+    assert marks[0]["scan"] >= 1, "the connect snapshot finds the drivers with SCAN"
+    # _publish also uses one pipeline per event (write_batch): 3 events + 3 snapshots.
+    assert marks[1]["pipeline"] - marks[0]["pipeline"] == 3 + 3
+    assert marks[1]["scan"] == marks[0]["scan"], "per-lap snapshots never SCAN"
+
+
+async def test_unreadable_snapshot_is_skipped_and_the_stream_goes_on(tmp_path: Path) -> None:
+    api = make_api(make_settings(tmp_path))
+    await _seed(api, {"alpha": False})
+
+    async def publisher() -> None:
+        await _wait_subscribed(api)
+        await api.redis.hset(K.driver_key(2024, 5, "alpha"), "undercut_flag", "maybe")
+        await _publish(api, _lap_event("alpha", 1))
+        await _store(api).end_session(2024, 5)
+
+    names = [e["event"] for e in await _stream(api, publisher)]
+    assert names == ["snapshot", "lap", "session_end"]  # the lap-1 snapshot was skipped
+
+
+async def test_snapshots_are_not_latency_samples(tmp_path: Path) -> None:
+    api = make_api(make_settings(tmp_path, enable_debug=True))
+    await _seed(api, {"alpha": False})
+
+    async def publisher() -> None:
+        await _wait_subscribed(api)
+        await _publish(api, _lap_event("alpha", 1))
+        await _store(api).end_session(2024, 5)
+
+    await _stream(api, publisher)
+    remembered = list(api.deps.latency._sent)
+    assert remembered and not any(i.startswith("snapshot") for i in remembered)

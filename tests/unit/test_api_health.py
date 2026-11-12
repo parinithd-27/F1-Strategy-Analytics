@@ -8,7 +8,7 @@ from pathlib import Path
 
 import fakeredis
 import pytest
-from _api_fixtures import make_api, make_settings, model_folder
+from _api_fixtures import LakeRace, make_api, make_settings, model_folder, write_file_lake
 
 from f1sa.api.health import KafkaUnavailableError, ModelStatus, describe_topic
 
@@ -123,3 +123,36 @@ async def test_health_never_leaks_the_redis_url(
     for needle in ("s3cr3t-pa55", "admin", "redis.internal", SECRET_URL):
         assert needle not in resp.text
         assert needle not in caplog.text
+
+
+async def test_health_reports_sample_lake_mode(tmp_path: Path) -> None:
+    write_file_lake(tmp_path / "lake")  # 2024 R5 has synthetic stints
+    api = make_api(make_settings(tmp_path))
+    async with api.client() as c:
+        resp = await c.get("/api/health")
+    assert resp.status_code == 200
+    assert resp.json()["lake"] == {"scheme": "file", "mode": "sample", "synthetic": True}
+
+
+async def test_health_reports_full_lake_mode(tmp_path: Path) -> None:
+    write_file_lake(tmp_path / "lake", (LakeRace(2023, 5, "Miami Grand Prix"),))
+    api = make_api(make_settings(tmp_path))
+    async with api.client() as c:
+        body = (await c.get("/api/health")).json()
+    assert body["lake"] == {"scheme": "file", "mode": "full", "synthetic": False}
+
+
+async def test_unreadable_lake_gives_nulls_and_keeps_status(tmp_path: Path) -> None:
+    api = make_api(make_settings(tmp_path))  # no clean zone at all
+    async with api.client() as c:
+        resp = await c.get("/api/health")
+    assert resp.status_code == 200, "the lake block is informational"
+    assert resp.json()["lake"] == {"scheme": "file", "mode": None, "synthetic": None}
+    hdfs = make_api(
+        make_settings(
+            tmp_path, data_lake_uri="hdfs://127.0.0.1:1/f1", hdfs_httpfs_url="http://127.0.0.1:1"
+        )
+    )
+    async with hdfs.client() as c:
+        lake = (await c.get("/api/health")).json()["lake"]
+    assert lake == {"scheme": "hdfs", "mode": None, "synthetic": None}

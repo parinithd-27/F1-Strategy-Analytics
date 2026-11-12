@@ -89,6 +89,10 @@ def test_compose_api_service() -> None:
     assert env["DATA_LAKE_URI"] == "${API_DATA_LAKE_URI:-file:///workspace/data/lake}"
     assert env["HDFS_HTTPFS_URL"] == "http://httpfs:14000"
     assert env["API_HOST"] == "0.0.0.0"
+    assert (
+        env["API_CORS_ORIGINS"]
+        == "${API_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
+    )
     assert env["PYTHONPATH"] == "/workspace/src"
     assert env["ENABLE_REPLAY"] == "${ENABLE_REPLAY:-0}"
     assert env["ENABLE_DEBUG"] == "${ENABLE_DEBUG:-0}"

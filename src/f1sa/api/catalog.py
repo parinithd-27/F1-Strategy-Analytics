@@ -3,7 +3,9 @@
 A race is listed when the clean zone has its ``races`` and ``laps`` partitions; the producer
 needs the laps and treats missing pit-stop, stint and results partitions as empty. ``laps`` is the
 producer's race distance (``etl.df_jobs.race_distance``): the winner's ``results.laps``
-(position 1), or the race's highest lap number when there is no winner row.
+(position 1), or the race's highest lap number when there is no winner row. ``synthetic`` is true
+when the race's clean ``stints`` carry ``is_synthetic = true`` (the sample bundle's generated tyre
+data, ``data/sample``); a race without a stints partition is not synthetic.
 
 Two readers, both read-only and limited to the clean zone:
 
@@ -42,7 +44,7 @@ from f1sa.config import Settings
 from f1sa.lake.paths import hdfs_path, local_path
 from f1sa.streaming.processor import SEALED_SEASON
 
-TABLES: tuple[str, ...] = ("races", "results", "laps")
+TABLES: tuple[str, ...] = ("races", "results", "laps", "stints")
 """The only clean tables the API reads."""
 ALLOWED_OPS: frozenset[str] = frozenset({"LISTSTATUS", "OPEN"})
 """The only HttpFS operations the API sends (both read-only)."""
@@ -61,6 +63,7 @@ class RaceInfo:
     round: int
     name: str | None
     laps: int
+    synthetic: bool = False
 
 
 def _check_table(table: str) -> None:
@@ -283,6 +286,7 @@ def load_races(reader: LakeReader, *, allow_test_season: bool) -> list[RaceInfo]
     """Every replayable race of the clean zone, sorted by (season, round)."""
     with_laps = set(reader.partitions("laps"))
     with_results = set(reader.partitions("results", required=False))
+    with_stints = set(reader.partitions("stints", required=False))
     out: list[RaceInfo] = []
     for season, round_ in reader.partitions("races"):
         if (season, round_) not in with_laps:
@@ -301,7 +305,13 @@ def load_races(reader: LakeReader, *, allow_test_season: bool) -> list[RaceInfo]
         if n is None:
             continue
         name = names[0].get("race_name") if names else None
-        out.append(RaceInfo(season=season, round=round_, name=name, laps=n))
+        stints = (
+            reader.read_rows("stints", season, round_, ["is_synthetic"])
+            if (season, round_) in with_stints
+            else []
+        )
+        synthetic = any(r.get("is_synthetic") is True for r in stints)
+        out.append(RaceInfo(season=season, round=round_, name=name, laps=n, synthetic=synthetic))
     return sorted(out, key=lambda r: (r.season, r.round))
 
 
@@ -336,6 +346,10 @@ class RaceCatalog:
             self.loads += 1
             self._cached = (now, races)
             return list(races)
+
+    def cached(self) -> list[RaceInfo] | None:
+        """The last loaded list (any age), without loading; ``None`` before the first load."""
+        return None if self._cached is None else list(self._cached[1])
 
     async def get(self, season: int, round_: int) -> RaceInfo | None:
         for race in await self.races():

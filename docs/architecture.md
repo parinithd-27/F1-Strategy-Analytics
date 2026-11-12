@@ -48,13 +48,14 @@ Defined in `docker-compose.yml`, project name `f1sa`. `make up` starts `core`; `
 | core | redis (no persistence, `maxmemory 256mb`, `volatile-ttl`) | `redis:8.10.3` | 6379 | `redis:6379` |
 | core | app (Python 3.12 + locked deps + Spark Kafka connector) | `f1sa-app:dev` (from `docker/spark/Dockerfile`) | n/a | n/a |
 | core | api (FastAPI, `python -m f1sa.api`, Step 13) | `f1sa-app:dev` | 127.0.0.1:8000 only (`API_HOST_PORT`) | `api:8000` |
+| core | web (Next.js dashboard, Step 14; non-root, read-only root fs) | `f1sa-web:dev` (from `docker/web/Dockerfile`) | 127.0.0.1:3000 only (`WEB_HOST_PORT`) | `web:3000` |
 | hdfs | namenode | `f1sa-hadoop:3.4.3` (from `apache/hadoop:3.4.3`) | 9870 (web UI) | `hdfs://namenode:8020` |
 | hdfs | datanode | `f1sa-hadoop:3.4.3` | n/a | `datanode:9864` |
 | hdfs | httpfs (HDFS REST gateway that proxies bytes, used by the HDFS sink) | `f1sa-hadoop:3.4.3` | 14000 | `http://httpfs:14000/webhdfs/v1` |
 | spark | spark-master (standalone) | `f1sa-app:dev` | 8080 (UI) | `spark://spark-master:7077` |
 | spark | spark-worker-1, spark-worker-2 | `f1sa-app:dev` | 8081, 8082 (UI) | n/a |
 
-- Host port 3000 is reserved for the web app (S14). The API publishes 8000 on the host's 127.0.0.1 only. Every host port can be overridden in `.env` (see `.env.example`). If you change `KAFKA_HOST_PORT` or `REDIS_HOST_PORT`, update `KAFKA_BOOTSTRAP` and `REDIS_URL` to match.
+- The web app publishes 3000 and the API 8000, both on the host's 127.0.0.1 only. Every host port can be overridden in `.env` (see `.env.example`). If you change `KAFKA_HOST_PORT` or `REDIS_HOST_PORT`, update `KAFKA_BOOTSTRAP` and `REDIS_URL` to match.
 - The app image installs `spark-sql-kafka-0-10_2.13:4.2.1` (plus `kafka-clients`, `spark-token-provider-kafka` and `commons-pool2`) into `$SPARK_HOME/jars` at build time, so Structured Streaming needs no network at runtime. Inside containers, Kafka is `kafka:29092`. From the host, it is `localhost:9092`.
 - HDFS is a single-node dev setup: `dfs.replication=1` and permissions disabled (`docker/hadoop/`). The NameNode is formatted on first start only.
 - The app container mounts the repo read-only at `/workspace`, with `data/`, `results/` and `models/` (Step 9c) mounted read-write over it.
@@ -70,13 +71,14 @@ The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserPro
 | redis | 384 MiB | dataset capped at 256 MiB (`maxmemory`) |
 | app | 1.5 GiB | driver for local Spark jobs |
 | api | 2 GiB | uvicorn (≈ 100 MiB) + one replay: stream job JVM + producer JVM (measured peaks 1.33 and 1.49 GiB) |
+| web | 512 MiB | Next.js standalone server (`node server.js`) |
 | namenode | 768 MiB | heap ≤ 512 MiB |
 | datanode | 768 MiB | heap ≤ 512 MiB |
 | httpfs | 384 MiB | heap ≤ 256 MiB |
 | spark-master | 512 MiB | daemon heap 256 MiB |
 | spark-worker-1, -2 | 1.5 GiB each | `SPARK_WORKER_MEMORY=1g` for executors + 256 MiB daemon |
-| **core total** | **≈ 4.6 GiB** | ≈ 2.6 GiB before the api service (Step 13) |
-| **full total** | **≈ 10.0 GiB** (limits) | needs the WSL VM raised to 14 GB (`memory=14GB` in `.wslconfig`, being done by the user); measured idle use is ≈ 1.6 GiB (before httpfs and api) |
+| **core total** | **≈ 5.1 GiB** | ≈ 2.6 GiB before the api (Step 13) and web (Step 14) services |
+| **full total** | **≈ 10.5 GiB** (limits) | needs the WSL VM raised to 14 GB (`memory=14GB` in `.wslconfig`, being done by the user); measured idle use is ≈ 1.6 GiB (before httpfs and api) |
 
 These are ceilings, not reservations. If the full profile runs into memory pressure, lower `SPARK_WORKER_MEMORY` and `SPARK_WORKER_CONTAINER_MEM` in `.env`, or raise `memory=` in `.wslconfig` and run `wsl --shutdown`.
 
@@ -655,8 +657,8 @@ Docs: `/api/docs`, `/api/openapi.json`.
 
 | Endpoint | Status codes |
 |---|---|
-| `GET /api/health` | 200 all checks pass; 503 with `checks.{redis,kafka,model}.ok/error` naming the failure |
-| `GET /api/races` | 200 `[{season, round, name, laps}]`; 503 clean zone unavailable |
+| `GET /api/health` | 200 all checks pass; 503 with `checks.{redis,kafka,model}.ok/error` naming the failure; `lake: {scheme, mode: sample\|full\|null, synthetic}` is informational |
+| `GET /api/races` | 200 `[{season, round, name, laps, synthetic}]`; 503 clean zone unavailable |
 | `GET …/state` | 200; 404 the race has no keys; 422 bad season/round; 500 a hash breaks the contract; 503 Redis down |
 | `GET …/events` | 200 `text/event-stream`; 422 bad season/round |
 | `POST …/replay` `{speed: 1\|10\|60}` | 202 (with `run_id`, `state`); 403 disabled or 2025; 404 not in the clean zone; 409 running / limit; 422; 500 launch failed; 503 |
@@ -674,6 +676,18 @@ Docs: `/api/docs`, `/api/openapi.json`.
   `event: <type>`, `id: <event_id>`, `data: <stored JSON + event_id + sse_sent_at_ms>`; `: heartbeat` every
   `API_SSE_HEARTBEAT_S` (15 s) regardless of traffic; the stream ends after `session_end`. Non-JSON, unknown
   types and other races' messages are skipped and counted.
+  - **`event: snapshot`** (pushed, never polled). The API reads the race's full state from Redis (every
+    driver hash plus the order zset, **one** `pipeline(transaction=False)`, `api/state.py`, shared with
+    `GET /state`) and sends `event: snapshot`, `id: snapshot-<lap>`, with data `{type: "snapshot", season,
+    round, lap, drivers, order, event_id, sse_sent_at_ms}`:
+    - once right after connect (`snapshot-0`; the drivers are found with one SCAN);
+    - once per race lap, right after the first `lap` event whose lap number is higher than the last
+      snapshot's (the leader's lap). These read the drivers already known, so they never SCAN.
+
+    The alert stream only says when a pair *becomes* a candidate, so these snapshots are what clear a stale
+    `undercut_flag` in the browser. A snapshot that cannot be read is skipped and logged, and the event
+    stream goes on. Snapshots are not latency samples. Tested: one per leader lap plus one after connect,
+    not one per event; one pipeline and no SCAN per lap; stale flags refreshed.
   - `event_id` is `payload.event_id` (the producer's uuid4) for lap / pit_in / pit_out. `undercut_alert`
     and `session_end` have no id in the Step 12 payload (streaming/ is unchanged), so they get
     `uuid5(ns, raw message)`: deterministic, unique per message (`published_at` has ms).
@@ -717,10 +731,12 @@ Docs: `/api/docs`, `/api/openapi.json`.
   `..`, absolute paths, a symlinked root or a `DEMO_DIR` pointing elsewhere. Entries with other names
   (`stream_job`) and symlinked entries are kept. Run it while no demo or replay is running.
 - **Races** (`catalog.py`): a race is listed when its `races` and `laps` partitions exist; `laps` is the
-  producer's distance rule (winner's laps, else the highest lap). Cached in memory for `API_RACES_CACHE_S`
+  producer's distance rule (winner's laps, else the highest lap). `synthetic` is true when the race's clean `stints`
+  carry `is_synthetic` (the sample's generated tyre data); `/api/health` `lake.mode` is `sample` when any
+  listed race is synthetic. Cached in memory for `API_RACES_CACHE_S`
   (300 s); the full lake over HttpFS takes about 3 s (90 races 2021–2024).
   - **HttpFS reader limits:** only `LISTSTATUS` and `OPEN`, always HTTP GET; every path is normalised and must
-    lie in `{lake}/clean/{races,results,laps}` (never `/f1/raw`); `season=2025` directories are never listed
+    lie in `{lake}/clean/{races,results,laps,stints}` (never `/f1/raw`); `season=2025` directories are never listed
     into or opened unless `ALLOW_TEST_SEASON=1`. The file reader applies the same table and season limits.
 - **Debug latency** (`latency.py`): with `ENABLE_DEBUG=1` the SSE stream remembers the timings of the last
   10,000 events it sent. A posted `ui_rendered_at_ms` is joined with them server-side and appended to
@@ -728,10 +744,84 @@ Docs: `/api/docs`, `/api/openapi.json`.
   redis_written_at_ms, sse_sent_at_ms, ui_rendered_at_ms, recorded_at_ms`), so the client supplies only its
   own render time.
 - **Security:** binds 127.0.0.1 by default (the container binds 0.0.0.0 and is published on the host's
-  127.0.0.1 only); CORS allows exactly `API_CORS_ORIGIN` (`*` refused), GET/POST, no credentials; replay and
+  127.0.0.1 only); CORS allows the `API_CORS_ORIGINS` list (default `http://localhost:3000` and
+  `http://127.0.0.1:3000`; `*` refused), GET/POST, no credentials; replay and
   debug are off by default; `models/` and `data/` (except `data/demo`, `data/checkpoints`) are mounted read-only. Responses and logs never carry
   the Redis URL or other settings: checks report the exception class and a fixed text.
 - **Logging** (`log.py`): JSON lines on stderr (`ts, level, logger, msg` + fields). One access line per request
   (`method, path, status, duration_ms`; no query string), written when the response ends, so an SSE line
   carries the stream's duration. Exceptions are logged by class name only.
 - **Step 15** adds `routes/whatif.py` and one entry in `app.ROUTERS`.
+
+## Dashboard (`web/`, Step 14)
+```
+browser ── GET /api/races, /api/health ───────────────► API (CORS: http://localhost:3000 only)
+   │    ── EventSource /api/races/{s}/{r}/events ──────► SSE (lap, pit_in, pit_out, undercut_alert, session_end)
+   │    ◄─ event: snapshot (after connect, once per leader lap) ─ Redis hash + order zset (pushed)
+   │    ── GET /state on a reconnect only ─────────────► Redis hash + order zset
+   │    ── POST /replay, GET /api/replays (1 s / 5 s) ─► replay pipeline status
+   └─ raceReducer(state, action): the one pure function that turns snapshots and SSE messages into the view
+```
+- **Versions** (exact pins, `web/package-lock.json`, `save-exact`): Node 26.13.0 (LTS "Lithium"), Next.js
+  16.4.5 (App Router), React 19.3.1, TypeScript 6.0.3 (`typescript-eslint` 8.72 supports < 6.1), ESLint 9.39.5
+  (the React, jsx-a11y and import plugins do not accept 10 yet), Vitest 5.0.5, Playwright 1.64.1. No UI,
+  CSS, chart or schema library: plain CSS with custom properties, hand-written SVG, hand-written type guards.
+- **Updates are pushed, never polled** (`lib/useRaceStream.ts`). The race state comes only over SSE: the
+  race events, plus the API's `event: snapshot` after connect and once per leader lap, which the reducer
+  applies like `/state`.
+  - On a **reconnect** (after an error) the client opens the EventSource, then on `open` reloads `/state`
+    once and applies the events buffered meanwhile. The API's own connect snapshot follows on the stream.
+  - Errors retry with backoff (1, 2, 4, 8, 15 s). After `session_end` the stream closes for good.
+  - Measured mid-race (2024 R5 at 60×, the page opened at `127.0.0.1:3000`):
+    - 28 snapshots (connect + 27 laps);
+    - the UI's flagged-row count equals the snapshot's on every lap, and a direct Redis read right after
+      it on 26 of 27 laps (on lap 20 Redis had moved on one batch, 13 vs 12);
+    - **0** page requests to `/state`.
+  - The page still polls `GET /api/replays` (every 1 s while a replay runs, else every 5 s) for the replay
+    control's status, as specified in Step 14. Replay status is not on the race channel.
+- **Reducer** (`lib/reducer.ts`, pure, 42 Vitest cases):
+  - A snapshot (pushed `event: snapshot` or a reconnect's `/state`) replaces the 9 hash fields (stale
+    undercut flags included) and the order zset. It keeps the client-built lap history (the last 20 laps)
+    and the alert groups. Snapshot ids repeat across connections, so snapshots are not deduplicated.
+  - A lap event updates the latest lap. Its gaps come from `race_time_s` at the same lap number (the
+    `timing_gaps` definition: leader = Jolpica P1, the car ahead = P − 1). The order follows the stream
+    job's live rank (`live_state.live_order`).
+  - `pit_in` / `pit_out` set and clear "IN PIT" and count stops.
+  - Alerts are grouped by attacker → defender (latest P, reason, trigger, count).
+  - `session_end` closes the race.
+  - A car is shown laps down only when the leader completed lap `L + k` before the car completed lap `L`.
+  - Robustness: malformed messages, other races' messages, duplicate ids (the last 5,000 are remembered)
+    and events after `session_end` only change counters. An older lap goes to the history only, an
+    unknown driver gets a row, and nothing throws.
+- **Accessibility:**
+  - Semantic landmarks and a skip link. The timing tower is a real `<table>` (caption, `scope`), and the
+    scrollable tower and alert list are focusable regions.
+  - The picker supports arrow keys, Home and End, with a polite result count. The focus ring is a 3 px
+    amber outline with an offset.
+  - Compounds are text plus a distinct glyph (solid, half, ring, hatched, drop, dashed "?"). Chart lines
+    differ in colour **and** dash, carry end labels with collision layout, and come with a hidden data
+    table.
+  - The alert feed's `aria-live="polite"` region announces **only** `reason=attempt` and
+    `trigger=probability_crossed` (`lib/announce.ts`, tested). New candidates update the list silently.
+  - Colour tokens live in `lib/theme.ts`, which feeds both the CSS variables and the contrast tests: text
+    ≥ 4.5:1 and UI elements ≥ 3:1, in light and dark, for every foreground/background pair, chart line,
+    grid and bar.
+  - `prefers-reduced-motion` turns every transition off. Rows have fixed heights, panels reserved heights,
+    the banner a fixed strip, and the chart a fixed height drawn at its real width (`ResizeObserver`), so
+    updates never shift the layout.
+  - Down to 375 px there is no horizontal page scroll; the tower scrolls inside its region (checked by the
+    Playwright test).
+- **Synthetic data:** the banner strip shows **SYNTHETIC DEMO DATA** whenever `/api/health` reports
+  `lake.mode = "sample"`, and the picker tags each synthetic race.
+- **UI latency** (`lib/debugLatency.ts`, `NEXT_PUBLIC_DEBUG_LATENCY=1`):
+  - every event id applied since the last paint is posted after two animation frames (after the paint)
+    to `/api/debug/latency`;
+  - it stops on a 403 (API debug off), and at most 50 posts are in flight.
+- **Container** (`docker/web/Dockerfile`, compose `web`):
+  - three stages on `node:26.13.0-bookworm-slim` (`npm ci`, `next build` with standalone output, runtime
+    with `node server.js` as `node`, uid 1000);
+  - a read-only root filesystem (tmpfs `/tmp`, `.next/cache`), `cap_drop: ALL`, `no-new-privileges`,
+    512 MiB, published on 127.0.0.1:3000 only;
+  - headers `nosniff`, `no-referrer`, `frame-ancestors 'none'`, and no `X-Powered-By`;
+  - Next.js telemetry is off (`NEXT_TELEMETRY_DISABLED=1`) in the image, the Makefile and CI.
+

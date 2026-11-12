@@ -110,6 +110,7 @@ def test_live_sse_events_heartbeat_and_disconnect_cleanup(
     ids = [str(uuid.uuid4()), str(uuid.uuid4())]
     events: list[tuple[str, str]] = []
     heartbeats = 0
+    snapshots = 0
     url = f"{base_url}/api/races/{SEASON}/{ROUND}/events"
     with httpx.Client(timeout=httpx.Timeout(10.0)) as client, client.stream("GET", url) as r:
         assert r.status_code == 200
@@ -129,6 +130,9 @@ def test_live_sse_events_heartbeat_and_disconnect_cleanup(
         for line in lines:
             if line.startswith("event: "):
                 name = line.removeprefix("event: ")
+                if name == "snapshot":
+                    snapshots += 1
+                    name = None
             elif line.startswith("id: ") and name is not None:
                 events.append((name, line.removeprefix("id: ")))
             elif line == ": heartbeat":
@@ -136,6 +140,7 @@ def test_live_sse_events_heartbeat_and_disconnect_cleanup(
             if len(events) == 2 and heartbeats >= 1:
                 break
     assert events == [("lap", ids[0]), ("pit_in", ids[1])]
+    assert snapshots == 2, "one snapshot after connect, one for the first lap-1 event"
     deadline = time.monotonic() + 5
     while _numsub(store) != 0:
         assert time.monotonic() < deadline, "subscription survived the client disconnect"
@@ -152,5 +157,5 @@ def test_live_sse_closes_after_session_end(base_url: str, store: R.RaceStore) ->
                 break
         store.end_session(SEASON, ROUND)
         names = [ln.removeprefix("event: ") for ln in lines if ln.startswith("event: ")]
-    assert names == ["session_end"]
+    assert names == ["snapshot", "session_end"]  # the connect snapshot (empty race) first
     assert _numsub(store) == 0

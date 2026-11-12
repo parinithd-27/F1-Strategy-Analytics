@@ -47,3 +47,24 @@ curl -N -s localhost:8000/api/races/2023/10/events
 `results/`, so the committed results are never overwritten by a demo.
 `make demo-clean` lists those folders and their checkpoints; `make demo-clean CONFIRM=yes` deletes
 them (and nothing outside `data/demo` and `data/checkpoints`). Do not run it while a replay is running.
+
+## Dashboard (Step 14)
+
+A Next.js dashboard on the API: race picker, timing tower, gap-to-leader chart, tyres, undercut
+alerts, replay control. Open **http://localhost:3000** (or `http://127.0.0.1:3000`; both are CORS
+origins of the API, `API_CORS_ORIGINS`). Live updates are pushed over SSE, including a full-state
+`snapshot` event after connect and once per leader lap; the dashboard never polls the race state.
+
+| Command | What runs |
+|---|---|
+| `make up` | infra, the `api` container (sample mode) and the `web` container (127.0.0.1:3000, non-root, read-only) |
+| `make api-up REPLAY=1` | lets the dashboard start replays (`FULL=1` for the 90 races of the HDFS lake) |
+| `make web` | Next.js dev server on 127.0.0.1:3000; stop the `web` container first (`docker compose stop web`) |
+| `make web-test` | lint, typecheck and the Vitest suites |
+| `make web-e2e` | Playwright smoke test against the API (needs `make api-up REPLAY=1`; downloads Chromium once into `~/.cache/ms-playwright`) |
+
+Pinned: Node 26.13.0 (LTS), Next.js 16.4.5, React 19.3.1, TypeScript 6.0.3. The API URL is
+`NEXT_PUBLIC_API_URL` (default `http://localhost:8000`, inlined at build time). With
+`NEXT_PUBLIC_DEBUG_LATENCY=1` and `make api-up DEBUG=1`, the dashboard posts its render time per
+event to `results/ui_latency.csv`. In sample mode a **SYNTHETIC DEMO DATA** banner is always shown.
+

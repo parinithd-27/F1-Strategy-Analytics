@@ -54,7 +54,7 @@ def create_app(settings: Settings | None = None, *, deps: ApiDeps | None = None)
     app.state.deps = deps
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.api_cors_origin],
+        allow_origins=list(settings.api_cors_origins),
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
         allow_credentials=False,

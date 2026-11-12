@@ -47,12 +47,16 @@ class LakeRace:
     results: tuple[tuple[int | None, int | None], ...] = ((1, 57), (2, 57), (3, 56))
     """(position, laps) rows."""
     laps: tuple[int, ...] = (1, 2, 3)
+    stints_synthetic: tuple[bool | None, ...] | None = (False, False)
+    """``is_synthetic`` of the race's stint rows; ``None`` = no stints partition."""
 
 
 DEFAULT_RACES = (
     LakeRace(2023, 5, "Miami Grand Prix"),
-    LakeRace(2024, 5, "Chinese Grand Prix", results=((1, 56), (2, 56))),
-    LakeRace(2025, 6, "Miami Grand Prix", results=((1, 57),)),
+    LakeRace(
+        2024, 5, "Chinese Grand Prix", results=((1, 56), (2, 56)), stints_synthetic=(True, True)
+    ),
+    LakeRace(2025, 6, "Miami Grand Prix", results=((1, 57),), stints_synthetic=None),
 )
 
 
@@ -88,6 +92,15 @@ def lake_files(races: Iterable[LakeRace]) -> dict[str, bytes]:
                     {
                         "driver_id": pa.array(["d0"] * len(r.laps)),
                         "lap": pa.array(list(r.laps), pa.int32()),
+                    }
+                )
+            )
+        if r.stints_synthetic is not None:
+            out[f"stints/{part}/part-00000-s.c000.snappy.parquet"] = _parquet_bytes(
+                pa.table(
+                    {
+                        "driver_id": pa.array([f"d{i}" for i in range(len(r.stints_synthetic))]),
+                        "is_synthetic": pa.array(list(r.stints_synthetic), pa.bool_()),
                     }
                 )
             )

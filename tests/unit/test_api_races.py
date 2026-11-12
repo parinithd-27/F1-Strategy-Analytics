@@ -32,10 +32,13 @@ from f1sa.api.catalog import (
 pytestmark = pytest.mark.anyio
 
 EXPECTED = [
-    {"season": 2023, "round": 5, "name": "Miami Grand Prix", "laps": 57},
-    {"season": 2024, "round": 5, "name": "Chinese Grand Prix", "laps": 56},
+    {"season": 2023, "round": 5, "name": "Miami Grand Prix", "laps": 57, "synthetic": False},
+    {"season": 2024, "round": 5, "name": "Chinese Grand Prix", "laps": 56, "synthetic": True},
 ]
-WITH_2025 = [*EXPECTED, {"season": 2025, "round": 6, "name": "Miami Grand Prix", "laps": 57}]
+WITH_2025 = [
+    *EXPECTED,
+    {"season": 2025, "round": 6, "name": "Miami Grand Prix", "laps": 57, "synthetic": False},
+]
 
 
 @pytest.fixture
@@ -44,7 +47,16 @@ def anyio_backend() -> str:
 
 
 def _rows(races: list[RaceInfo]) -> list[dict[str, Any]]:
-    return [{"season": r.season, "round": r.round, "name": r.name, "laps": r.laps} for r in races]
+    return [
+        {
+            "season": r.season,
+            "round": r.round,
+            "name": r.name,
+            "laps": r.laps,
+            "synthetic": r.synthetic,
+        }
+        for r in races
+    ]
 
 
 # ------------------------------------------------------------------ laps rule
@@ -87,14 +99,14 @@ def test_race_without_laps_partition_or_winner(tmp_path: Path) -> None:
     write_file_lake(tmp_path / "lake", races)
     reader = FileLakeReader(tmp_path / "lake" / "clean", allow_test_season=False)
     assert _rows(load_races(reader, allow_test_season=False)) == [
-        {"season": 2022, "round": 2, "name": "No winner", "laps": 44},
-        {"season": 2022, "round": 3, "name": None, "laps": 3},
+        {"season": 2022, "round": 2, "name": "No winner", "laps": 44, "synthetic": False},
+        {"season": 2022, "round": 3, "name": None, "laps": 3, "synthetic": False},
     ]
 
 
-def test_only_the_three_tables_are_readable(tmp_path: Path) -> None:
+def test_only_the_four_tables_are_readable(tmp_path: Path) -> None:
     reader = FileLakeReader(tmp_path, allow_test_season=True)
-    for table in ("stints", "pitstops", "../raw", "telemetry_raw"):
+    for table in ("pitstops", "telemetry_lap", "../raw", "telemetry_raw", "stints_tracinginsights"):
         with pytest.raises(CatalogError, match="not readable"):
             reader.partitions(table)
 
@@ -153,7 +165,7 @@ def test_httpfs_reader_stays_in_the_clean_zone(tmp_path: Path) -> None:
     fake, reader = _httpfs(tmp_path, allow=True)
     load_races(reader, allow_test_season=True)
     assert all(path.startswith("/f1/clean/") for _, path in fake.ops)
-    assert all(path.split("/")[3] in ("races", "results", "laps") for _, path in fake.ops)
+    assert {path.split("/")[3] for _, path in fake.ops} == {"races", "results", "laps", "stints"}
     before = len(fake.ops)
     for path in (
         "/f1/raw/jolpica/laps/season=2024/round=5/laps.json",
@@ -161,7 +173,8 @@ def test_httpfs_reader_stays_in_the_clean_zone(tmp_path: Path) -> None:
         "/f1/clean/races/../../raw",
         "/f1/features/pit_loss",
         "/f1/clean",
-        "/f1/clean/stints",
+        "/f1/clean/pitstops",
+        "/f1/clean/telemetry_raw/season=2024",
         "/f1/cleaner/races",
         "f1/clean/races",
     ):
@@ -208,7 +221,7 @@ async def test_catalog_caches_for_the_ttl(tmp_path: Path) -> None:
     now[0] = 10.5
     await catalog.races()
     assert catalog.loads == 2
-    assert (await catalog.get(2024, 5)) == RaceInfo(2024, 5, "Chinese Grand Prix", 56)
+    assert (await catalog.get(2024, 5)) == RaceInfo(2024, 5, "Chinese Grand Prix", 56, True)
     assert await catalog.get(2025, 6) is None
 
 
@@ -250,3 +263,36 @@ async def test_get_races_503_without_a_clean_zone(tmp_path: Path) -> None:
         resp = await c.get("/api/races")
     assert resp.status_code == 503
     assert resp.json() == {"detail": "clean zone unavailable"}
+
+
+# ------------------------------------------------------------------ synthetic flag
+def test_synthetic_comes_from_the_stints_of_each_race(tmp_path: Path) -> None:
+    races = (
+        LakeRace(2022, 1, "All synthetic", stints_synthetic=(True, True)),
+        LakeRace(2022, 2, "Mixed", stints_synthetic=(False, True)),
+        LakeRace(2022, 3, "Real", stints_synthetic=(False, False)),
+        LakeRace(2022, 4, "Null flags", stints_synthetic=(None, None)),
+        LakeRace(2022, 5, "No stints", stints_synthetic=None),
+    )
+    write_file_lake(tmp_path / "lake", races)
+    local = FileLakeReader(tmp_path / "lake" / "clean", allow_test_season=False)
+    flags = {r.round: r.synthetic for r in load_races(local, allow_test_season=False)}
+    assert flags == {1: True, 2: True, 3: False, 4: False, 5: False}
+    fake = DirFakeHttpFS()
+    fake.add_tree("/f1/clean", lake_files(races))
+    http = HttpFsLakeReader(
+        make_settings(tmp_path, data_lake_uri="hdfs://namenode:8020/f1"),
+        "/f1",
+        allow_test_season=False,
+        session=httpfs_session(fake),
+    )
+    assert load_races(http, allow_test_season=False) == load_races(local, allow_test_season=False)
+    assert {op for op, _ in fake.ops} <= {"LISTSTATUS", "OPEN"}
+    assert {p.split("/")[3] for _, p in fake.ops} == {"races", "results", "laps", "stints"}
+
+
+def test_stints_of_2025_are_never_read_unless_allowed(tmp_path: Path) -> None:
+    fake, reader = _httpfs(tmp_path, allow=False)
+    load_races(reader, allow_test_season=False)
+    assert not [p for _, p in fake.ops if "season=2025" in p]
+    assert any("/stints/season=2024/round=5" in p for _, p in fake.ops)

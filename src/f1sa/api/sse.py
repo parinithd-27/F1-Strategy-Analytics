@@ -18,6 +18,23 @@ Framing (one frame per Redis message, UTF-8)::
 * After ``session_end`` the stream ends. Pub/Sub keeps no history, so ``Last-Event-ID`` cannot
   be honoured and is ignored; ``/state`` gives the current state after a reconnect.
 
+Snapshots (pushed, never polled): the stream reads the race's full state from Redis (every
+driver hash + the order set, one pipeline, ``api/state.py``) and sends it as::
+
+    event: snapshot
+    id: snapshot-<lap>
+    data: {"type": "snapshot", "season", "round", "lap", "drivers", "order",
+           "event_id", "sse_sent_at_ms"}
+
+* once right after connect (``snapshot-0``; the drivers are found with one SCAN);
+* once per race lap: when a ``lap`` event arrives whose lap number is higher than the lap of the
+  last snapshot (the leader's lap), right after that lap frame. These read the drivers already
+  known (the previous snapshot and the events since), so they need no SCAN.
+
+The alert stream only says when a pair *becomes* a candidate, so these snapshots are what clears a
+stale ``undercut_flag`` in the browser. A snapshot that cannot be read (Redis error, a hash that
+breaks the contract) is skipped and logged; the event stream goes on.
+
 Clean-up: Starlette does not close the body iterator when the client goes away. So
 ``SSEResponse`` closes the subscription itself, in a ``finally`` shielded from cancellation. That
 covers ASGI spec < 2.4 (disconnect cancels the stream), >= 2.4 (``send`` raises ``OSError``) and
@@ -40,6 +57,12 @@ from redis.exceptions import RedisError
 from starlette.responses import StreamingResponse
 from starlette.types import Receive, Scope, Send
 
+from f1sa.api.state import (
+    StateContractError,
+    driver_ids_from_keys,
+    read_race_state,
+    scan_race_keys,
+)
 from f1sa.serving import keys as K
 from f1sa.streaming.redis_sink import now_ms
 
@@ -49,6 +72,9 @@ PREAMBLE = b"retry: 3000\n: connected\n\n"
 HEARTBEAT = b": heartbeat\n\n"
 IDLE_BACKOFF_S = 0.02
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+SNAPSHOT = "snapshot"
+SSE_EVENTS: tuple[str, ...] = (*K.EVENT_TYPES, SNAPSHOT)
+"""Event names on the SSE stream: the Pub/Sub types plus the API's own ``snapshot``."""
 ID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "f1sa:race-events")
 """Namespace of the derived ids of messages without ``payload.event_id``."""
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -68,7 +94,7 @@ def event_id_for(raw: str, message: Mapping[str, Any]) -> str:
 
 def format_event(name: str, event_id: str, data: Mapping[str, Any]) -> bytes:
     """One SSE frame; ``json.dumps`` never emits a newline, so ``data`` is a single line."""
-    if name not in K.EVENT_TYPES or "\n" in event_id or "\r" in event_id:
+    if name not in SSE_EVENTS or "\n" in event_id or "\r" in event_id:
         raise ValueError(f"invalid SSE event {name!r} / id {event_id!r}")
     body = json.dumps(data, allow_nan=False, separators=(",", ":"), sort_keys=True)
     return f"event: {name}\nid: {event_id}\ndata: {body}\n\n".encode()
@@ -101,6 +127,58 @@ class EventStream:
         self.sent = 0
         self.skipped = 0
         self.heartbeats = 0
+        self.snapshots = 0
+        self.snapshot_errors = 0
+        self.snapshot_lap: int | None = None
+        """Lap of the last snapshot (0 = the connect snapshot); a higher lap event triggers one."""
+        self.known_drivers: set[str] = set()
+        self._pending_lap: int | None = None
+
+    async def snapshot(self, lap: int) -> bytes | None:
+        """The ``snapshot`` frame of the race's current Redis state, or ``None`` when it cannot be
+        read. The first one finds the drivers with one SCAN; later ones read the known drivers."""
+        try:
+            if self.snapshot_lap is None:
+                keys = await scan_race_keys(self.client, self.season, self.round)
+                self.known_drivers |= set(driver_ids_from_keys(keys, self.season, self.round))
+            state = await read_race_state(
+                self.client, self.season, self.round, sorted(self.known_drivers)
+            )
+        except (StateContractError, RedisError, OSError) as exc:
+            self.snapshot_errors += 1
+            log.warning(
+                "snapshot skipped",
+                extra={"channel": self.channel, "lap": lap, "exc_class": type(exc).__name__},
+            )
+            return None
+        finally:
+            self.snapshot_lap = lap
+        self.known_drivers |= set(state.drivers) | {o.driver_id for o in state.order}
+        event_id = f"snapshot-{lap}"
+        data = {
+            "type": SNAPSHOT,
+            "lap": lap,
+            **state.model_dump(),
+            "event_id": event_id,
+            "sse_sent_at_ms": self.clock_ms(),
+        }
+        self.snapshots += 1
+        return format_event(SNAPSHOT, event_id, data)
+
+    def _note(self, msg: Mapping[str, Any]) -> int | None:
+        """Remember the event's driver; the lap number of a ``lap`` event that needs a snapshot."""
+        payload = msg.get("payload")
+        if not isinstance(payload, Mapping):
+            return None
+        driver = payload.get("driver_id")
+        if isinstance(driver, str) and K.DRIVER_ID_RE.fullmatch(driver):
+            self.known_drivers.add(driver)
+        lap = payload.get("lap")
+        if msg.get("type") != "lap" or isinstance(lap, bool) or not isinstance(lap, int):
+            return None
+        if self.snapshot_lap is not None and lap <= self.snapshot_lap:
+            return None
+        return lap
 
     def frame(self, data: str | bytes) -> tuple[bytes, str] | None:
         """``(frame, type)`` for one Pub/Sub message body, or ``None`` if it is skipped."""
@@ -128,6 +206,7 @@ class EventStream:
             return None
         if self.on_sent is not None:
             self.on_sent(eid, out)
+        self._pending_lap = self._note(msg)
         return frame, msg["type"]
 
     async def frames(self) -> AsyncIterator[bytes]:
@@ -136,6 +215,9 @@ class EventStream:
         try:
             await self.pubsub.subscribe(self.channel)
             yield PREAMBLE
+            first = await self.snapshot(0)
+            if first is not None:
+                yield first
             loop = asyncio.get_running_loop()
             next_beat = loop.time() + self.heartbeat_s
             while True:
@@ -160,6 +242,11 @@ class EventStream:
                 yield framed[0]
                 if framed[1] == "session_end":
                     return
+                lap, self._pending_lap = self._pending_lap, None
+                if lap is not None:
+                    snap = await self.snapshot(lap)
+                    if snap is not None:
+                        yield snap
         finally:
             await self.close()
 
@@ -187,6 +274,7 @@ class EventStream:
                 "sent": self.sent,
                 "skipped": self.skipped,
                 "heartbeats": self.heartbeats,
+                "snapshots": self.snapshots,
             },
         )
 

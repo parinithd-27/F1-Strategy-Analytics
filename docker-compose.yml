@@ -1,5 +1,5 @@
 # Local infrastructure for F1 Strategy Analytics.
-# Profiles: core (kafka, redis, app, api) | hdfs (namenode, datanode) | spark (master + 2 workers)
+# Profiles: core (kafka, redis, app, api, web) | hdfs (namenode, datanode) | spark (master + 2 workers)
 #           full = core + hdfs + spark.
 # Host ports reserved: 3000 web, 6379 redis, 8000 api, 9092 kafka, 9870 namenode UI.
 # Host ports are overridable via the project .env (see .env.example). Memory budget:
@@ -175,7 +175,7 @@ services:
       PYTHONPATH: /workspace/src
       API_HOST: 0.0.0.0
       API_PORT: "8000"
-      API_CORS_ORIGIN: ${API_CORS_ORIGIN:-http://localhost:3000}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       DATA_LAKE_URI: ${API_DATA_LAKE_URI:-file:///workspace/data/lake}
       KAFKA_BOOTSTRAP: kafka:29092
       KAFKA_TOPIC_EVENTS: ${KAFKA_TOPIC_EVENTS:-f1.race.events}
@@ -217,6 +217,43 @@ services:
       timeout: 10s
       retries: 6
       start_period: 15s
+    restart: unless-stopped
+
+  # Next.js dashboard (Step 14): non-root, read-only root filesystem, published on the host's
+  # 127.0.0.1 only. The browser calls the API at NEXT_PUBLIC_API_URL (inlined at build time); the
+  # API's CORS origin is http://localhost:3000, so open the dashboard via localhost, not 127.0.0.1.
+  web:
+    image: f1sa-web:dev
+    build:
+      context: ./web
+      dockerfile: ../docker/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_DEBUG_LATENCY: ${NEXT_PUBLIC_DEBUG_LATENCY:-0}
+    profiles: [core, full]
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
     restart: unless-stopped
 
   # ---------------------------------------------------------------- hdfs

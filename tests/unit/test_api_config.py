@@ -15,7 +15,7 @@ def test_defaults_are_closed() -> None:
     s = Settings()
     assert s.api_host == "127.0.0.1"
     assert s.api_port == 8000
-    assert s.api_cors_origin == "http://localhost:3000"
+    assert s.api_cors_origins == ["http://localhost:3000", "http://127.0.0.1:3000"]
     assert (s.enable_replay, s.enable_debug, s.allow_test_season) == (False, False, False)
     assert s.api_max_replays == 1
     assert s.api_sse_heartbeat_s == 15.0
@@ -40,15 +40,21 @@ def test_flags_parse_from_env(monkeypatch: pytest.MonkeyPatch, raw: str, expecte
     "origin",
     ["*", "http://*.example", "localhost:3000", "ftp://localhost", "http://localhost:3000/app"],
 )
-def test_cors_origin_must_be_one_http_origin(origin: str) -> None:
-    with pytest.raises(ValidationError, match="api_cors_origin"):
-        Settings(api_cors_origin=origin)
+def test_cors_origins_must_be_http_origins(origin: str) -> None:
+    with pytest.raises(ValidationError, match="api_cors_origins"):
+        Settings(api_cors_origins=origin)
+    with pytest.raises(ValidationError, match="api_cors_origins"):
+        Settings(api_cors_origins=f"http://localhost:3000,{origin}")
 
 
-def test_cors_origin_trailing_slash_is_stripped() -> None:
-    assert Settings(api_cors_origin="http://localhost:3000/").api_cors_origin == (
-        "http://localhost:3000"
+def test_cors_origins_from_env_are_comma_separated(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "API_CORS_ORIGINS", " http://localhost:3000/ , http://127.0.0.1:3000,http://localhost:3000"
     )
+    assert Settings().api_cors_origins == ["http://localhost:3000", "http://127.0.0.1:3000"]
+    monkeypatch.setenv("API_CORS_ORIGINS", " , ")
+    with pytest.raises(ValidationError, match="api_cors_origins"):
+        Settings()
 
 
 @pytest.mark.parametrize(

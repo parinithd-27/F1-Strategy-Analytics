@@ -61,6 +61,7 @@ class RaceOut(_Out):
     round: int
     name: str | None
     laps: int
+    synthetic: bool = Field(description="tyre/telemetry data of this race is generated (sample)")
 
 
 class CheckOut(_Out):
@@ -85,9 +86,20 @@ class HealthChecks(_Out):
     model: ModelCheckOut
 
 
+class LakeOut(_Out):
+    """Where the races come from. Informational: it never changes the health status."""
+
+    scheme: Literal["file", "hdfs"]
+    mode: Literal["sample", "full"] | None = Field(
+        description="sample when any listed race is synthetic; null if the clean zone is unreadable"
+    )
+    synthetic: bool | None
+
+
 class HealthOut(_Out):
     status: Literal["ok", "degraded"]
     checks: HealthChecks
+    lake: LakeOut
 
 
 class ReplayIn(BaseModel):

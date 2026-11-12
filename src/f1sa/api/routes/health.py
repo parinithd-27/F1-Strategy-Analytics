@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from f1sa.api.catalog import CatalogError
 from f1sa.api.deps import Deps
 from f1sa.api.health import check_redis, run_kafka_check
-from f1sa.api.models import CheckOut, HealthChecks, HealthOut, ModelCheckOut
+from f1sa.api.models import CheckOut, HealthChecks, HealthOut, LakeOut, ModelCheckOut
 
 router = APIRouter(tags=["health"])
 
@@ -24,6 +26,16 @@ async def health(deps: Deps) -> JSONResponse:
         check_redis(deps.redis, timeout), run_kafka_check(deps.kafka_check, timeout)
     )
     m = deps.model
+    scheme: Literal["file", "hdfs"] = (
+        "hdfs" if deps.settings.data_lake_uri.startswith("hdfs://") else "file"
+    )
+    try:
+        races = await deps.catalog.races()
+    except CatalogError:
+        lake = LakeOut(scheme=scheme, mode=None, synthetic=None)
+    else:
+        synthetic = any(r.synthetic for r in races)
+        lake = LakeOut(scheme=scheme, mode="sample" if synthetic else "full", synthetic=synthetic)
     body = HealthOut(
         status="ok" if redis_res.ok and kafka_res.ok and m.ok else "degraded",
         checks=HealthChecks(
@@ -42,5 +54,6 @@ async def health(deps: Deps) -> JSONResponse:
                 k=m.k,
             ),
         ),
+        lake=lake,
     )
     return JSONResponse(body.model_dump(), status_code=200 if body.status == "ok" else 503)

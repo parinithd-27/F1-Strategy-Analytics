@@ -41,12 +41,12 @@ test-int: ## Integration tests (needs infra); exit 5 = none collected is OK
 
 # ---------------------------------------------------------------- infrastructure (Docker Compose)
 COMPOSE := docker compose
-CORE_SERVICES := kafka redis app api
+CORE_SERVICES := kafka redis app api web
 FULL_SERVICES := $(CORE_SERVICES) namenode datanode httpfs spark-master spark-worker-1 spark-worker-2
 
 .PHONY: up up-full down ps logs nuke
 
-up: api-dirs ## Start core infra (kafka, redis, app, api) and wait until healthy
+up: api-dirs ## Start core infra (kafka, redis, app, api, web) and wait until healthy
 	$(COMPOSE) --profile core up -d --build
 	scripts/wait_for.sh -t 240 $(CORE_SERVICES)
 
@@ -207,3 +207,30 @@ demo-clean: ## Delete demo outputs data/demo/<run_id> and demo/replay checkpoint
 
 test-api: ## API unit tests (fakeredis, no infra)
 	$(UV) run pytest tests/unit/test_api_*.py tests/unit/test_makefile_api.py tests/unit/test_demo_outputs.py tests/unit/test_demo_clean.py -q
+
+# ---------------------------------------------------------------- dashboard (Step 14)
+# `make web` runs the Next.js dev server on 127.0.0.1:3000 (the API's CORS origin is
+# http://localhost:3000, so it must be port 3000: stop the compose `web` container first; the
+# preflight says so). `make web-e2e` builds and starts the app and runs the Playwright smoke test
+# against the API (sample mode with replay: `make api-up REPLAY=1`).
+WEB_ENV := NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=$(or $(NEXT_PUBLIC_API_URL),http://localhost:8000)
+
+.PHONY: web web-test web-build web-e2e
+web/node_modules: web/package-lock.json
+	cd web && npm ci --no-audit --no-fund
+	@touch web/node_modules
+
+web: web/node_modules ## Next.js dev server on 127.0.0.1:3000 (needs the API; stop the web container first)
+	@node web/scripts/check-port.mjs 127.0.0.1 3000
+	cd web && $(WEB_ENV) npm run dev
+
+web-test: web/node_modules ## Dashboard lint + typecheck + Vitest
+	cd web && npm run lint && npm run typecheck && npm test
+
+web-build: web/node_modules ## Production build of the dashboard (.next/standalone)
+	cd web && $(WEB_ENV) npm run build
+
+web-e2e: web/node_modules ## Playwright smoke test (needs make api-up REPLAY=1; downloads Chromium once)
+	@node web/scripts/check-port.mjs 127.0.0.1 3000
+	cd web && npx playwright install chromium
+	cd web && $(WEB_ENV) npm run build && $(WEB_ENV) npm run test:e2e

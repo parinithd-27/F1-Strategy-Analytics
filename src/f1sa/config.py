@@ -10,11 +10,11 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Any, Self
 from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 JOLPICA_HARD_LIMIT_PER_HOUR = 500
 """Jolpica's published per-hour request limit; the configured budget may not exceed it."""
@@ -74,8 +74,11 @@ class Settings(BaseSettings):
     """Bind address of ``python -m f1sa.api``; only the compose service sets 0.0.0.0 (inside its
     container, published on the host's 127.0.0.1 only)."""
     api_port: int = Field(default=8000, ge=1, le=65535)
-    api_cors_origin: str = "http://localhost:3000"
-    """The one browser origin allowed by CORS (the Next.js dashboard)."""
+    api_cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
+    )
+    """Browser origins allowed by CORS (the Next.js dashboard, by both of its local names).
+    ``API_CORS_ORIGINS`` is a comma-separated list; ``*`` is refused."""
     enable_replay: bool = False
     """``ENABLE_REPLAY=1`` enables ``POST /api/races/{s}/{r}/replay``."""
     enable_debug: bool = False
@@ -158,23 +161,32 @@ class Settings(BaseSettings):
             raise ValueError(f"hdfs_httpfs_url must be http(s)://host:port, got {value!r}")
         return value.strip().rstrip("/")
 
-    @field_validator("api_cors_origin")
+    @field_validator("api_cors_origins", mode="before")
     @classmethod
-    def _check_cors_origin(cls, value: str) -> str:
-        value = value.strip().rstrip("/")
-        parsed = urlparse(value)
-        if (
-            parsed.scheme not in _HTTP_SCHEMES
-            or not parsed.hostname
-            or parsed.path
-            or parsed.query
-            or parsed.fragment
-            or "*" in value
-        ):
-            raise ValueError(
-                f"api_cors_origin must be one http(s)://host[:port] origin, got {value!r}"
-            )
-        return value
+    def _check_cors_origins(cls, value: Any) -> list[str]:
+        items = value.split(",") if isinstance(value, str) else value
+        if not isinstance(items, list | tuple):
+            raise ValueError("api_cors_origins must be a comma-separated list of origins")
+        out: list[str] = []
+        for raw in items:
+            origin = str(raw).strip().rstrip("/")
+            parsed = urlparse(origin)
+            if (
+                parsed.scheme not in _HTTP_SCHEMES
+                or not parsed.hostname
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or "*" in origin
+            ):
+                raise ValueError(
+                    f"api_cors_origins entries must be http(s)://host[:port] origins, got {raw!r}"
+                )
+            if origin not in out:
+                out.append(origin)
+        if not out:
+            raise ValueError("api_cors_origins must name at least one origin")
+        return out
 
     @field_validator("api_host")
     @classmethod
