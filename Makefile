@@ -151,3 +151,24 @@ nuke: ## DESTRUCTIVE: remove containers AND volumes (requires CONFIRM=yes)
 	@echo "WARNING: this deletes all f1sa volumes (Kafka log data, HDFS namenode/datanode data)."
 	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: re-run as 'make nuke CONFIRM=yes'." >&2; exit 1; fi
 	$(COMPOSE) --profile full down -v --remove-orphans
+
+# ---------------------------------------------------------------- streaming (Step 12)
+# stream-demo never starts, stops or rebuilds services: it needs `make up` (kafka, redis) already
+# running. Sample mode runs producer, stream job and subscriber on the host (the first run fetches
+# the pinned Kafka connector into data/cache/ivy); FULL=1 runs all three in the app container.
+SEASON ?= 2024
+ROUND ?= 5
+SPEED ?= 10
+STREAM_DEMO_ARGS = --season $(SEASON) --round $(ROUND) --speed $(SPEED)
+
+.PHONY: stream-demo stream-parity-full
+stream-demo: ## Replay one race: Kafka -> Structured Streaming -> Redis + latency CSV (SEASON ROUND SPEED [FULL=1]; needs make up)
+ifeq ($(FULL),)
+	@test -d data/lake/features/pit_loss -a -d data/lake/clean/laps || { echo "Missing data/lake: run 'make etl-sample features-sample' first." >&2; exit 1; }
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python experiments/streaming_latency.py $(STREAM_DEMO_ARGS)
+else
+	$(APP_EXEC) python experiments/streaming_latency.py $(STREAM_DEMO_ARGS)
+endif
+
+stream-parity-full: ## Batch vs stream feature parity over 2021-2024 (app container, HDFS lake; 2025 never read)
+	$(APP_EXEC) python experiments/stream_parity.py --seasons 2021-2024

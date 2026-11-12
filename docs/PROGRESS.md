@@ -637,6 +637,32 @@
   - Tests: `test_keys.py`, `test_redis_store.py` (sync + async on fakeredis), `test_latency_bench.py`,
     `test_config.py` (new setting), and `tests/integration/test_redis_store.py` (real Redis 8.10: batch, pubsub,
     TTL, async).
+- Step 12 (W6): Kafka race replay and Structured Streaming undercut detector into Redis (#19, #20, #23, #31)
+  - User decisions: track status and race distance cannot be computed live (the heuristic uses the whole race's
+    green median; `race_laps` is the winner's lap count). They are replayed as race context on each lap event
+    (`track_neutral`, `track_red_flag`, `race_laps`; disclosed). On the host the Kafka connector comes from
+    `spark.jars.packages` (pinned 4.2.1, ivy cache `data/cache/ivy`).
+  - `streaming/`: `events.py` (schema, JSON, Spark StructType, infra-header filter), `producer.py` (one race in
+    race order x SPEED, acks=all, idempotent, key=driver_id, `session_end` per partition, 2025 refused),
+    `stream_job.py` (readStream latest, maxOffsetsPerTrigger, trigger 500 ms, foreachBatch, progress listener),
+    `processor.py` (driver-side state, watermark over partitions, state snapshot and batch-id replay skip),
+    `live_state.py` / `live_features.py` (Spark-free ports of the 21 `real` inputs and the shared rule),
+    `priors.py` (pit-loss and out-lap priors of earlier races, one partition read), `redis_sink.py` (one
+    `write_batch` per batch and race, `end_session`, nothing after it), `latency.py`, `demo.py`, `parity.py`.
+  - `make stream-demo SEASON ROUND SPEED [FULL=1]`, `make stream-parity-full`; features/, model/, serving/ untouched.
+  - Parity (21 inputs, docs/architecture.md "Streaming"): full lake 2021-2024, 90 races, 34,608 eligible pairs at
+    every decision lap and 157 labelled attempts identical; max input diff 0.0, max P diff 3.3e-16
+    (`results/stream_parity_full.csv`). Sample and Step 8 scenarios too, at batch sizes 1/7/50 and a lagging
+    partition, with the rehearsal model and the deployed model.
+  - Runs (sample 2024 R5): host at speed 60 and 10 and FULL=1 at 60, 20 drivers in the order set, TTL ~3600 s
+    after session_end. Recorded run (`make stream-demo` speed 60, after the alert policy): 1,252 messages, end
+    to end p50 814 / p95 1481 / p99 3303 ms; the 500 ms trigger dominates.
+  - Tests: 12 new unit files (parity, events, producer, live state and features, priors, sink, job, latency,
+    demo, Makefile) and `tests/integration/test_streaming.py` (real Kafka + Redis, speed 60, infra message).
+  - Alert policy (`alerts.py`; `reason`/`trigger` in `events.UndercutAlert`): `opportunity` on a new candidate
+    or a P crossing 0.5 upward, `attempt` (P at L-1) when the attacker pits; hashes, rule, scorer, parity
+    unchanged. 2024 R5: 409 -> 141 alerts (113 new, 19 crossed, 9 attempts = batch detector-eligible attempts,
+    labelled hulkenberg/bottas L-1=7 included); `parity.check_alerts` in the unit and integration tests.
 ## Next
 - User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
   `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
@@ -653,13 +679,18 @@
 - Step 10: scalability and partitioning experiments.
 - After committing Step 9c, optionally run `make model-save-full FORCE=1` so that `git_dirty` is false in the
   deployment metadata.
-- Step 12: write through `serving.redis_store.RaceStore.write_batch` once per micro-batch, and call `end_session`
-  on `session_end`. Stop writing a race after its `session_end` (a later write would refresh the 6 h safety TTL).
 - S16: rerun `uv run python experiments/redis_latency.py` with only the core profile up (`make down` and then
   `make up`) and compare it with the Step 11 run (see Known issues).
-- Step 12: load `lr/scorer.json` with `LRScorer.load` in the stream job; compute the inputs exactly as
-  `features/undercut.py` does at L-1.
+- S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
+  run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
 ## Known issues
+- Step 12: `track_neutral`, `track_red_flag` and `race_laps` on the lap events are hindsight values (whole-race
+  heuristic, winner's lap count); live they would come from race control and the scheduled distance.
+- Step 12: `redis_written_at_ms` is the client time just before the batch's single pipeline is sent (a PUBLISH
+  in the pipeline cannot carry its completion time); the write duration is in `results/stream_batches.jsonl`.
+  The first batch of a race also loads its priors (Spark), so p99 latency includes ~2-3 s once per race.
+- Step 12: a car awaited by a decision (lapped car, or a missing car ahead) counts as retired after 2 leader
+  lap times; driver state survives restarts only through `driver_state/state.json` in the same checkpoint.
 - Redis latency varies from run to run on this WSL2 / Docker Desktop host.
   - An earlier run in the same session met every schedule: 60.00/s with 0 late ticks; write p99 3.0 ms at 60/s,
     HGETALL p99 0.84 ms.
@@ -716,11 +747,8 @@
   calibration. The ECE bootstrap interval can sit above the point value (resampling duplicates bins).
 - LOSO uses raw class-weighted scores, so its Brier and ECE are not comparable with the calibrated validation
   numbers.
-- The streaming side (Step 12) must compute `restart_lap` with the same 1-lap / 3-lap red-flag rule.
 - `make test-int` still treats pytest exit 5 (no tests collected) as success. That can only happen now if the
   integration tests are deselected.
-- The integration test writes one `infra_test` message (header `test=infra`) to `f1.race.events` on each run. S12
-  consumers must use their own group and offsets, or filter out that header.
 - The first `make up` builds the app image, which needs network access (PyPI and Maven Central). Later runs are offline.
 - If the host UID is not 1000, set `APP_UID` in `.env` before building, so that files written to data/ and results/
   stay owned by the host user.
@@ -807,3 +835,8 @@ Step 4C → model (needs `make up-full`): `make model-dev-tyre-full model-dev-ti
 `uv run pytest tests/unit/test_model_ti_inputs.py tests/unit/test_model_pipeline.py tests/unit/test_makefile_full.py -q`.
 Determinism: run those three make targets twice and compare `sha256sum` of the 42 files with
 `data/dev_ti_tyre_reference.sha` (expect all OK); `make model-dev-full` then `sha256sum -c data/real_dev_committed.sha`.
+
+Step 12 (needs `make up`; `make up-full` for FULL=1 and parity): `make stream-demo SEASON=2024 ROUND=5 SPEED=10`
+(add `FULL=1` for HDFS), `make stream-parity-full` (expect `mismatching races: 0`), then
+`uv run pytest tests/unit/test_stream_parity.py tests/unit/test_live_features.py tests/unit/test_stream_job.py -q`
+and `uv run pytest tests/integration/test_streaming.py -q -m integration`.

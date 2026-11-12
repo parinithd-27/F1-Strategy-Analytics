@@ -513,3 +513,116 @@ The key contract in CLAUDE.md is the only key layout. `keys.py` builds the names
   in-container floor comes from `redis-cli --latency -i 1` repeated 30 times, because without a TTY it exits after
   one 1 s summary. Results go to `results/redis_latency.csv`, and the environment fingerprint is appended to
   `results/README.md`.
+
+## Streaming (`streaming/`, Step 12)
+```
+clean zone (one race) --producer: race order x SPEED, key=driver_id, acks=all, idempotent--> Kafka f1.race.events (3 partitions)
+  --Structured Streaming: startingOffsets=latest, maxOffsetsPerTrigger, trigger 500 ms, header test=infra dropped-->
+  foreachBatch (StreamProcessor, driver-side state) --shared rule + pure-Python calibrated LR-->
+  RaceStore.write_batch (one pipeline per micro-batch and race) --> Redis hash / zset / pubsub --> latency subscriber
+```
+- **Producer** (`producer.py`): reads only the race's `season=S/round=R` clean partitions. Events in race order:
+  - `pit_in` (in-lap L) just before `lap` L at the line crossing;
+  - `pit_out` (L+1) at the crossing plus the stop time, never after the next crossing;
+  - one `session_end` per partition.
+
+  Season 2025 is refused unless `--allow-test-season` is given.
+- **Event schema** (`events.py`): `RaceEvent` with JSON (de)serialisation and the matching Spark `StructType`.
+  - Besides the requested fields it carries `race_time_s` (pacing and watermark) and three **replayed context**
+    fields: `track_neutral`, `track_red_flag` and `race_laps`.
+- **Stream job** (`stream_job.py`, `processor.py`):
+  - The state is driver-side inside `foreachBatch`; there is no Spark stateful operator.
+  - It is snapshotted to `data/checkpoints/<name>/driver_state/state.json` after every batch. A restarted job
+    restores it and skips a replayed `batch_id`.
+  - On `session_end` from every partition, the job evaluates what is left, writes, calls `end_session`, and then
+    writes nothing more for that race.
+  - Scoring uses `lr/scorer.json` of `models/undercut/deploy_real_G3.5_k2`. The metadata must say `real`,
+    G = 3.5, k = 2.
+  - Outputs: `results/stream_progress.jsonl` (`StreamingQueryProgress`) and `results/stream_batches.jsonl`
+    (per batch counts and Redis write time), both started fresh each run.
+  - On the host, the Kafka connector comes from `spark.jars.packages` (the exact pinned coordinate) with the ivy
+    cache in `data/cache/ivy`. In the app image it is already installed.
+- **When a decision is evaluated** (`live_state.py`): the batch sees the whole race, the stream only what has
+  arrived.
+  - A pair with attacker A at decision lap L-1 is evaluated once the watermark (the minimum race-time high-water
+    mark over the partitions) passes `T_A(L-1) + max(pit_loss_prior, 0)`. By then every crossing that the rule
+    and the rejoin-traffic feature read has arrived.
+  - It waits longer if the car at A's position − 1 has not arrived, or if a car whose L-2 crossing lies between
+    D and A (or in the rejoin window) has not completed L-1 (a lapped car). The wait ends when that car arrives,
+    or after 2 × the leader's lap time, when it is treated as retired.
+  - `session_end` flushes everything left.
+
+### Feature parity: the 21 `real` inputs at decision time
+| Input | How the stream gets it |
+|---|---|
+| gap_s, gap_ahead_change_1l/_3l | live: exact port of `df_jobs.timing_gaps` over the received laps |
+| attacker_position | live: Jolpica position on A's lap event |
+| attacker/defender_stint_laps | live: stint start = 1 + the last `pit_in` lap before the decision lap |
+| rejoin_traffic_cars, rejoin_nearest_ahead_s | live: port of `_rejoin_traffic` (with the prior pit loss) |
+| pace_delta_last3_s, attacker/defender_deg_slope_s_per_lap, deg_slope_delta_s_per_lap | live ports of `lap_decision_features` (Spark HALF_UP `round`; `regr_slope` = `ck / m2` in Spark's update order). The green-lap filter uses the **replayed** `track_neutral` |
+| laps_remaining | **replayed** `race_laps` − (L-1) |
+| pit_loss_prior_s, pit_loss_source | prior: `features/pit_loss` row of the race (earlier races only), loaded once per race |
+| {A,D}_expected_outlap_pace_residual_s / _source, {A,D}_expected_stop_delta_s | prior: `features/outlap_features`, max per driver (as `_driver_priors`), source → `none` |
+
+The rule also needs the following:
+- `team_key`: the lineage key from the entry list, loaded with the priors;
+- the pit flags, from the pit events;
+- track green and the restart lap: the replayed flags, through the ported 1-lap / 3-lap red-flag rule.
+
+**Hindsight disclosure (user decision).** Two inputs cannot be reproduced live from events up to L-1:
+- **Track status.** The Jolpica heuristic divides each lap by the whole race's green median, so a lap's flag can
+  depend on later laps.
+- **`race_laps`.** This is the winner's lap count from the post-race results.
+
+The replay therefore carries the batch values on each lap event. A live deployment would take them from the
+race-control feed (SC/VSC/red flag) and the scheduled distance. They are the only non-causal values in the
+stream (`events.CONTEXT_FIELDS`, `live_features.CONTEXT_INPUTS`). The stream never reads the target race's clean
+or feature tables apart from the earlier-race priors and the entry list.
+
+**Parity check** (`parity.py`, `tests/unit/test_stream_parity.py`, `make stream-parity-full`):
+- Races are replayed through `StreamProcessor` in simulated micro-batches (sizes 1, 7 and 50 over 3 partitions,
+  plus one variant with a lagging partition).
+- The check compares the eligible pair set at every decision lap, and for every labelled attempt the 21 inputs
+  and the probability against Spark's `PipelineModel.transform` + `Calibrator` (tolerance 1e-9).
+- Full lake, 2021–2024: 90 races, 34,608 eligible pairs and 157 labelled attempts matched. The maximum input
+  difference is 0.0 and the maximum probability difference is 3.3e-16 (`results/stream_parity_full.csv`).
+
+### Redis writes and latency fields
+- **One `write_batch` per micro-batch and race:**
+  - all driver hashes: live position, gaps of the latest lap, compound or `UNKNOWN`, tyre age, last lap,
+    `undercut_flag` (1 when the car is a rule-eligible attacker at its latest evaluated decision lap) and
+    `undercut_prob` (its calibrated P);
+  - the full order set (unique live rank: laps completed, then crossing time);
+  - `lap` / `pit_in` / `pit_out` events, and the `undercut_alert` messages the alert policy selects (below).
+- **Latency fields.** Every payload carries `produced_at_ms`, `batch_received_at_ms` and `redis_written_at_ms`.
+  - A PUBLISH inside the pipeline cannot carry the time the pipeline finished, so `redis_written_at_ms` is the
+    client time just before the batch is sent.
+  - Redis runs one pipeline in order, so a subscriber sees an event only after the batch's state writes.
+  - The measured write time is in `stream_batches.jsonl`.
+- **Alert policy** (`alerts.py`). The rule and the scorer still evaluate every eligible pair on every lap,
+  and every driver hash still carries `undercut_flag` / `undercut_prob` for its latest decision lap. Only the
+  published alerts are thinned, so the dashboard and its aria-live feed see changes, not every candidate on
+  every lap. Payload schema: `events.UndercutAlert` + `events.alert_spark_schema()`, with `reason` and
+  `trigger`.
+
+  | reason | trigger | published when |
+  |---|---|---|
+  | `opportunity` | `new_candidate` | the pair is eligible at decision lap L-1 and was not at L-2 |
+  | `opportunity` | `probability_crossed` | the pair was eligible at L-2 with P < 0.5 and has P >= 0.5 at L-1 |
+  | `attempt` | `pit_in` | the attacker of a pair eligible at L-1 pits on L (P at L-1) |
+
+  - At most one opportunity alert per pair and lap, and one attempt alert per attacker and lap.
+  - The threshold is the deployed model's `decision_threshold` (0.5).
+  - Each attacker's decisions are evaluated strictly in lap order, so "the previous lap" is always known. The
+    attempt alert is emitted by whichever arrives second, the decision or the `pit_in`. Together these make
+    the published alerts independent of how the stream is cut into micro-batches (tested).
+  - `parity.check_alerts` checks the policy against the batch tables in the unit and integration tests:
+    - `new_candidate` alerts equal the batch pairs that become eligible;
+    - `attempt` alerts equal the batch attempts with `detector_eligible`, so every labelled attempt has one.
+  - Sample 2024 R5: 409 eligible pairs over the race now give 141 alerts (113 new candidates, 19 threshold
+    crossings, 9 attempts). The race's one labelled attempt (hulkenberg on bottas, decision lap 7) is among
+    the 9.
+- **Latency run.** `make stream-demo` (`demo.py`, `experiments/streaming_latency.py`) writes
+  `results/streaming_latency.csv` with three segments plus end to end, and the alert `reason` and `trigger`.
+  The producer, the job and the subscriber run on one host (the WSL host, or all in the app container with
+  `FULL=1`), so all times come from one clock.
