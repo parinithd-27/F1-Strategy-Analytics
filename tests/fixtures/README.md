@@ -23,3 +23,14 @@
   `drivers_2023` and `constructors_2023` are season-level and trimmed the same way.
 
 No other values were edited. Do not add data beyond what the tests need (see `DATA_LICENSES.md`).
+
+## `tracinginsights/`: hand-made files in the TracingInsights format (invented values)
+
+- **Not real data.** The files copy the *structure* of a TracingInsights Race folder
+  (`session_laptimes.json`, `rcm.json`, `session_info.json`, `drivers.json`, `<DRV>/<lap>_tel.json`:
+  42 lap fields, 9 race-control fields, 18 telemetry channels, `"None"` strings for missing values).
+  Every value is invented, so no Formula 1 timing data is committed.
+- **Generated** by `tracinginsights/make_fixtures.py`, which documents the scenario (3 drivers × 5 laps, a pit stop
+  with a used set, missing and UNKNOWN compounds, a retired lap, SC / VSC / red flag / penalty messages, boundary
+  samples shared by consecutive lap files, a telemetry gap and a driver without telemetry).
+  `test_tracinginsights_parse.py::test_fixtures_regenerate` checks that the script reproduces the committed bytes.

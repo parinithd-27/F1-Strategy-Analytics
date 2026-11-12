@@ -156,3 +156,26 @@ def test_httpfs_healthy_when_hdfs_profile_up() -> None:
     if not _service_healthy("namenode"):
         pytest.skip("hdfs profile not running (start it with `make up-full`)")
     assert _service_healthy("httpfs"), "httpfs must be healthy whenever the hdfs profile is up"
+
+
+def test_spark_in_app_writes_hdfs_with_replication_one() -> None:
+    """Spark in the app container (``etl.spark.build_spark``) must write blocks with replication 1
+    on the one-datanode cluster. Writes and then removes its own temp directory only."""
+    if not _service_healthy("namenode") or not _service_healthy("app"):
+        pytest.skip("hdfs profile and app not running (start them with `make up-full`)")
+    path = f"/tmp/f1sa-it/replication-{uuid.uuid4()}"
+    code = (
+        "from f1sa.etl.spark import build_spark; s = build_spark('f1sa-it-replication'); "
+        f"s.range(3).write.parquet('hdfs://namenode:8020{path}'); s.stop()"
+    )
+    try:
+        write = _compose(
+            "exec", "-T", "-e", "PYTHONPATH=/workspace/src", "app", "python", "-c", code
+        )
+        assert write.returncode == 0, write.stderr[-2000:]
+        stat = _compose("exec", "-T", "namenode", "hdfs", "dfs", "-stat", "%r %n", f"{path}/part-*")
+        assert stat.returncode == 0, stat.stderr
+        factors = {line.split()[0] for line in stat.stdout.splitlines() if line.strip()}
+        assert factors == {"1"}, stat.stdout
+    finally:
+        _compose("exec", "-T", "namenode", "hdfs", "dfs", "-rm", "-r", "-f", "-skipTrash", path)

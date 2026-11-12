@@ -375,7 +375,126 @@
     - CLI guards and the git sha refusal.
     - Scorer vs Spark within 1e-9: validation rows, None numerics and categoricals, unseen categories, std-0
       columns, NaN/inf/bool rejected.
+- Step 4C Phase 1 (audit only): `docs/data_source_audit.md`, a replacement for FastF1 (F1 TV login needed since
+  Oct 2026)
+  - TracingInsights `2021`..`2025` are live under `TracingInsights`, with SHAs pinned in the audit.
+    - Licences: MIT for 2021-2024 (not Apache-2.0 as the brief said) and Apache-2.0 for 2025.
+    - Race-only data is 18.7 GB, of which 18.6 GB is per-lap telemetry. Lap, race-control and session tables are
+      about 81 MB.
+  - All 114 manifest races are present, with names matching Jolpica (114/114), and the driver code equals the
+    Jolpica code for 2,272/2,272 driver-races.
+  - Compound coverage is 99.75 / 98.58 / 99.86 / 100 / 98.12%. Race control is present in every race, with lap
+    numbers on at least 99.95% of messages, and track status is exact.
+  - OpenF1 agrees 100% on compound (2023 R5, 2024 R5, 2025 R5), and also on tyre life and stint for 2023/2024.
+  - Network use: 30 GitHub API calls, 5 blob-free clones, about 500 raw files (89 MB, scratchpad only) and 9
+    OpenF1 calls. 2025 is reported as aggregates only, and its files were deleted.
+  - No changes to `src/`, `tests/`, `data/` or `results/`: the v1 hashes are identical before and after.
+- Step 4C Phase 2: TracingInsights loader (option B4), additive clean tables and an HDFS replication fix
+  - `f1sa-ingest-ti` (`ingest/tracinginsights_loader.py`, `ingest/tracinginsights_parse.py`, pins in
+    `ingest/tracinginsights_pins.json`):
+    - Fetches only `raw.githubusercontent.com` at the pinned commits. Each file is checked against its git blob
+      SHA-1, and sha256 is recorded in `data/manifest_tracinginsights.json` (separate from `data/manifest.json`).
+    - Writes through the existing sinks (HttpFS). It resumes per race item (`tracinginsights`,
+      `tracinginsights_telemetry`), supports `--only-failed`, and is kill-safe (tested with a real SIGKILL).
+    - Disk guard on `/mnt/c`: it refuses below 20 GB and prints the free GB it saw.
+    - "None"/"nan"/"" are converted to nulls explicitly and counted per field in each partition's `_manifest.json`.
+  - Telemetry (B4) for every race of 2021-2025:
+    - Downloaded into memory, then aggregated per (driver, lap) by `features/telemetry_agg_ti.py`.
+    - It reuses `telemetry_agg.assign_to_laps` + `aggregate_samples` unchanged (exact equality test against the
+      clean FastF1 path).
+    - It adds `n_samples` and `telemetry_coverage`: full; partial = span < 90% of the window or a gap > 2.0 s;
+      none = 0 samples.
+    - The gap threshold is 2.0 s, not the planned 1.0 s: 1.0 s flagged ordinary 1.0–1.3 s feed dropouts
+      (14 of 56 real laps).
+    - Boundary samples shared by consecutive lap files are deduplicated (the later lap's copy is kept).
+    - Raw samples are discarded, except 2024, which is kept as Parquet under
+      `raw/tracinginsights/telemetry/season=/round=/driver=/` (skip it with `--skip-raw-telemetry`).
+    - Gate (2024 R5): 114 s per race (download 89 s, aggregate 13 s), below the 10-minute limit.
+  - `f1sa-clean-ti` (`etl/clean_tracinginsights.py`, schemas in `lake/schemas_tracinginsights.py`) writes five new
+    tables, partitioned by season/round:
+    - `stints_tracinginsights`: 6,421 rows;
+    - `race_control`: 10,191;
+    - `race_control_track_status`: 1,338;
+    - `telemetry_lap_real`: 125,055, with `is_synthetic=false`;
+    - `compound_coverage`: 114.
+
+    It also writes `clean/_quality/tracinginsights.json` and `results/tracinginsights_coverage_full.csv`.
+    - Missing compounds stay null with `compound_missing` (2022 Austria 77.4%, 2021 Belgium all UNKNOWN); nothing
+      is imputed.
+    - The race-control car number comes from `dNum`, or else is parsed from the message text ("CAR n (",
+      "PENALTY FOR CAR n"), because `dNum` is null on real messages.
+    - Unmapped drivers: 0 in every season.
+    - 2025 is in the lake, but reports give counts only.
+  - Real run (2026-11-11/12):
+    - 228/228 items done, 0 failed, in 3.7 h.
+    - 2021 R8 telemetry was redone once (149 s) after a dtype fix: `toPandas()` turned null `gear_changes` into
+      DOUBLE, so it is now cast to nullable Int32, with a regression test.
+    - The clean job takes 60 s.
+    - HDFS added 1.9 GB raw (1.8 GB of it 2024 raw telemetry, 48 MB laps, 4.2 MB aggregates) and 5.9 MB clean.
+    - Coverage per season: compound 99.75 / 98.58 / 99.86 / 100 / 98.12%; telemetry laps full 23,745 / 23,504 /
+      24,357 / 26,585 / 26,673.
+  - Real-data check (2024 R5): 40/40 TracingInsights stint changes match Jolpica pit stops, and the SC/VSC timeline
+    covers laps 21–31, the same as the v1 heuristic.
+  - HDFS replication: the cause of the 1,936 under-replicated blocks was the Spark jobs in the app container.
+    - There is no `HADOOP_CONF_DIR` there, so the Hadoop client used its default `dfs.replication=3`. Those were the
+      /f1/clean files (912) and the /f1/features files (1,024).
+    - `build_spark` now sets `spark.hadoop.dfs.replication` from `HDFS_REPLICATION` (default 1), and HttpFS CREATE
+      passes `replication` explicitly.
+    - All 2,552 new raw files and all 570 new clean files are at replication 1. Old blocks are untouched (the count
+      is still 1,936).
+  - v1 is untouched:
+    - The read-only HDFS snapshot (10 clean tables, 10 feature tables, `labels_checksum` and 9 labelled sets) is
+      identical before and after.
+    - `results/*` (22 files), `data/lake` (39 files) and `data/manifest.json` are identical. `data/sample` is
+      unchanged.
+    - `clean.py`, `lake/schemas.py`, the label definition and the model spec are not modified.
+  - Tests: 736 unit tests pass (79 new in the TracingInsights files plus `test_hdfs_replication.py`), plus the
+    integration test `test_spark_in_app_writes_hdfs_with_replication_one`. Lint, format and mypy are clean.
+- Step 4C wrap-up: lap reconciliation of TracingInsights with Jolpica (read-only, counts only)
+  - `etl/reconcile_ti.py` and `make reconcile-ti-full` (app container, HDFS). It writes nothing: no sink and no
+    results file, and a test checks the source.
+    - Key uniqueness of all 5 TI clean tables, plus a lap-level stint check (`start_lap..end_lap`, no lap in two
+      stints).
+    - Left join from Jolpica laps to `telemetry_lap_real` (no fan-out).
+    - Rows on one side only, each assigned the first matching cause: lap < 1, duplicate, driver absent, after
+      the last lap, before the first lap, gap. These are split by Jolpica status class, with cross-tabs for a
+      null raw TI `lap_time_s` and `results.laps + 1`.
+    - Races below 95% compound coverage.
+  - Result (PASS):
+    - 0 duplicate keys in every TI table, and 0 stint-lap overlaps.
+    - The left join keeps the Jolpica count in every season, and every Jolpica lap matches.
+    - Jolpica-only: 0. TI-only: 70 / 48 / 36 / 32 / 35 (221 rows), exactly the count differences. Every one has a
+      null TI lap time (an uncompleted lap).
+      - 56 rows: retired on lap 1 or did not start (`results.laps = 0`).
+      - 145 rows: the lap after `results.laps` (a car's retirement lap, or the lap it was on at the finish).
+      - 20 rows: 2021 R12 Spa, laps 2–3 behind the SC.
+    - 0 lap-0, 0 duplicate and 0 mapping causes.
+    - The 2025 TI count is 26,692, not the 26,711 in the brief.
+    - 2025 races below 95%: R6 Miami 0.5562, R13 Belgium 0.9352.
+  - Docs, in `docs/data_dictionary.md`:
+    - a "Lap reconciliation" table, with what was verified and what is interpretation;
+    - the 2.0 s partial-gap threshold and why it was chosen.
+  - `ti-sample-check` does not appear in the README, `traceability.md`, the Makefile, src or tests. Nothing to
+    rename.
+  - Tests: `tests/unit/test_reconcile_ti.py` (15, in `make test-ti`), covering:
+    - uniqueness on each key, and stint overlap;
+    - no fan-out vs fan-out, and per season;
+    - every cause in priority order, with the totals identity;
+    - the coverage boundary at 0.95;
+    - the fixture race end to end;
+    - the CLI exit codes, and the lake left unchanged.
+
+    `make test-ti`: 102 passed.
+  - v1 unchanged. Before and after are identical for:
+    - `results/*`, `data/manifest.json`, `data/manifest_tracinginsights.json`, `data/lake`, `data/sample`;
+    - the HDFS listings and file checksums of `/f1/raw`, `/f1/clean` and `/f1/features`;
+    - 25 Spark table checksums (10 v1 clean, 10 features, 5 TI), plus `labels_checksum` and the 9 labelled sets.
 ## Next
+- User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
+  `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
+  no bytes or checksums change.
+- Use `telemetry_lap_real` / `stints_tracinginsights` / `race_control` in a later, explicitly versioned feature
+  step (v1 does not read them, by design). Decide then whether `real` mode may use TracingInsights compounds.
 - User: commit `docs/model_spec.md` (the freeze). Then `make model-test-full CONFIRM=yes` (opens 2025 once per
   setting) when the user says so.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
@@ -388,6 +507,19 @@
 - Step 12: load `lr/scorer.json` with `LRScorer.load` in the stream job; compute the inputs exactly as
   `features/undercut.py` does at L-1.
 ## Known issues
+- TracingInsights (Step 4C):
+  - Two races are below 95% compound coverage outside 2025: 2021 R12 (Belgium, 3 laps behind the SC, every
+    compound UNKNOWN) and 2022 R11 (Austria, 77.4%). In 2025, 2 races are below 95%: R6 Miami (55.6%) and R13
+    Belgium (93.5%).
+  - 190 telemetry laps are `partial` and 1 is `none` (2021 R8) across all seasons.
+  - Telemetry aggregation takes per-lap files on the session clock (lap start + time in lap). A sample outside every
+    lap window is dropped and counted (`n_samples_outside_window` in the meta).
+  - `telemetry_lap_real` has 221 more rows than Jolpica laps (2021-2025). Each is an uncompleted lap with a null TI lap
+    time (see "Lap reconciliation" in `docs/data_dictionary.md`). Later feature steps must left-join TI onto Jolpica
+    laps.
+  - The data are MIT (2021-2024) or Apache-2.0 (2025) licensed as repos only. Neither covers the underlying F1/FOM
+    data (see DATA_LICENSES.md).
+- The 1,936 old under-replicated blocks remain until the user runs `setrep` (see Next).
 - The deployment metadata records `git_dirty: true`, because it was saved before the Step 9c code was committed.
   The sha (36c369b) is the parent commit. The model itself is unaffected (it is the same frozen procedure, and the
   reproduction check matched).
@@ -481,3 +613,9 @@ Step 9: `make etl-sample && make features-sample && make model-eval-sample`, the
 Step 9c (needs `make up-full`; the app must have the `./models` mount): `make model-save-full` (add `FORCE=1` if
 the folder exists), then
 `uv run pytest tests/unit/test_model_deploy.py tests/unit/test_lr_scorer.py tests/unit/test_makefile_full.py -q`.
+
+Step 4C Phase 2 (needs `make up-full`): `make ingest-ti-full` (resumable; `SKIP_RAW_TELEMETRY=1` skips the 2024 raw
+samples), then `make etl-ti-full`, then `make test-ti` and
+`docker compose exec namenode hdfs dfs -stat %r /f1/clean/stints_tracinginsights/season=2024/round=5/*` (expect 1).
+
+Step 4C wrap-up (needs `make up-full`): `make reconcile-ti-full` (read-only, expect `result: PASS`), then `make test-ti`.

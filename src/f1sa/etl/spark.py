@@ -6,6 +6,8 @@ from pathlib import Path
 
 from pyspark.sql import SparkSession
 
+from f1sa.config import get_settings
+
 RUNTIME_CONF = {
     # reruns / subsets replace only the partitions they write
     "spark.sql.sources.partitionOverwriteMode": "dynamic",
@@ -21,14 +23,31 @@ def configure_session(spark: SparkSession) -> None:
         spark.conf.set(key, value)
 
 
+def hadoop_config(hdfs_replication: int | None = None) -> dict[str, str]:
+    """Hadoop client settings for every job: ``dfs.replication`` (default
+    ``Settings.hdfs_replication``, i.e. ``HDFS_REPLICATION``, 1).
+
+    The app image sets no ``HADOOP_CONF_DIR``, so without this the Hadoop client inside PySpark
+    uses its default of 3 on our one-datanode cluster and every block it writes is
+    under-replicated. It changes how blocks are stored, never the file contents.
+    """
+    if hdfs_replication is None:
+        hdfs_replication = get_settings().hdfs_replication
+    if hdfs_replication < 1:
+        raise ValueError(f"hdfs_replication must be >= 1, got {hdfs_replication}")
+    return {"spark.hadoop.dfs.replication": str(hdfs_replication)}
+
+
 def build_spark(
     app: str,
     master: str = "local[2]",
     *,
     local_dir: Path | None = None,
     shuffle_partitions: int = 4,
+    hdfs_replication: int | None = None,
 ) -> SparkSession:
-    """A SparkSession for ETL jobs. ``local_dir`` keeps Spark scratch files inside the lake."""
+    """A SparkSession for ETL jobs. ``local_dir`` keeps Spark scratch files inside the lake.
+    The Hadoop client settings come from :func:`hadoop_config`."""
     builder = (
         SparkSession.builder.master(master)
         .appName(app)
@@ -43,7 +62,7 @@ def build_spark(
     if local_dir is not None:
         local_dir.mkdir(parents=True, exist_ok=True)
         builder = builder.config("spark.local.dir", str(local_dir.resolve()))
-    for key, value in RUNTIME_CONF.items():
+    for key, value in {**RUNTIME_CONF, **hadoop_config(hdfs_replication)}.items():
         builder = builder.config(key, value)
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")

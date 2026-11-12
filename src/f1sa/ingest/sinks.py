@@ -185,6 +185,7 @@ class HdfsSink(_SinkHelpers):
         self.files = []
         self._base = f"{settings.hdfs_httpfs_url}/webhdfs/v1"
         self._user = settings.hdfs_user
+        self._replication = settings.hdfs_replication
         self._session = session or requests.Session()
         self._sleep = sleep
         self._max_retries = max_retries
@@ -277,7 +278,11 @@ class HdfsSink(_SinkHelpers):
                 "PUT",
                 tmp,
                 "CREATE",
-                params={"overwrite": "true", "data": "true"},
+                params={
+                    "overwrite": "true",
+                    "data": "true",
+                    "replication": str(self._replication),
+                },
                 data=data,
                 ok=(200, 201),
             )

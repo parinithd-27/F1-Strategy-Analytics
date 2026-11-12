@@ -33,6 +33,8 @@ dependencies = [
 f1sa-ingest = "f1sa.ingest.cli:main"
 f1sa-clean = "f1sa.etl.clean:main"
 f1sa-features = "f1sa.features.build:main"
+f1sa-ingest-ti = "f1sa.ingest.tracinginsights_loader:main"
+f1sa-clean-ti = "f1sa.etl.clean_tracinginsights:main"
 
 [project.optional-dependencies]
 dev = [

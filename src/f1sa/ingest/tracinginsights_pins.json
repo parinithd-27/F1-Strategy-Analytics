@@ -1,0 +1,1182 @@
+{
+ "source": "https://github.com/TracingInsights/{season}",
+ "audited": "2026-11-11",
+ "note": "Commit SHAs and git blob SHA-1s recorded by the Step 4C audit (docs/data_source_audit.md).",
+ "seasons": {
+  "2021": {
+   "repo": "TracingInsights/2021",
+   "commit": "5815eb898310d63a9054dbb98cc27c54355fac06",
+   "licence": "MIT",
+   "rounds": {
+    "1": {
+     "event": "Bahrain Grand Prix",
+     "folder": "Bahrain Grand Prix",
+     "files": {
+      "session_laptimes.json": "bd4d7c45baec37e8f5d8df36fea1e45a982cf411",
+      "rcm.json": "53f33c1c069eb281c5a37322551eb79b5142db59",
+      "session_info.json": "c4f070b7b8f6a4b3879035f0c7a0b3d595302a70",
+      "drivers.json": "1df6a17b70461335446b6b89266d6861a6f93f80"
+     }
+    },
+    "2": {
+     "event": "Emilia Romagna Grand Prix",
+     "folder": "Emilia Romagna Grand Prix",
+     "files": {
+      "session_laptimes.json": "cd44d781939dd70beb3bfab9c8abeb947454c2f2",
+      "rcm.json": "67d634300ef18b7ecd59e9bf1c932e7ec706a52f",
+      "session_info.json": "8690e1222b946902ac6797902d9c58bde207482b",
+      "drivers.json": "bb4aca18fddd15af3d98028b0fa630df36291cac"
+     }
+    },
+    "3": {
+     "event": "Portuguese Grand Prix",
+     "folder": "Portuguese Grand Prix",
+     "files": {
+      "session_laptimes.json": "4552a3a3188b91cdc8c63a9c86652bd64f2bace1",
+      "rcm.json": "5325e57e88b347c85b2eb199e2e2d1eefc21a946",
+      "session_info.json": "95d92536b20981fd1bf0927a9cbd0a70554b8b48",
+      "drivers.json": "bb4aca18fddd15af3d98028b0fa630df36291cac"
+     }
+    },
+    "4": {
+     "event": "Spanish Grand Prix",
+     "folder": "Spanish Grand Prix",
+     "files": {
+      "session_laptimes.json": "13ad430b4ad34eb2eb28b449acd9558eff929e8c",
+      "rcm.json": "b90aa0ba4606d9ccaf80b0f193de3fa6505b3d72",
+      "session_info.json": "cdbf8b8f654a5b93cf010890e485858879f921e2",
+      "drivers.json": "bb4aca18fddd15af3d98028b0fa630df36291cac"
+     }
+    },
+    "5": {
+     "event": "Monaco Grand Prix",
+     "folder": "Monaco Grand Prix",
+     "files": {
+      "session_laptimes.json": "de52a7f01f0a64b994b27789eb65c0e9f93d1191",
+      "rcm.json": "6d0562bb35250013f636a500007b15b7115963ed",
+      "session_info.json": "2cd053a6c0e6518a34d359431d2301620ba425b5",
+      "drivers.json": "528f06da0b8ae4785e3554dac4e33c0cbd6dc4f1"
+     }
+    },
+    "6": {
+     "event": "Azerbaijan Grand Prix",
+     "folder": "Azerbaijan Grand Prix",
+     "files": {
+      "session_laptimes.json": "028a9d340553917becdea991877598753ca1a0bb",
+      "rcm.json": "8b4912e9b905dd3e75fd1a7baa9f2c9076d2f6cc",
+      "session_info.json": "f7aedb5bff95a9fd57742b6fe0c42f3f0f34a403",
+      "drivers.json": "bb4aca18fddd15af3d98028b0fa630df36291cac"
+     }
+    },
+    "7": {
+     "event": "French Grand Prix",
+     "folder": "French Grand Prix",
+     "files": {
+      "session_laptimes.json": "29228992f0a76d4784e28913c292cfd5a2fb59a7",
+      "rcm.json": "197828cc1085395dd1e5ca558199854f19c7b8c7",
+      "session_info.json": "e782dcce71f6d016c7e5b29d829370ed35376ecc",
+      "drivers.json": "d2bd7fcf6b3775811bd0d5573f5eab7a375e4ae9"
+     }
+    },
+    "8": {
+     "event": "Styrian Grand Prix",
+     "folder": "Styrian Grand Prix",
+     "files": {
+      "session_laptimes.json": "4c6027264e396ad1f76521946b0dce3cd046f5ba",
+      "rcm.json": "5594a4abe3117c30f67e706099808219091eeb04",
+      "session_info.json": "c155a8b54704debddd0cd2eefbfd28af93e1cb44",
+      "drivers.json": "569655abdbabe8d3f1d4830c7f588ea9c56d8d21"
+     }
+    },
+    "9": {
+     "event": "Austrian Grand Prix",
+     "folder": "Austrian Grand Prix",
+     "files": {
+      "session_laptimes.json": "77db0ec94c09ffcb811e09da53756a316b2eeb12",
+      "rcm.json": "19a22d5962328fda61ec9decfaa15115d3ef5c54",
+      "session_info.json": "fca477be378ddc16c8f393bbff45e3ecc1846e91",
+      "drivers.json": "cdc9b59acbff5de6d1b02572552c63fc0414bc5b"
+     }
+    },
+    "10": {
+     "event": "British Grand Prix",
+     "folder": "British Grand Prix",
+     "files": {
+      "session_laptimes.json": "7828d24fabd6c4e491b61a34ea8714f0d1e7d4a3",
+      "rcm.json": "93e9eb36bfe6c75b0f79a540e80ba3ef63a0bd08",
+      "session_info.json": "d1edfdc4f616e71c435888a5af0e8ad3625571d5",
+      "drivers.json": "ea20c3842b0427bcb19eb6e76c382eb0b1216c73"
+     }
+    },
+    "11": {
+     "event": "Hungarian Grand Prix",
+     "folder": "Hungarian Grand Prix",
+     "files": {
+      "session_laptimes.json": "8db3e49855f4151041282d0bdd34f01c6257b966",
+      "rcm.json": "c60f1b1319bc474534645deada178fb62d38a097",
+      "session_info.json": "7218569061ed2cd4b3afd3ad6b85275004f56d4d",
+      "drivers.json": "9c80d073f285c804fd3e7a000f8f8aaafd8c8651"
+     }
+    },
+    "12": {
+     "event": "Belgian Grand Prix",
+     "folder": "Belgian Grand Prix",
+     "files": {
+      "session_laptimes.json": "dd043293baf1d7e50205f9c86281295626089823",
+      "rcm.json": "895231d98f76ae4fc6cf81ac9caaa62412d623a9",
+      "session_info.json": "8d68852781e7bb5d9810082a6e5863c02851e1ff",
+      "drivers.json": "1c27b9b102ef5d79b188e7b92eca485aef859f54"
+     }
+    },
+    "13": {
+     "event": "Dutch Grand Prix",
+     "folder": "Dutch Grand Prix",
+     "files": {
+      "session_laptimes.json": "e116bf8aa8abe11f762c3e758a8544dfce33d01a",
+      "rcm.json": "c8af57bc6f59c5bf3d4bf7088a7485b348f6bbc4",
+      "session_info.json": "123271fb110e2287ba54d1b092ad150071d9f9ad",
+      "drivers.json": "af6a06d9e0e2f3645fd44f7b7c81b12cfc7ad617"
+     }
+    },
+    "14": {
+     "event": "Italian Grand Prix",
+     "folder": "Italian Grand Prix",
+     "files": {
+      "session_laptimes.json": "3e948ec99f33ca91aa24ef0349bf8ffb35f8191e",
+      "rcm.json": "af677dae061ab300c7d263796303a4c02c9557c7",
+      "session_info.json": "07fb5c728dfad254e54203912030b8fb1eb4f2e7",
+      "drivers.json": "5c08f569d4ac7b3d7066dedb3b33fb61a3c4ef86"
+     }
+    },
+    "15": {
+     "event": "Russian Grand Prix",
+     "folder": "Russian Grand Prix",
+     "files": {
+      "session_laptimes.json": "ea94cd87dca640cec08caa6b241bcbbf3cfec4cf",
+      "rcm.json": "e95279246d208d8da88ffc415d26e559c0b94cab",
+      "session_info.json": "01c264b678974f7c401ec08ceb4e930263535edf",
+      "drivers.json": "b744623dfcb2273d606d73baea9a417736b6a7b2"
+     }
+    },
+    "16": {
+     "event": "Turkish Grand Prix",
+     "folder": "Turkish Grand Prix",
+     "files": {
+      "session_laptimes.json": "f23a1b64333d11f1091d78b11f9116d9db16fe3d",
+      "rcm.json": "8c0081c0ad8650dc98c89e3588ea64556ed7c188",
+      "session_info.json": "b9e59685561f4b73a43dad7ade1fc8edc0139267",
+      "drivers.json": "15626a75c251cf89aa9e5c856b61d04c7a0b15fc"
+     }
+    },
+    "17": {
+     "event": "United States Grand Prix",
+     "folder": "United States Grand Prix",
+     "files": {
+      "session_laptimes.json": "16496c4f9572fc068417953b06c29e29b451207a",
+      "rcm.json": "56d799ba64b722ab4fdb10b4ff5ed655115317c0",
+      "session_info.json": "e19974ba28fa3fd7ba5a90679a0c89eec921dd04",
+      "drivers.json": "ac8a22d2a2d25cf61d42e354365b9830fb74551e"
+     }
+    },
+    "18": {
+     "event": "Mexico City Grand Prix",
+     "folder": "Mexico City Grand Prix",
+     "files": {
+      "session_laptimes.json": "b843dd2a927e0da22f2cf9e3bef5b25aa180b385",
+      "rcm.json": "3f59d001d78320a20e82bae84048e81a2d2fde2d",
+      "session_info.json": "d3730e1582aecc0e0732693fa66ccac63b4176b1",
+      "drivers.json": "f5079f1335ea149dfe610cc2f8257c9593298184"
+     }
+    },
+    "19": {
+     "event": "São Paulo Grand Prix",
+     "folder": "São Paulo Grand Prix",
+     "files": {
+      "session_laptimes.json": "3c4f50c78a9b3d992bfa946f0ae980b59c619a46",
+      "rcm.json": "6206704a1f2f063aea38ad47afa76abc458cd842",
+      "session_info.json": "a383b4681cb20a46df610ef57affd7070fb253db",
+      "drivers.json": "4125835c0ea31c843e57083bc809ee8b71c1280a"
+     }
+    },
+    "20": {
+     "event": "Qatar Grand Prix",
+     "folder": "Qatar Grand Prix",
+     "files": {
+      "session_laptimes.json": "7424e50b989b02e4150aab74e9faa0931dab7e01",
+      "rcm.json": "143401a6fd8f5e22bc1afe4be8720887f637fe13",
+      "session_info.json": "48f18fee04549fa64aea7ceb500164fc74da9962",
+      "drivers.json": "bb4aca18fddd15af3d98028b0fa630df36291cac"
+     }
+    },
+    "21": {
+     "event": "Saudi Arabian Grand Prix",
+     "folder": "Saudi Arabian Grand Prix",
+     "files": {
+      "session_laptimes.json": "1efc39593726ee3c59c882102142a9c24ba16349",
+      "rcm.json": "2c0027d9b1a7b5ef1b423aea83d2ddf5acfbd4ff",
+      "session_info.json": "2bee39badd6e6ad9b7bb34f52d16104e31d01cbb",
+      "drivers.json": "bb4aca18fddd15af3d98028b0fa630df36291cac"
+     }
+    },
+    "22": {
+     "event": "Abu Dhabi Grand Prix",
+     "folder": "Abu Dhabi Grand Prix",
+     "files": {
+      "session_laptimes.json": "d31d0dc5aad088e649ddc0af9eaca6d32f06f51d",
+      "rcm.json": "04ee46212002c024661e7345c6e3a7d369599956",
+      "session_info.json": "c02f9ef5c05dfc87ec867198d588fa4042938a92",
+      "drivers.json": "428770540a2ba2c4e57341e22c892bdbee6405b3"
+     }
+    }
+   }
+  },
+  "2022": {
+   "repo": "TracingInsights/2022",
+   "commit": "df396d091c4a40a3a6b733631da3497f8c91d89f",
+   "licence": "MIT",
+   "rounds": {
+    "1": {
+     "event": "Bahrain Grand Prix",
+     "folder": "Bahrain Grand Prix",
+     "files": {
+      "session_laptimes.json": "422ab5c616c75360be3ccd84b8b5e3a771c41595",
+      "rcm.json": "801c1a25eae3ca7a3252881b9885f4c343a3348a",
+      "session_info.json": "95b4c5709684abcc7a841443df1ac1edc85a9646",
+      "drivers.json": "6be50246544ef45bf36be021b545ef85bad42477"
+     }
+    },
+    "2": {
+     "event": "Saudi Arabian Grand Prix",
+     "folder": "Saudi Arabian Grand Prix",
+     "files": {
+      "session_laptimes.json": "38d3fe4c8fea811aa0bb23b06a82d1d6c034a724",
+      "rcm.json": "556e576c020ffdaa344762b93ca5552e573b1596",
+      "session_info.json": "a9fa781f27a3b8d20e20b9ce9118ef2ab8fed36d",
+      "drivers.json": "110bd83c4c89beb42f860264e7c1367359d236ee"
+     }
+    },
+    "3": {
+     "event": "Australian Grand Prix",
+     "folder": "Australian Grand Prix",
+     "files": {
+      "session_laptimes.json": "06941cb1449d73ab05a85d68bfd20137ac3b22e7",
+      "rcm.json": "dfa4113a52b953c3981137f14e270268441175f8",
+      "session_info.json": "bac0916ce37f53e5394724e93131524bc53db3a1",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "4": {
+     "event": "Emilia Romagna Grand Prix",
+     "folder": "Emilia Romagna Grand Prix",
+     "files": {
+      "session_laptimes.json": "c14f498bc4f54a3003ff2477a8551ea9be2e5585",
+      "rcm.json": "c25bf2d5137d6023fe73bac28c3ff7a90386e569",
+      "session_info.json": "5bc750f73108f98021a61c84520f028a3742499c",
+      "drivers.json": "2f8105827f02d8d8cfcc14db701fa4c291c6aff2"
+     }
+    },
+    "5": {
+     "event": "Miami Grand Prix",
+     "folder": "Miami Grand Prix",
+     "files": {
+      "session_laptimes.json": "10c2beef115c4c706b8f4ef79869567b664ebb6c",
+      "rcm.json": "230c06725712f9edf4a1c831ebb93984681c2a03",
+      "session_info.json": "67a247117929761e6071d05fc09ce5c271328cc0",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "6": {
+     "event": "Spanish Grand Prix",
+     "folder": "Spanish Grand Prix",
+     "files": {
+      "session_laptimes.json": "206c8cc261eba62feb9da9aa77c458682722fd7a",
+      "rcm.json": "2fb53cf9285274976cde749274b17b7f7b97c2b7",
+      "session_info.json": "e1e6169fefe95ae41fd77fe2d50b70815bed79f7",
+      "drivers.json": "f9b4b4a3168452b01dc34e81d0c0ea87dc8c2f7e"
+     }
+    },
+    "7": {
+     "event": "Monaco Grand Prix",
+     "folder": "Monaco Grand Prix",
+     "files": {
+      "session_laptimes.json": "7b0428f60a497c6efa008664e9a4c151101a2335",
+      "rcm.json": "555e44d5ef918fd301e4646940370dbf09d80f19",
+      "session_info.json": "61a233c9df33b8077ceacb9bb781b07224d63f32",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "8": {
+     "event": "Azerbaijan Grand Prix",
+     "folder": "Azerbaijan Grand Prix",
+     "files": {
+      "session_laptimes.json": "95dc02b7d8b428ebb41ad3c0c1f7924c2a43c185",
+      "rcm.json": "a8459a40fa54e0653ab1bb14a07c99ad3e962b4f",
+      "session_info.json": "621ae8bcd377bb609a08e039df134f3d73805c5f",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "9": {
+     "event": "Canadian Grand Prix",
+     "folder": "Canadian Grand Prix",
+     "files": {
+      "session_laptimes.json": "41d8756a015cd2e2157a2e5155e48663789e807b",
+      "rcm.json": "e853149a43feb7e632fa11b0aa51eb76bc167dd7",
+      "session_info.json": "f97dbd7981e1087bd064c0247f8af6ba41e0cdfe",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "10": {
+     "event": "British Grand Prix",
+     "folder": "British Grand Prix",
+     "files": {
+      "session_laptimes.json": "ea8cfc0d711404b40a883ef65c2154cdd76a8af6",
+      "rcm.json": "1ecfa8568171500876c0edfc343c1bbe6d359f1a",
+      "session_info.json": "ef34f7ae466150dd32c814b917df055a5dd293a1",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "11": {
+     "event": "Austrian Grand Prix",
+     "folder": "Austrian Grand Prix",
+     "files": {
+      "session_laptimes.json": "fa762c78dd4d0957359688703b8085bbc4b4f371",
+      "rcm.json": "f4ad5383ac861e94aa257728bc732da14297cf26",
+      "session_info.json": "3be264ca2beb8d851be166e7d7c21125e58f90a7",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "12": {
+     "event": "French Grand Prix",
+     "folder": "French Grand Prix",
+     "files": {
+      "session_laptimes.json": "b79bb58d14c82f60907b44f0ac3bf23dbd88dc55",
+      "rcm.json": "aa8c90c4e576f2af74694ee7edb0e883ac88234e",
+      "session_info.json": "7d04b7059755de2d5ea8578c960736c62a90e93f",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "13": {
+     "event": "Hungarian Grand Prix",
+     "folder": "Hungarian Grand Prix",
+     "files": {
+      "session_laptimes.json": "b0b4343bbec078321096b09a7dbcda6a1283320a",
+      "rcm.json": "05b95539b6daf6267657a61f81099c873fa1c6ad",
+      "session_info.json": "a8ceefa4e9a9568cb3af686e4c4853c0a45b21b2",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "14": {
+     "event": "Belgian Grand Prix",
+     "folder": "Belgian Grand Prix",
+     "files": {
+      "session_laptimes.json": "da0b69019439d73c1c0c7fe21df0e2782f298950",
+      "rcm.json": "9190358475a0547003a23fb8c9461e29668d8640",
+      "session_info.json": "f404bd8dce3806ddf57334745e400d80daf15e03",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "15": {
+     "event": "Dutch Grand Prix",
+     "folder": "Dutch Grand Prix",
+     "files": {
+      "session_laptimes.json": "1a602a0a2b6560608c683fd2670dfb6b1d6d687e",
+      "rcm.json": "b63a558c66564a71c539c395b267bb970a7c685b",
+      "session_info.json": "ed5f75e9ff18814095c51326a1e16696a1b058fd",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "16": {
+     "event": "Italian Grand Prix",
+     "folder": "Italian Grand Prix",
+     "files": {
+      "session_laptimes.json": "aad57dc79c7c4aee6e547e2b9c1c124d9431d65e",
+      "rcm.json": "c59660f3d7a774d7a835b1f61c3247178c48efe9",
+      "session_info.json": "a9c45e9453664a46e6e97275f626cab1cb967598",
+      "drivers.json": "9be6480a3cbb464cc81a6062d920f79a86727281"
+     }
+    },
+    "17": {
+     "event": "Singapore Grand Prix",
+     "folder": "Singapore Grand Prix",
+     "files": {
+      "session_laptimes.json": "74000d6647cf740b4f4b2ac9f6b5e5b0ce82b88d",
+      "rcm.json": "351b43b0cf2857eb98744cf95d2d7e19f0d1a061",
+      "session_info.json": "994fbea4eb3fcf2f1a9d3ecc766e38a521790e5f",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "18": {
+     "event": "Japanese Grand Prix",
+     "folder": "Japanese Grand Prix",
+     "files": {
+      "session_laptimes.json": "7deac2d1f33a9f7ef1ca3cdc8a5f2272619a32b6",
+      "rcm.json": "1ac14a7875e1e20960dad89de3d5406927bc379f",
+      "session_info.json": "05a8974013f2c0723457e4039e4c7bf06c71327c",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "19": {
+     "event": "United States Grand Prix",
+     "folder": "United States Grand Prix",
+     "files": {
+      "session_laptimes.json": "aec08db565583a927192de0f42256153d6bc3dcb",
+      "rcm.json": "a943235268d40db4518b6b94196630a488a29e58",
+      "session_info.json": "15efb486589537e51b8fd32184d4507166ccb671",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "20": {
+     "event": "Mexico City Grand Prix",
+     "folder": "Mexico City Grand Prix",
+     "files": {
+      "session_laptimes.json": "732ef520ab23b7fe6956debe30cab656e49bbd1b",
+      "rcm.json": "5fd9dc2943e134c6d7d06d93c396903be4aed7c5",
+      "session_info.json": "415a2e0519914809cdb362c8e41969488999231b",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "21": {
+     "event": "São Paulo Grand Prix",
+     "folder": "São Paulo Grand Prix",
+     "files": {
+      "session_laptimes.json": "7338e248e0ae65a50ab90c58c9be311d490e143f",
+      "rcm.json": "816d7e09755d33736a922accd5105be16c2399da",
+      "session_info.json": "d01a5935fc8a441c991bae5a72efe730985f03d6",
+      "drivers.json": "53405bb7bca3748807dc37cfb9b84c92da3b7dc7"
+     }
+    },
+    "22": {
+     "event": "Abu Dhabi Grand Prix",
+     "folder": "Abu Dhabi Grand Prix",
+     "files": {
+      "session_laptimes.json": "e6cef2b33c9fdb82c0486e9d268aa5c87d068d8b",
+      "rcm.json": "6fb8053189289738d333965adf838a00c018cef3",
+      "session_info.json": "8d5efd6b2217edfbdbbdd86f984fbd8067e315cd",
+      "drivers.json": "1b599c8b81e5b5a2d90315c65585f24f63091f91"
+     }
+    }
+   }
+  },
+  "2023": {
+   "repo": "TracingInsights/2023",
+   "commit": "737c84d3ae14b9883a671ca248d015b69cf1cb58",
+   "licence": "MIT",
+   "rounds": {
+    "1": {
+     "event": "Bahrain Grand Prix",
+     "folder": "Bahrain Grand Prix",
+     "files": {
+      "session_laptimes.json": "bc85012d313c341710b00a4098cc38650f03061b",
+      "rcm.json": "5e94af17ae0382a94825a95705332dbb5562a276",
+      "session_info.json": "99ce8b0d3b9590c9d43949ac781fb869f9e386e1",
+      "drivers.json": "361ab56898f175b05991b8b8a28863289caa6b5e"
+     }
+    },
+    "2": {
+     "event": "Saudi Arabian Grand Prix",
+     "folder": "Saudi Arabian Grand Prix",
+     "files": {
+      "session_laptimes.json": "25c2c1a360c7d183319f29b28a4a411878a18e17",
+      "rcm.json": "3eed42f4150d26c3fc0ca0cc55bbcf12508e5aca",
+      "session_info.json": "c90aff329a651700d3c20daa19e75a74208503de",
+      "drivers.json": "9088c6e70b3ee139c9607e211f49d03f5284256c"
+     }
+    },
+    "3": {
+     "event": "Australian Grand Prix",
+     "folder": "Australian Grand Prix",
+     "files": {
+      "session_laptimes.json": "ed114ede75cc44dab0d1f993933d470b081bbe45",
+      "rcm.json": "5fdaebfaa369b5f21725efda37e83a1fd0fdc38b",
+      "session_info.json": "ba8f02c1bccb6d6e84b774a286d543b33393184a",
+      "drivers.json": "361ab56898f175b05991b8b8a28863289caa6b5e"
+     }
+    },
+    "4": {
+     "event": "Azerbaijan Grand Prix",
+     "folder": "Azerbaijan Grand Prix",
+     "files": {
+      "session_laptimes.json": "32b3d0663fc454afffd1a1b8c676899b64510e49",
+      "rcm.json": "033e1ce194dfa3c2a786ebc0a4a4f76d017628ff",
+      "session_info.json": "7097ce8dd84251729dfda832f4e315c2a302a27d",
+      "drivers.json": "361ab56898f175b05991b8b8a28863289caa6b5e"
+     }
+    },
+    "5": {
+     "event": "Miami Grand Prix",
+     "folder": "Miami Grand Prix",
+     "files": {
+      "session_laptimes.json": "b7c2abd34d53a7027ada013ff5d1f745f591ab43",
+      "rcm.json": "ebe85e0e22b45c1710115701d271fbac535c7ab7",
+      "session_info.json": "ab3d7f9fb349d1798ef00f37e2d7de99b274ee1d",
+      "drivers.json": "ecf17e8ef4bd65a02b2dd0d487ed3c76a481337e"
+     }
+    },
+    "6": {
+     "event": "Monaco Grand Prix",
+     "folder": "Monaco Grand Prix",
+     "files": {
+      "session_laptimes.json": "f028e1b6255a190d43c4531d3fc664b97e415bcd",
+      "rcm.json": "3a7fcc115eeb4617e2f6584d710e19f3e58888b0",
+      "session_info.json": "a88737767272224aaec5481b80045b226053a20e",
+      "drivers.json": "9088c6e70b3ee139c9607e211f49d03f5284256c"
+     }
+    },
+    "7": {
+     "event": "Spanish Grand Prix",
+     "folder": "Spanish Grand Prix",
+     "files": {
+      "session_laptimes.json": "7cfae64690d624e10b81277149c04b4e499ee82d",
+      "rcm.json": "1cb213c970b6d1b1250282d3fb88f1e60ab1bcfe",
+      "session_info.json": "41a2cab71ff282ebc3883ac260782091f48dbffa",
+      "drivers.json": "0754ca1f964880cdaf8df574b3e81328e9a97c6c"
+     }
+    },
+    "8": {
+     "event": "Canadian Grand Prix",
+     "folder": "Canadian Grand Prix",
+     "files": {
+      "session_laptimes.json": "8a6b1093c3af5652acf75ae359fca270b6882e4d",
+      "rcm.json": "37df50c8d8ff5257c8f70c1eacb236906edfa348",
+      "session_info.json": "ca2c67b56cd25ceb087fe3ba0e184953bf7cc6ff",
+      "drivers.json": "361ab56898f175b05991b8b8a28863289caa6b5e"
+     }
+    },
+    "9": {
+     "event": "Austrian Grand Prix",
+     "folder": "Austrian Grand Prix",
+     "files": {
+      "session_laptimes.json": "3361d482261bdeba308c55fb0a4f4a132c523215",
+      "rcm.json": "e3b568728e551db869eb34058fab06219072c7bb",
+      "session_info.json": "d29c2db9917a8beb9917fadadbd14eef0a86ce61",
+      "drivers.json": "361ab56898f175b05991b8b8a28863289caa6b5e"
+     }
+    },
+    "10": {
+     "event": "British Grand Prix",
+     "folder": "British Grand Prix",
+     "files": {
+      "session_laptimes.json": "801328cffad16ad0416646a233792b1327d8336d",
+      "rcm.json": "6cf550ddecc7cdfc96f11f49c33a1bd5c9c3739b",
+      "session_info.json": "268b6a0d596c7ed5218f9f1df2c78cda72c29fb1",
+      "drivers.json": "361ab56898f175b05991b8b8a28863289caa6b5e"
+     }
+    },
+    "11": {
+     "event": "Hungarian Grand Prix",
+     "folder": "Hungarian Grand Prix",
+     "files": {
+      "session_laptimes.json": "ce4e6a1df25dcbbe2e1ee8ad4602f3d0af0c630c",
+      "rcm.json": "d9dd9c24a965905744fdf067da3b16db8a34e1d7",
+      "session_info.json": "658bd2151b9b8667217d6f09734bb48ee84f676b",
+      "drivers.json": "009477cb360e05616a4ec9da4ede80bde311a864"
+     }
+    },
+    "12": {
+     "event": "Belgian Grand Prix",
+     "folder": "Belgian Grand Prix",
+     "files": {
+      "session_laptimes.json": "c32e3dd13e3ddc70525e008c347a1549151dbda4",
+      "rcm.json": "206091d39bb2cfb2f8c1f85c7e2f21c808af3a53",
+      "session_info.json": "c5aca3336a21d417da045f263442c2d22fb616fc",
+      "drivers.json": "c33149dd6f1f6e9042c296ea81302c7a5d6173ce"
+     }
+    },
+    "13": {
+     "event": "Dutch Grand Prix",
+     "folder": "Dutch Grand Prix",
+     "files": {
+      "session_laptimes.json": "74ea20b232f0fd373299e002f614e0ccb675679c",
+      "rcm.json": "0eb481a7c4693922dc631e75d611d721b1c329f6",
+      "session_info.json": "de3212e496f7e127df14a3fff1d7dd62a686e36f",
+      "drivers.json": "1cf4109f5d15fcc7e54e532e553465f9d2c005e8"
+     }
+    },
+    "14": {
+     "event": "Italian Grand Prix",
+     "folder": "Italian Grand Prix",
+     "files": {
+      "session_laptimes.json": "d314d24e869c770807b29944fbc8f6fd0d04cf1f",
+      "rcm.json": "47aad2939e4cd6d2c74248a65697657291186478",
+      "session_info.json": "82d455e6163908865e79e1f88588bc341aa07375",
+      "drivers.json": "1cf4109f5d15fcc7e54e532e553465f9d2c005e8"
+     }
+    },
+    "15": {
+     "event": "Singapore Grand Prix",
+     "folder": "Singapore Grand Prix",
+     "files": {
+      "session_laptimes.json": "e7fa85d48c4121b1d8cbdc2417a82d2ce68ecac9",
+      "rcm.json": "0cd327fee944f7f7847d511fa28dc7167ca07923",
+      "session_info.json": "46d11e46c9cc967a75926a7cc9aff4a118945c61",
+      "drivers.json": "b0649a5ac38a8904e68264bd1f8daa5b9201eaca"
+     }
+    },
+    "16": {
+     "event": "Japanese Grand Prix",
+     "folder": "Japanese Grand Prix",
+     "files": {
+      "session_laptimes.json": "9b69f28b9485ade3a3142074bcfd70dcccb959b2",
+      "rcm.json": "2053f00145751e169da3f47fd59e79f6df082ab4",
+      "session_info.json": "d5d0c56c093a36d9ca8996a0dfdff8c30b85ea20",
+      "drivers.json": "43cccaa5fb9cd1bbca5a50da2b6944bffede6202"
+     }
+    },
+    "17": {
+     "event": "Qatar Grand Prix",
+     "folder": "Qatar Grand Prix",
+     "files": {
+      "session_laptimes.json": "40cb5330b216aa7ef912c97bade4b012d8df18bf",
+      "rcm.json": "bb42a0907ba2683a2a9a815e779a3ee8b0635818",
+      "session_info.json": "6cd7812e0a4f9f3b047c34ebd6a62e834e57d292",
+      "drivers.json": "b3264be2d7747a7840c4aa0ba3b66318def68d47"
+     }
+    },
+    "18": {
+     "event": "United States Grand Prix",
+     "folder": "United States Grand Prix",
+     "files": {
+      "session_laptimes.json": "e32fea3caf6f00504281683108e515db3695e1fd",
+      "rcm.json": "d9557b47793dcdccfaf16ab02e424c8d34136aff",
+      "session_info.json": "ef23e4fb740578b92138aef6963e321b6d04543e",
+      "drivers.json": "cdc69830d51e8e2132f60e8124dc4e31b9bcd181"
+     }
+    },
+    "19": {
+     "event": "Mexico City Grand Prix",
+     "folder": "Mexico City Grand Prix",
+     "files": {
+      "session_laptimes.json": "f4601f01b2084b3ea0640317ab05854c13f95d5f",
+      "rcm.json": "8a352538007440b7d819af1fb1cb697ff70dc5cf",
+      "session_info.json": "f44d43512fc34c04392f6764c8fcbef2fe3501b5",
+      "drivers.json": "37799b44833eb66ce3fe7142953b85770a228795"
+     }
+    },
+    "20": {
+     "event": "São Paulo Grand Prix",
+     "folder": "São Paulo Grand Prix",
+     "files": {
+      "session_laptimes.json": "ca99e6c6d09a36121eb1c6525168853067cc3151",
+      "rcm.json": "5c094613253cfcc1fd7a73985177a70ba8965202",
+      "session_info.json": "f2b4ccf8d13e8fdb83b9e141d2603f1a15665bb9",
+      "drivers.json": "cd4a5eabb084b298d76d6f50171fb03226fe0c29"
+     }
+    },
+    "21": {
+     "event": "Las Vegas Grand Prix",
+     "folder": "Las Vegas Grand Prix",
+     "files": {
+      "session_laptimes.json": "63bcdf30030fe71222efd7ee1c07095564a5d0f8",
+      "rcm.json": "946e628d9555ffd0b61c56927dc5243a0371404d",
+      "session_info.json": "50302c987ac2423a755d12a0a1a8e451da16b8f6",
+      "drivers.json": "37799b44833eb66ce3fe7142953b85770a228795"
+     }
+    },
+    "22": {
+     "event": "Abu Dhabi Grand Prix",
+     "folder": "Abu Dhabi Grand Prix",
+     "files": {
+      "session_laptimes.json": "ba43b04c97970a54cccd54dc8e60cd32ffa9d38e",
+      "rcm.json": "d39c229f7686b8ba68f7919978654df998537fc5",
+      "session_info.json": "9b8a09558691910b7944ecc5e3491c41e43cf0da",
+      "drivers.json": "6e05f53555860d6aabe07493c4341bb987a91dd7"
+     }
+    }
+   }
+  },
+  "2024": {
+   "repo": "TracingInsights/2024",
+   "commit": "d1543a71370d9b617b627319f8ad80b2f85dfd5e",
+   "licence": "MIT",
+   "rounds": {
+    "1": {
+     "event": "Bahrain Grand Prix",
+     "folder": "Bahrain Grand Prix",
+     "files": {
+      "session_laptimes.json": "be442eb20f262b39bdd83bfe1f08652ba5a5b552",
+      "rcm.json": "897799d71ca0ae683b0fdac5d186a030cd5540ad",
+      "session_info.json": "9f04c746f86083d7994625c447f853a6f15f6717",
+      "drivers.json": "c1d3a76d86b2b35bb2c6c6416eac93bb0a472488"
+     }
+    },
+    "2": {
+     "event": "Saudi Arabian Grand Prix",
+     "folder": "Saudi Arabian Grand Prix",
+     "files": {
+      "session_laptimes.json": "96b4127f4077cbb3bd09f6cad828210cf9e513d8",
+      "rcm.json": "3e3f2afc70adb503213acf73fb638168e3519e81",
+      "session_info.json": "07562e919d4471cd19f90bb7dd653749adfabcec",
+      "drivers.json": "9a2b1b75514bf045ea022ae311cf82e0466dc204"
+     }
+    },
+    "3": {
+     "event": "Australian Grand Prix",
+     "folder": "Australian Grand Prix",
+     "files": {
+      "session_laptimes.json": "79757cc5e2fe311bbb0144bc012a055e0f64517b",
+      "rcm.json": "91f5d62a5c84f1c44c4757a18beaf23fcf33b05a",
+      "session_info.json": "b90152bf4388971ef305dac7e096e09fa3802e67",
+      "drivers.json": "9497fd485dde662f4c9a5a5b694733c95d28fbe9"
+     }
+    },
+    "4": {
+     "event": "Japanese Grand Prix",
+     "folder": "Japanese Grand Prix",
+     "files": {
+      "session_laptimes.json": "29f22bb1673899fa9dfbd238aec609fbefaf2ac1",
+      "rcm.json": "7edd43be6944a34324d92f194ad57ea579d284a8",
+      "session_info.json": "ac2f996c03b9def9f650e386eab9741dbfb7558b",
+      "drivers.json": "af1f405330d0b64bc7cb06413bcdaa4f03ac9cb0"
+     }
+    },
+    "5": {
+     "event": "Chinese Grand Prix",
+     "folder": "Chinese Grand Prix",
+     "files": {
+      "session_laptimes.json": "a18ebe755706b397dc47342fb792aa4d9bf31a06",
+      "rcm.json": "ed4524feaa7ec5ae7ab488eb71cd148b770c2a56",
+      "session_info.json": "ce0217adc219852f0f97a5cc241f5ab1fca70696",
+      "drivers.json": "9188fc67098fd0f7e0457ffba8328d7d1aaeaf1d"
+     }
+    },
+    "6": {
+     "event": "Miami Grand Prix",
+     "folder": "Miami Grand Prix",
+     "files": {
+      "session_laptimes.json": "ff60d31f066e9b1ad4dc6c3f34db9d77ab0b0db4",
+      "rcm.json": "4189bd5a5e23c99e654a3edf42647ae03f20a832",
+      "session_info.json": "dd4897bf2873b4d78be57e406aa2ac04a0bfbe6f",
+      "drivers.json": "defc7728b7a3b710797a0d3dc4f6c29aa0d80ffa"
+     }
+    },
+    "7": {
+     "event": "Emilia Romagna Grand Prix",
+     "folder": "Emilia Romagna Grand Prix",
+     "files": {
+      "session_laptimes.json": "fad3dbbabc05838a2678978b5c1256a79e356bb6",
+      "rcm.json": "d5359719e5f611850d6d4f05ff71825b4d1d60f8",
+      "session_info.json": "d13e00608a70f4f1a4378e3c093d705de369321e",
+      "drivers.json": "07e3271ab224fde1684deaefd9edb1d2cfea7548"
+     }
+    },
+    "8": {
+     "event": "Monaco Grand Prix",
+     "folder": "Monaco Grand Prix",
+     "files": {
+      "session_laptimes.json": "0fe8930611c60bbc689096238d9c0aca2a957d79",
+      "rcm.json": "ee3acd25010396b1598c8dccc3e2dfd6952a6bc7",
+      "session_info.json": "320b6784322c32e0b244ff35f704bcfd7390ac49",
+      "drivers.json": "48f2ec70f4ae98f482efe28619b198e67251a4dc"
+     }
+    },
+    "9": {
+     "event": "Canadian Grand Prix",
+     "folder": "Canadian Grand Prix",
+     "files": {
+      "session_laptimes.json": "37fd016da8769353e5c5511a127b38ecac4fc99c",
+      "rcm.json": "70fe687f83a2714f95b2776529ef35f66db6d05b",
+      "session_info.json": "cc3621867874a1e26d256a8f243c1a04ce49f421",
+      "drivers.json": "3ae9c1b6495d96247d0fcfffc067098440741f76"
+     }
+    },
+    "10": {
+     "event": "Spanish Grand Prix",
+     "folder": "Spanish Grand Prix",
+     "files": {
+      "session_laptimes.json": "b97da226dc94e0930cc51782db20534fb3ca2749",
+      "rcm.json": "8642d25ebf7f80d7cc5b8fb7bdfb595970dc090c",
+      "session_info.json": "0cfd28e1b840a60883ee1b7775768ae0b5c0f641",
+      "drivers.json": "5bc4096f7170198e28afa7a2a2da3f3fd397ced0"
+     }
+    },
+    "11": {
+     "event": "Austrian Grand Prix",
+     "folder": "Austrian Grand Prix",
+     "files": {
+      "session_laptimes.json": "077dcadce7873f363cd5e9dee04a079d2398db28",
+      "rcm.json": "a58bb239313bd2ef83ca840460fc453e21c3bdb6",
+      "session_info.json": "10dd30e27e59e7bda334f174cb9f6ef2adfe639e",
+      "drivers.json": "fbb75f52f0287e5d1439a9e17e8b7a50740364cb"
+     }
+    },
+    "12": {
+     "event": "British Grand Prix",
+     "folder": "British Grand Prix",
+     "files": {
+      "session_laptimes.json": "10a7553b5569e8ea52083d06342f381822d49886",
+      "rcm.json": "444e0724a3ffedb084140444d86b65e3f7edbe9e",
+      "session_info.json": "74c4504e9be779590aef216d354e8bdebdeb0e1c",
+      "drivers.json": "81300c864ea2a093f0dd9237dca5a1cbd204f673"
+     }
+    },
+    "13": {
+     "event": "Hungarian Grand Prix",
+     "folder": "Hungarian Grand Prix",
+     "files": {
+      "session_laptimes.json": "5cabd0799839c616218c46883c3d8daaf5a62703",
+      "rcm.json": "2615b6cfe9e042fc7a7d71fba1f85d03c46c2858",
+      "session_info.json": "5f4069de33a34d901feb0e301c13464c2a1c67ad",
+      "drivers.json": "0f470b85b197172c9478f3df0198bc3e1bff1b41"
+     }
+    },
+    "14": {
+     "event": "Belgian Grand Prix",
+     "folder": "Belgian Grand Prix",
+     "files": {
+      "session_laptimes.json": "e77100e3733127f52e1b60d8a8a6b09d40e0a4d2",
+      "rcm.json": "4050e5967f7728fb1e22157e94abb476664c6c6a",
+      "session_info.json": "739a677f1e91b0dfbedf393447c2f3ed84bcda72",
+      "drivers.json": "765c3684c1890e17835ab77632963d3934bd45d1"
+     }
+    },
+    "15": {
+     "event": "Dutch Grand Prix",
+     "folder": "Dutch Grand Prix",
+     "files": {
+      "session_laptimes.json": "57ff13a5f2e0b03457b3b262bf23d431eddbedce",
+      "rcm.json": "1188781dd163af0d71a05400b639d34e2d4842e5",
+      "session_info.json": "3d73348d460d01b368a567f31804faa9388dad12",
+      "drivers.json": "a200f39b40620784fa098929cb603627613d7798"
+     }
+    },
+    "16": {
+     "event": "Italian Grand Prix",
+     "folder": "Italian Grand Prix",
+     "files": {
+      "session_laptimes.json": "8b5f8e56a15e56abe7feaa2a71977a1dd4e0bab2",
+      "rcm.json": "6bbf804ee335a033d5245b7759123b30b6f85db4",
+      "session_info.json": "8f55e438710437c89ae057a8ecb5ec1a5cf1b44b",
+      "drivers.json": "248f11ea3f90b6e834274ab3ee263bf15e8c722f"
+     }
+    },
+    "17": {
+     "event": "Azerbaijan Grand Prix",
+     "folder": "Azerbaijan Grand Prix",
+     "files": {
+      "session_laptimes.json": "028f293b0e2126e455711f908592e10cd9ad8773",
+      "rcm.json": "d5ec76c515364215767cd8e6b8143cff6d56488f",
+      "session_info.json": "8101a4318a9bf187069775ad8d5ebf725c6d7f8d",
+      "drivers.json": "f5208ca197e8b555212c3ffd369b8d5fffad9248"
+     }
+    },
+    "18": {
+     "event": "Singapore Grand Prix",
+     "folder": "Singapore Grand Prix",
+     "files": {
+      "session_laptimes.json": "92638080d6e57965c6a4bdd3f05c7f72d1822ff3",
+      "rcm.json": "21bfda00abd940ed7f5fcfedc56d0efaa11f4cc9",
+      "session_info.json": "809e13bb3779a92a26d848c3dbb934a9b7f10a6c",
+      "drivers.json": "b1cd154f78737e2e2eb64e0bf10b5320b875477c"
+     }
+    },
+    "19": {
+     "event": "United States Grand Prix",
+     "folder": "United States Grand Prix",
+     "files": {
+      "session_laptimes.json": "8890f6eafb7cc605cc6f051020efc8ff7cc89ebe",
+      "rcm.json": "4fbfee758d6c3f14d0f7fe8a6528dc3f0199681e",
+      "session_info.json": "fd3bf132b1d78a9f545e4a0383ef593e617823aa",
+      "drivers.json": "788d7d09fff71816bbd00a2c5912b34e6f57556e"
+     }
+    },
+    "20": {
+     "event": "Mexico City Grand Prix",
+     "folder": "Mexico City Grand Prix",
+     "files": {
+      "session_laptimes.json": "e5cf21eda6c7e461c8b698abb2b3398eb98f578c",
+      "rcm.json": "18b6b4633cec148df04adec86fd0c84683698223",
+      "session_info.json": "46d843c15a908fdc5af694c82b7e560dd6edc762",
+      "drivers.json": "9279194b51824ac3115787a0c21b1201e52ca838"
+     }
+    },
+    "21": {
+     "event": "São Paulo Grand Prix",
+     "folder": "São Paulo Grand Prix",
+     "files": {
+      "session_laptimes.json": "a01d84e650ace99b45e39a580c0cfc2b5a3ae805",
+      "rcm.json": "cb35a8d9b2e7022d2d51d707bd149263f70400f4",
+      "session_info.json": "6d08f5b9d53d37be181726cbbae82e6dab742707",
+      "drivers.json": "8e00903868c115d25fc50c181d1b32473bc327f5"
+     }
+    },
+    "22": {
+     "event": "Las Vegas Grand Prix",
+     "folder": "Las Vegas Grand Prix",
+     "files": {
+      "session_laptimes.json": "7abed579f0d396d272d1d9ae0c7c65f04cdf07a1",
+      "rcm.json": "e63696968e442ae84ca7756478867517fa7797ab",
+      "session_info.json": "a3cda5f94309e368b1ec7625ed45d491ea45572f",
+      "drivers.json": "1d8765130995840e895a3a918e68dc964b0446d8"
+     }
+    },
+    "23": {
+     "event": "Qatar Grand Prix",
+     "folder": "Qatar Grand Prix",
+     "files": {
+      "session_laptimes.json": "4340d44f287a2f668fde9b532b7b37dfb0afa3e6",
+      "rcm.json": "ae2449c68cd46f516229b8dc176d909816d69f39",
+      "session_info.json": "faa7026da0dfd9ada98458be0ef6d5a8efcb881f",
+      "drivers.json": "54151b0570346f5c564bb6a01017014d91c8e3fb"
+     }
+    },
+    "24": {
+     "event": "Abu Dhabi Grand Prix",
+     "folder": "Abu Dhabi Grand Prix",
+     "files": {
+      "session_laptimes.json": "e8b3227404e641380cd665a04b01333b87fb8d24",
+      "rcm.json": "84ceaf1182ba6326b1d1c850997066a16c778e7c",
+      "session_info.json": "611332d4840ad3d87f0ddc9a0abbcf969651ff77",
+      "drivers.json": "fba44e6a8247c98eab3287c3d379991e26478023"
+     }
+    }
+   }
+  },
+  "2025": {
+   "repo": "TracingInsights/2025",
+   "commit": "dfb3ea3f50b69857fe8e40cabe5e899743c59f6a",
+   "licence": "Apache-2.0",
+   "rounds": {
+    "1": {
+     "event": "Australian Grand Prix",
+     "folder": "Australian Grand Prix",
+     "files": {
+      "session_laptimes.json": "6daa7337e1109a1a734c88fbeff575da0fc22541",
+      "rcm.json": "34b808c70a9512f5533a77fc08e03ffec2922b4e",
+      "session_info.json": "7dbf3480795172210faf49bd32378ea6a053f036",
+      "drivers.json": "4be7acffdd7c61abcb69db5999d96e764f48b720"
+     }
+    },
+    "2": {
+     "event": "Chinese Grand Prix",
+     "folder": "Chinese Grand Prix",
+     "files": {
+      "session_laptimes.json": "40722156df53f616ad5d4beb114e8fcf922da106",
+      "rcm.json": "6f44262843aa11b74b3dfa993593b0e67f0b6eb2",
+      "session_info.json": "7a0d1870e72b3b132f2c25ac5bef1e91edf76947",
+      "drivers.json": "fa1de0398542c4dda5d1aa77ab53829811efa3bc"
+     }
+    },
+    "3": {
+     "event": "Japanese Grand Prix",
+     "folder": "Japanese Grand Prix",
+     "files": {
+      "session_laptimes.json": "69004779a8cf58a1167069cf715145cb195473c1",
+      "rcm.json": "86bab411240a4a61c3113cb1a239fd0bb0b4d3b5",
+      "session_info.json": "d26a247616522eb2e2feaf188627047de6083fdc",
+      "drivers.json": "e5dc6fb7ed737f4806977edf586b86e695c61f3e"
+     }
+    },
+    "4": {
+     "event": "Bahrain Grand Prix",
+     "folder": "Bahrain Grand Prix",
+     "files": {
+      "session_laptimes.json": "5d71988eb497e58a73cf82776745c21754d467cb",
+      "rcm.json": "6c7c73a852756d5b044134659625d6e5474b236e",
+      "session_info.json": "746139bf71f14e3df9c9b24e28685b2e01999222",
+      "drivers.json": "3a26b407e52e535c6267f2c64ac12cb62b55f1e6"
+     }
+    },
+    "5": {
+     "event": "Saudi Arabian Grand Prix",
+     "folder": "Saudi Arabian Grand Prix",
+     "files": {
+      "session_laptimes.json": "fb2826f2f74322cad8fedcd72538daa35f04f008",
+      "rcm.json": "adb8a18da72ada61d4ba4e83ab58e41c85a8efb2",
+      "session_info.json": "20832d68bc0e2b9129fe180324cfe65e1214d28d",
+      "drivers.json": "1c96bcb96d48995da3361f4b747b1bd6b4775584"
+     }
+    },
+    "6": {
+     "event": "Miami Grand Prix",
+     "folder": "Miami Grand Prix",
+     "files": {
+      "session_laptimes.json": "480c1057090fe09b29ff58f96132c50ac36fe086",
+      "rcm.json": "3858838e050bf32eb7e6dfbcc9f837b79c1456fa",
+      "session_info.json": "bcdc45d7cf2726b36ec30a6a3e8929ee9254d975",
+      "drivers.json": "12a77d2d8f699eac0674c3e62aff151759f07ff7"
+     }
+    },
+    "7": {
+     "event": "Emilia Romagna Grand Prix",
+     "folder": "Emilia Romagna Grand Prix",
+     "files": {
+      "session_laptimes.json": "8b9007ebf5bbe7198398e5a88e1ede48237200b6",
+      "rcm.json": "dcbb0b48ca18266406ce681a97452fee31854df3",
+      "session_info.json": "739b6d5016ce00e0353aa8ce4b69c004601f8049",
+      "drivers.json": "c82fa6ec7e2e4367f73e4f645499cb7cd33ff178"
+     }
+    },
+    "8": {
+     "event": "Monaco Grand Prix",
+     "folder": "Monaco Grand Prix",
+     "files": {
+      "session_laptimes.json": "7a42fd15aa948073fb39c455131fda5443236c38",
+      "rcm.json": "48ecbc320a2e0cbe21d3657ef9620c7e1a51eafd",
+      "session_info.json": "5b86d44c971147104a9409e9eec7d9d51461b835",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "9": {
+     "event": "Spanish Grand Prix",
+     "folder": "Spanish Grand Prix",
+     "files": {
+      "session_laptimes.json": "992663e3a5050deefdc1f700db87e8fb96f02257",
+      "rcm.json": "d18d980f65c16327979adb6b53d8bdaddba1a690",
+      "session_info.json": "14d0dd6bd73038ed24efdea05f6d9e0337459296",
+      "drivers.json": "97fa12ce6eb732030b81a06a87e984e88ddbc165"
+     }
+    },
+    "10": {
+     "event": "Canadian Grand Prix",
+     "folder": "Canadian Grand Prix",
+     "files": {
+      "session_laptimes.json": "567eb5dd4801335e886aa47b5668cce29464ab5e",
+      "rcm.json": "07e2a72bb5090465db6910453603e396133cd967",
+      "session_info.json": "8875c1db7c71d6ae2e201fb64ec97bdfc0f4364a",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "11": {
+     "event": "Austrian Grand Prix",
+     "folder": "Austrian Grand Prix",
+     "files": {
+      "session_laptimes.json": "55f9a66bc1ace9603a984fea5fd28f1cce7367b8",
+      "rcm.json": "5d6f9600af309f5fcd5c90c8fe69467223bf791d",
+      "session_info.json": "6a51481dbb877af9d3731106b17ccb25be104312",
+      "drivers.json": "949dc4e2edb533bbf68572e649aaa8ada6900993"
+     }
+    },
+    "12": {
+     "event": "British Grand Prix",
+     "folder": "British Grand Prix",
+     "files": {
+      "session_laptimes.json": "a00462ddf0d0ea4bcc3685fec64e4fe1fb8aa1cb",
+      "rcm.json": "6bb507588379cfd18ce1a2a2585cafbd70e85c68",
+      "session_info.json": "2fd59b169ea4125b2eab0aec03821d1cfcb682b3",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "13": {
+     "event": "Belgian Grand Prix",
+     "folder": "Belgian Grand Prix",
+     "files": {
+      "session_laptimes.json": "3ea510477d950b2c0384433ddb17b31ba54ed4b5",
+      "rcm.json": "2a761e88f17cabee203342faac10941a604b3de7",
+      "session_info.json": "79174637a3694efd1814f90439ac69ee0a06741c",
+      "drivers.json": "121b0ba6a2225eb0dde397a706fcbdfc6dac0f94"
+     }
+    },
+    "14": {
+     "event": "Hungarian Grand Prix",
+     "folder": "Hungarian Grand Prix",
+     "files": {
+      "session_laptimes.json": "a05612b50c1f07c0a232f2211a26b538f28ce39b",
+      "rcm.json": "b0c20380cc5032f02f39b22f7e0f7ccbffb2efd3",
+      "session_info.json": "c29c3b1d5afeb090e0f0e5048c0cf06dc6945b5d",
+      "drivers.json": "e81d1f1fa6d8416f08d095daaea1a0d685a68ecc"
+     }
+    },
+    "15": {
+     "event": "Dutch Grand Prix",
+     "folder": "Dutch Grand Prix",
+     "files": {
+      "session_laptimes.json": "89d3e924b61ef0c05d79845281092ee63461b9a2",
+      "rcm.json": "68a3ae8a977b27aca88db2d6b4307c2e07af4608",
+      "session_info.json": "dd4fbeec1a4339b372c64c738528d17946853eef",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "16": {
+     "event": "Italian Grand Prix",
+     "folder": "Italian Grand Prix",
+     "files": {
+      "session_laptimes.json": "738bf7ae7424d0efad1fda179151cdfea4489564",
+      "rcm.json": "8894e23ad31e1dbcc1fb4c25e19bea77a92b102a",
+      "session_info.json": "76c9209228c7185e46de465ad37a216f00e39967",
+      "drivers.json": "f98bfcb65d952f863de12da325f74ef3bd0b4b30"
+     }
+    },
+    "17": {
+     "event": "Azerbaijan Grand Prix",
+     "folder": "Azerbaijan Grand Prix",
+     "files": {
+      "session_laptimes.json": "548bccba6d497c35a6ced7bca33a4b64f0365e42",
+      "rcm.json": "e3e81b5ab4f4d155897378cc0bced16f7cfd2516",
+      "session_info.json": "7f24620c05f4da76a04b14ab2d9597e91eeec29f",
+      "drivers.json": "fd189575021cf59866c0dafe7c3be14ac81fb06e"
+     }
+    },
+    "18": {
+     "event": "Singapore Grand Prix",
+     "folder": "Singapore Grand Prix",
+     "files": {
+      "session_laptimes.json": "6c828a4fbdfa8149afc43acc25a3a8a0342f0236",
+      "rcm.json": "14cc10b9cadbb4eceb5246e689528018da055c1b",
+      "session_info.json": "529fd0d215583531e040b8c702c731ce2058d1e0",
+      "drivers.json": "426841e3e80d193c4b91f5e5748636682fadb108"
+     }
+    },
+    "19": {
+     "event": "United States Grand Prix",
+     "folder": "United States Grand Prix",
+     "files": {
+      "session_laptimes.json": "2518fe3c373595547bd5d83cdfa91f402e423f63",
+      "rcm.json": "408dd73d6a49f5d9d8589ef222d8db057e084ce4",
+      "session_info.json": "7f2196e03cf7c47767afc6c939ac4a1a76fc0c2c",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "20": {
+     "event": "Mexico City Grand Prix",
+     "folder": "Mexico City Grand Prix",
+     "files": {
+      "session_laptimes.json": "c1aed8cb882ca41074666a8ead23459cc9958eb6",
+      "rcm.json": "9ef5def43d8897eb59afbd6a79670102561a35ac",
+      "session_info.json": "4fa26b0aa191d431dd6b2b1a47fe7c87a1c01a62",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "21": {
+     "event": "São Paulo Grand Prix",
+     "folder": "São Paulo Grand Prix",
+     "files": {
+      "session_laptimes.json": "b7c25ddc364a03b209e1f39960fcaded75142968",
+      "rcm.json": "35afa2742f5c6975392dc8e75f34605fbfc904f9",
+      "session_info.json": "add8b6ae4171886f9f0dd07ca097a355e87dd22b",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "22": {
+     "event": "Las Vegas Grand Prix",
+     "folder": "Las Vegas Grand Prix",
+     "files": {
+      "session_laptimes.json": "5bc24f5a52810cbf8a229f82f2543730287c7a00",
+      "rcm.json": "bc9ed954da129df37775900f640348da296652c3",
+      "session_info.json": "fa14bd754dfbaf295d44a2ce303aa49b00d8a85d",
+      "drivers.json": "99a9638a8f75e258a89929bc887e1f439d5dcaa1"
+     }
+    },
+    "23": {
+     "event": "Qatar Grand Prix",
+     "folder": "Qatar Grand Prix",
+     "files": {
+      "session_laptimes.json": "07f7fea0985b4053e7eb1ea01baca06d16085e14",
+      "rcm.json": "3a95bf2f56c24f54faf3486cb0f47d4fb0ef185d",
+      "session_info.json": "1775424e6ce7ff18b1875abdde759dbf75d8345a",
+      "drivers.json": "e5e35c4d8bf81e9e86c403d34cda1e336a859c61"
+     }
+    },
+    "24": {
+     "event": "Abu Dhabi Grand Prix",
+     "folder": "Abu Dhabi Grand Prix",
+     "files": {
+      "session_laptimes.json": "b67d08628d25b34353100cde935f82c42939787b",
+      "rcm.json": "21ed753089a4bbaa3c891d343fb13c561616cafe",
+      "session_info.json": "31f532c86edadccc4b6f1b4c9cd70f1492282a6f",
+      "drivers.json": "6ef119dfbfe02b8df91343049d65dbc87a4b0853"
+     }
+    }
+   }
+  }
+ }
+}

@@ -584,3 +584,83 @@ flagged laps in these four races are a wet or drying track, not a safety car. Th
 Red-flag laps are now flagged in 2022 R7 (lap 30) and 2023 R13 (lap 64). Excluding wet laps is consistent with the
 label definition, which excludes wet running (reason 15). In full mode, compounds are null, so reason 15 cannot fire
 and the heuristic is the only thing that excludes them; those attempts are counted as `neutralised`, not `wet`.
+
+## TracingInsights tables (Step 4C)
+Source: TracingInsights season repositories, Race sessions, at pinned commits (`docs/data_source_audit.md`). Real
+data: `is_synthetic = false`, `source = 'tracinginsights'`. **Additive.** No v1 table reads these, and
+label-definition-v1 and model-spec-v1 are unchanged. Missing values arrive as the string `"None"`. They are
+converted to nulls explicitly and counted per field in each raw partition's `_manifest.json` (`none_strings`).
+
+### Raw zone (`raw/tracinginsights/{table}/season=S/round=R/`)
+| Table | Files | Notes |
+|---|---|---|
+| `laps` | `session_laptimes.json` (as received), `laps.parquet` | 42 fields renamed (`lST`→`lap_start_session_s`, `sesT`→`lap_end_session_s`, `life`→`tyre_life`, `pin`/`pout`→`pit_in/out_session_s`, …); session seconds |
+| `rcm` | `rcm.json`, `rcm.parquet` | `seq` (file order), `time_utc` text, category, message, flag, scope, sector, `driver_number`, `lap` |
+| `session_info` | `session_info.json`, `track_status.parquet` | `_manifest.json` meta: t0 date, session start, total laps, meeting name |
+| `drivers` | `drivers.json`, `drivers.parquet` | code, team |
+| `telemetry_lap_agg` | `telemetry_lap_agg.parquet` | one row per lap window, keyed by TI `driver_code`; meta: files, bytes, `telemetry_inputs_sha256`, duplicate and outside-window sample counts, coverage counts |
+| `telemetry` (`/driver=DRV/`) | `telemetry.parquet` | **2024 only**: raw samples (`time_in_lap_s`, `session_time_s`, speed, rpm, gear, throttle, brake, drs, distance, x/y/z, accelerations, car ahead) |
+
+### Clean zone (`clean/{table}/season=S/round=R/`)
+| Table | Key | Columns |
+|---|---|---|
+| `stints_tracinginsights` | season, round, driver_id, stint | driver_code, start_lap, end_lap, laps, `compound` (SOFT/MEDIUM/HARD/INTERMEDIATE/WET or null), `compound_missing`, `n_laps_compound_null`, `compound_conflict` (laps disagree → compound null), `tyre_age_at_start` (first lap's tyre life − 1), `fresh_tyre` |
+| `race_control` | season, round, seq | time_utc, lap, category, message, status, flag, scope, sector, driver_number (from `dNum`, else the text: "PENALTY FOR CAR n", else the only "CAR n (XXX)"), driver_id, `is_sc_deployed`, `is_vsc_deployed`, `is_red_flag`, `is_penalty` ("PENALTY FOR CAR") |
+| `race_control_track_status` | season, round, seq | start/end session s (end null for the last period), status code, message, `is_green` (1), `is_yellow` (2), `is_sc` (4), `is_red_flag` (5), `is_vsc` (6), `is_vsc_ending` (7), `lap_from`/`lap_to` = leader laps overlapping the period |
+| `telemetry_lap_real` | season, round, driver_id, lap | the `telemetry_agg` aggregates (mean/max speed, `pct_full_throttle` at ≥ 98%, brake fraction, gear changes, mean RPM), `n_samples` (0 = no telemetry), `telemetry_coverage` (full / partial / none) |
+| `compound_coverage` | season, round | n_lap_rows, n_compound_known, `compound_share`, n_compound_unknown_label, n_compound_null, n_tyre_life_known, `tyre_life_share`, n_stint_null, `below_95pct`, n_drivers, n_drivers_unmapped, n_rcm_messages, n_rcm_with_lap, telemetry laps by coverage |
+
+- **Driver mapping:** TI code → the v1 clean `drivers.code` of the race, else the car number. Unmapped drivers are
+  counted in `compound_coverage` and left out of the driver-keyed tables.
+- **Coverage:** a race below 95% compound coverage (2022 R11 Austria: 77% in the audit) keeps null compounds with
+  `compound_missing`, never imputed. `results/tracinginsights_coverage_full.csv` and
+  `clean/_quality/tracinginsights.json` hold counts and shares only (2025 included as counts only).
+- **Telemetry coverage thresholds** (`features/telemetry_agg_ti.py`): a lap is `none` with 0 samples, `partial`
+  when the samples span less than 90% of the lap window **or** any gap between consecutive samples is greater than
+  **2.0 s**, otherwise `full`. The planned gap threshold was 1.0 s. On the real laps checked in Step 4C Phase 2 it flagged 14 of 56
+  laps whose only defect was an ordinary 1.0–1.3 s feed dropout. Those laps keep usable aggregates, so the
+  threshold was raised to 2.0 s, which still catches real holes in the data.
+
+### Lap reconciliation (`make reconcile-ti-full`, `etl/reconcile_ti.py`, read-only)
+Key: (season, round, driver_id, lap). Jolpica = v1 clean `laps`; TI = `telemetry_lap_real`. The table shows counts
+only, and 2025 is included as counts only. `telemetry_lap_real` has exactly as many rows as the raw TI laps and the
+raw telemetry aggregates in every season, so the driver mapping drops no rows. The 2025 count is **26,692**, not
+the 26,711 given in the step brief: the brief was 19 rows high, and the table count matches
+`results/tracinginsights_coverage_full.csv`.
+
+| Season | Jolpica | TI | TI only | Jolpica only | TI only: driver has no Jolpica lap | TI only: after the driver's last Jolpica lap |
+|---|---|---|---|---|---|---|
+| 2021 | 23,688 | 23,758 | 70 | 0 | 12 | 58 (40 finished, 18 retired) |
+| 2022 | 23,529 | 23,577 | 48 | 0 | 9 | 39 (1 finished, 1 lapped, 37 retired) |
+| 2023 | 24,386 | 24,422 | 36 | 0 | 8 | 28 (2 lapped, 26 retired) |
+| 2024 | 26,574 | 26,606 | 32 | 0 | 13 | 19 (19 retired) |
+| 2025 | 26,657 | 26,692 | 35 | 0 | 14 | 21 (21 retired) |
+
+The status classes come from Jolpica `results.status`: `Finished`; lapped (`+n Lap(s)` / `Lapped`); retired (any
+other status).
+- **Uniqueness:** there are 0 duplicate keys in `telemetry_lap_real` (season, round, driver_id, lap),
+  `stints_tracinginsights` (season, round, driver_id, stint) and `compound_coverage` (season, round), and also
+  none in `race_control` and `race_control_track_status`. The two stint and coverage tables have no `lap` column.
+  For stints, the laps `start_lap..end_lap` are expanded to check the lap-level key as well (0 laps in two stints).
+- **No fan-out:** a left join from Jolpica laps to `telemetry_lap_real` keeps the Jolpica row count exactly in
+  every season, and every Jolpica lap matches (23,688 / 23,529 / 24,386 / 26,574 / 26,657 matched).
+- **Verified:** each cause count comes from a rule checked on the data.
+  - Every difference is a TI-only row; Jolpica-only is 0 in every season.
+  - There are 0 rows with lap < 1 (no lap 0 or formation lap), 0 duplicate rows and 0 driver-mapping losses (every
+    TI-only driver is a Jolpica entrant).
+  - Every one of the 221 TI-only rows has a null raw TI `lap_time_s`, so it is a lap that was not completed. The
+    driver's last Jolpica lap always equals `results.laps`.
+  - 201 of the 221 rows are lap `results.laps + 1`.
+    - The 56 rows of drivers with no Jolpica lap have `results.laps = 0`: they retired on lap 1 or did not start,
+      and TI keeps an uncompleted lap 1.
+    - The rest are the uncompleted lap on which a car retired, or the lap a lapped or finished car was on when
+      the race ended.
+  - The other 20 rows are 2021 R12 (Belgium): TI has laps 2–3 behind the SC for all 20 classified cars, while
+    Jolpica and the results record 1 lap.
+  - TI-only rows are often `partial` telemetry (84 of 221, against 190 of 125,055 overall).
+- **Interpretation (not verified beyond the counts above):** TracingInsights/FastF1 opens a lap when a car crosses
+  the line and keeps it even if the car never completes it. Jolpica lists only completed, timed laps.
+- **For later joins:** join TI onto Jolpica laps (left join, no fan-out), never the other way round. Use TI-only
+  rows only with `lap_time_s` and the coverage flag in mind.
+- **Races below 95% compound coverage:** 2021 R12 Belgian GP 0.0, 2022 R11 Austrian GP 0.7742, 2025 R6 Miami GP
+  0.5562, 2025 R13 Belgian GP 0.9352.

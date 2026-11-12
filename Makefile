@@ -86,6 +86,23 @@ report-full: ## Full-data quality report into results/ (reads HDFS, writes nothi
 
 pipeline-full: etl-full features-full report-full ## etl-full, features-full, then report-full
 
+# ---------------------------------------------------------------- TracingInsights (Step 4C)
+# ingest-ti-full runs on the HOST: files go through HttpFS (HDFS_HTTPFS_URL) as in Step 4A, and the
+# per-lap telemetry aggregates are computed with a local Spark session before upload. Resumable
+# (data/manifest_tracinginsights.json); SKIP_RAW_TELEMETRY=1 keeps no raw samples (default: 2024).
+.PHONY: ingest-ti-full etl-ti-full reconcile-ti-full test-ti
+ingest-ti-full: ## TracingInsights tables + telemetry aggregates for 2021-2025 into /f1/raw (host -> HttpFS)
+	DATA_LAKE_URI=$(HDFS_LAKE) uv run f1sa-ingest-ti --seasons 2021-2025 --sink hdfs$(if $(SKIP_RAW_TELEMETRY), --skip-raw-telemetry,)
+
+etl-ti-full: hdfs-dirs ## Additive TracingInsights clean tables in /f1/clean + results/tracinginsights_coverage_full.csv
+	$(APP_EXEC) python -m f1sa.etl.clean_tracinginsights
+
+reconcile-ti-full: ## Read-only TracingInsights vs Jolpica lap reconciliation (counts only, writes nothing)
+	$(APP_EXEC) python -m f1sa.etl.reconcile_ti
+
+test-ti: ## TracingInsights unit tests (invented fixtures, no network)
+	uv run pytest tests/unit/test_tracinginsights_parse.py tests/unit/test_tracinginsights_loader.py tests/unit/test_telemetry_agg_ti.py tests/unit/test_clean_tracinginsights.py tests/unit/test_hdfs_replication.py tests/unit/test_reconcile_ti.py -q
+
 .PHONY: model-dev-full
 model-dev-full: ## DEVELOPMENT model run on the full features (2021-2024 only; 2025 never loaded)
 	$(APP_EXEC) python experiments/model_eval.py --source full --no-test

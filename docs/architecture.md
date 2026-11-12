@@ -179,6 +179,45 @@ same guarantees:
 - Races are loaded and written one at a time, one driver partition after another. The session is dropped and
   `gc.collect()` runs before the next race, so at most one race is in memory.
 
+## TracingInsights source (`ingest/tracinginsights_*.py`, `etl/clean_tracinginsights.py`, Step 4C)
+FastF1 needs an F1 TV login since Oct 2026, so tyres, race control, exact track status and telemetry come from the
+TracingInsights season repositories (audit: `docs/data_source_audit.md`). FastF1 stays as an optional path.
+
+```mermaid
+flowchart LR
+  GH["raw.githubusercontent.com<br/>TracingInsights/&lt;season&gt;@&lt;pinned commit&gt;"] -->|"tables (≤1 req/s)<br/>telemetry (4 parallel, in memory)"| HOST["host: f1sa-ingest-ti<br/>blob-id check, None→null + counts<br/>local Spark: telemetry_agg"]
+  HOST -->|HdfsSink → HttpFS| RAW["/f1/raw/tracinginsights/<br/>laps rcm session_info drivers<br/>telemetry_lap_agg, telemetry (2024)"]
+  RAW --> CT["app: f1sa-clean-ti (Spark)"]
+  V1["/f1/clean/drivers (v1, read-only)"] --> CT
+  CT --> NEW["/f1/clean: stints_tracinginsights, race_control,<br/>race_control_track_status, telemetry_lap_real, compound_coverage"]
+```
+
+- **Reproducible:** commits are pinned in `ingest/tracinginsights_pins.json`, together with the git blob ids of the
+  four table files of every race. Telemetry blob ids come from a blob-free fetch of the pinned tree (a few MB,
+  cached in `data/cache/tracinginsights/trees`). Every body is checked against its blob id before anything is
+  written. sha256s go into each partition's `_manifest.json` and into `data/manifest_tracinginsights.json`, which is
+  resumable, uses `--only-failed`, and is separate from `data/manifest.json`.
+- **Telemetry (B4):**
+  - one race at a time: download into memory, put the samples on the session clock (`lST + time`, ms), drop the
+    boundary sample that consecutive lap files share (keeping the later lap's copy), then aggregate with the
+    unchanged `telemetry_agg.assign_to_laps` + `aggregate_samples`;
+  - only the aggregates are kept, plus `n_samples` and a coverage flag (`none` / `partial`: span < 90% or a gap
+    > 2 s / `full`);
+  - raw samples are kept for 2024 only (`--skip-raw-telemetry`);
+  - peak local disk ≈ 0. A disk guard checks free space on `/mnt/c` (the Windows drive backing WSL) and refuses
+    below 20 GB.
+- **Additive:** the new clean tables live in `lake/schemas_tracinginsights.py`, and `etl.clean` never reads them.
+  The v1 stints precedence (FastF1 → synthetic → inferred), the neutralisation flag and every v1 table are
+  unchanged. A test runs v1 clean with and without TI raw data present and compares the checksums.
+
+### HDFS replication
+The cluster has one datanode, but the PySpark Hadoop client in the app image (no `HADOOP_CONF_DIR`) used Hadoop's
+default `dfs.replication=3`. So every block written by the Spark jobs (`/f1/clean`, `/f1/features`; 1,936 blocks)
+was under-replicated, while HttpFS (which reads `hdfs-site.xml`, replication 1) wrote `/f1/raw` correctly.
+`etl.spark.build_spark` now passes `spark.hadoop.dfs.replication` from `HDFS_REPLICATION` (default 1), and
+`HdfsSink` sends `replication` on CREATE explicitly. Existing files keep their factor until
+`hdfs dfs -setrep -R 1 /f1` is run, which changes metadata only and leaves contents and checksums alone.
+
 ## Sample mode (`data/sample/`, Step 4B)
 - `make sample-data` validates the bundle **offline**, or builds it if it is missing (`REBUILD=1` to force).
 - The bundle is a mini raw lake with the raw-zone layout: real Jolpica pages for 2023 R5 and 2024 R5 plus

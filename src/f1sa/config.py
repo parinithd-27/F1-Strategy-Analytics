@@ -50,9 +50,18 @@ class Settings(BaseSettings):
     fastf1_cache_dir: Path = Path("data/cache/fastf1")
     hdfs_httpfs_url: str = "http://localhost:14000"
     hdfs_user: str = "hadoop"
+    hdfs_replication: int = Field(default=1, ge=1, le=3)
+    """Block replication for files we write to HDFS (Spark jobs and HttpFS). The dev cluster
+    has one datanode, so the Hadoop client default of 3 leaves every block under-replicated."""
     manifest_path: Path = Path("data/manifest.json")
     sample_dir: Path = Path("data/sample")
     fastf1_max_races_per_hour: int = Field(default=20, ge=1, le=60)
+    tracinginsights_cache_dir: Path = Path("data/cache/tracinginsights")
+    tracinginsights_manifest_path: Path = Path("data/manifest_tracinginsights.json")
+    ti_disk_guard_path: Path = Path("/mnt/c")
+    """Free space is checked here: on WSL the Windows drive backs the Docker/WSL disks, while the
+    WSL filesystem itself reports its virtual size."""
+    ti_min_free_gb: float = Field(default=20.0, gt=0)
     f1_username: SecretStr | None = None
     f1_password: SecretStr | None = None
 
