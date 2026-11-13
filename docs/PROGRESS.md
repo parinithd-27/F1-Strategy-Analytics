@@ -1084,3 +1084,4 @@ empty). Python: `uv run pytest tests/unit/test_api_races.py tests/unit/test_api_
 
 ## 9f approval
 - 2026-11-13: label-definition-v1, model-spec-v1 and model-spec-v2 approved for the single 2025 test run by Parinith D. on behalf of the team (Data Wranglers). No further sign-off required.
+- 2026-11-12 21:02 UTC: first 9f attempt aborted. The app container went down overnight mid-run. No results files were written and no 2025 test numbers were seen. The partial model folder is kept as models/undercut/_aborted_20261112T2102Z_full_real_G3.5_k2 and its log as data/test_run_aborted_20261112.log (both gitignored). Rerun allowed under the rerun rule (crash with no test number seen).
