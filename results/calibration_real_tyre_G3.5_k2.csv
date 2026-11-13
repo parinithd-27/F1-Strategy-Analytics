@@ -1,0 +1,3 @@
+model,split,chosen_method,brier_raw,brier_isotonic,brier_platt,brier_calibrated,ece_raw,ece_calibrated,ece_5bin_raw,ece_5bin_calibrated,n_attempts,reason
+lr,validation,platt,0.190414,0.152041,0.178534,0.178534,0.167134,0.114460,0.133029,0.064315,49,platt: validation has 49 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples
+gbt,validation,platt,0.210494,0.149546,0.191252,0.191252,0.174461,0.106951,0.163428,0.082694,49,platt: validation has 49 labelled attempts (< 300); isotonic has one free step per distinct score and overfits small samples
