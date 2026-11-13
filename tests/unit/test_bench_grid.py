@@ -242,12 +242,21 @@ CHILD_HOG = (
 
 
 def test_subprocess_cell_ok(tmp_path: Path) -> None:
+    # Fixed memory readings (a quiet cgroup, plenty of host memory): the outcome must not depend
+    # on how much memory the machine running the tests happens to use.
+    cg = tmp_path / "cgroup"
+    cg.mkdir()
+    (cg / "memory.current").write_text(str(GIB // 4))
+    (cg / "memory.stat").write_text("inactive_file 0\n")
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(f"MemTotal: {32 * GIB // 1024} kB\nMemAvailable: {16 * GIB // 1024} kB\n")
     result = tmp_path / "c.result.json"
     outcome = G.run_subprocess_cell(
         [sys.executable, "-c", CHILD_OK, "--out", str(result)],
         result,
         MemoryGuard(4 * GIB),
         interval_s=0.05,
+        sampler_kwargs={"cgroup_root": cg, "meminfo": meminfo},
     )
     assert outcome.status == "ok" and outcome.result == {
         "status": "ok",

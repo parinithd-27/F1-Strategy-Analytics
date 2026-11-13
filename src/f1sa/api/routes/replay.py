@@ -49,6 +49,7 @@ async def start_replay(body: ReplayIn, race: Race, deps: Deps) -> ReplayOut:
     except OSError as exc:
         log.error("replay launch failed", extra={"season": s, "exc_class": type(exc).__name__})
         raise HTTPException(500, "the producer could not be started") from exc
+    deps.lap_logs.start_soon(s, r, fresh=True)  # what-if lap history from lap 1 (S15)
     return ReplayOut(**job.to_dict())
 
 

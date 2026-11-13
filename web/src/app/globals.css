@@ -204,6 +204,34 @@ input[type="search"], select {
 .replay-status.state-running, .replay-status.state-starting { color: var(--ok); }
 .replay-error { margin: 0.25rem 0 0; min-height: 1.2rem; font-size: 0.82rem; color: var(--danger); }
 
+/* What-if: results area reserves its height, so a run never shifts the page; the table scrolls
+ * inside it on narrow screens (min-width 0 lets the grid item shrink below the table). */
+.whatif-panel { min-width: 0; }
+.whatif-form { display: flex; align-items: end; gap: 0.75rem; flex-wrap: wrap; }
+.wi-field { display: grid; gap: 0.3rem; font-size: 0.8rem; color: var(--muted); min-width: 0; }
+.wi-field select {
+  min-height: 2.5rem; min-width: 12rem; max-width: 100%; padding: 0 0.5rem; font: 600 0.9rem/1 var(--font-num);
+  color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.wi-field select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.whatif-status { margin: 0.6rem 0 0; min-height: 1.4rem; font: 600 0.85rem/1.4 var(--font-num); }
+.whatif-results { min-height: 21rem; overflow-x: auto; }
+.whatif-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.whatif-table caption { text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 0.4rem; }
+.whatif-table th, .whatif-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--surface-2); text-align: left; vertical-align: middle; }
+.whatif-table thead th { font: 700 0.7rem/1 var(--font-num); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+.wi-name { display: block; font-weight: 700; }
+.wi-timeline { display: block; font-size: 0.72rem; color: var(--muted); font-weight: 400; }
+.wi-prob { min-width: 9rem; }
+.wi-prob-num { display: inline-block; min-width: 3rem; font: 800 1rem/1 var(--font-num); }
+.wi-bar { display: inline-block; vertical-align: middle; width: 5.5rem; height: 0.55rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
+.wi-fill { display: block; height: 100%; background: var(--bar); }
+.wi-num { font-family: var(--font-num); white-space: nowrap; }
+.wi-reason { color: var(--muted); font-style: italic; }
+.wi-sensitivity th[scope="rowgroup"] { font: 700 0.72rem/1.2 var(--font-num); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-top: 0.8rem; }
+.whatif-model { margin: 0.6rem 0 0.2rem; }
+.whatif-inputs, .whatif-warning, .whatif-empty { margin: 0.2rem 0; font-size: 0.8rem; }
+
 .stream-stats { margin-top: 0.75rem; font: 0.75rem/1.2 var(--font-num); }
 
 /* ------------------------------------------------------------------ responsive */
@@ -226,7 +254,7 @@ input[type="search"], select {
 /* ------------------------------------------------------------------ motion */
 @media (prefers-reduced-motion: no-preference) {
   .race-link, .btn, .speed span { transition: border-color 120ms ease, background-color 120ms ease; }
-  .age-fill { transition: width 300ms ease; }
+  .age-fill, .wi-fill { transition: width 300ms ease; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

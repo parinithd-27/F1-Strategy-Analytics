@@ -643,6 +643,7 @@ browser (http://localhost:3000) --CORS--> FastAPI (uvicorn, 127.0.0.1:8000)
   POST /api/races/{s}/{r}/replay           subprocesses: stream_job, then producer (ENABLE_REPLAY=1)
   GET  /api/replays                        running replays + the last 20 with state / error
   POST /api/debug/latency                  results/ui_latency.csv (ENABLE_DEBUG=1)
+  POST /api/races/{s}/{r}/whatif           Redis state + recorded laps + priors -> sim/ (S15)
 ```
 Run modes (README "API"):
 - `make up`: the compose `api` service (core profile, app image) in sample mode on 127.0.0.1:8000.
@@ -665,6 +666,7 @@ Docs: `/api/docs`, `/api/openapi.json`.
 | `POST …/replay` `{speed: 1\|10\|60}` | 202 (with `run_id`, `state`); 403 disabled or 2025; 404 not in the clean zone; 409 running / limit; 422; 500 launch failed; 503 |
 | `GET /api/replays` | 200 `{enabled, max_running, running, recent}` (state `starting/running/finished/failed`, error, exit codes) |
 | `POST /api/debug/latency` `{event_id, ui_rendered_at_ms}` | 201; 403 disabled; 404 unknown id; 409 already recorded; 422 |
+| `POST …/whatif` `{attacker, defender, n?=500, seed?=42}` | 200 three strategies + sensitivity + model P; 404 race not in the lake, no live state or unknown driver; 409 the defender is not directly ahead, or no decision state; 422; 503 Redis, lake or tyre model unavailable |
 
 - **Path parameters** use the key rules of `serving/keys.py` (season 1950–2100, round 1–30, ints only), so a
   request that could not name a Redis key gets 422 before Redis is touched. The 403 of a disabled flag wins
@@ -752,7 +754,7 @@ Docs: `/api/docs`, `/api/openapi.json`.
 - **Logging** (`log.py`): JSON lines on stderr (`ts, level, logger, msg` + fields). One access line per request
   (`method, path, status, duration_ms`; no query string), written when the response ends, so an SSE line
   carries the stream's duration. Exceptions are logged by class name only.
-- **Step 15** adds `routes/whatif.py` and one entry in `app.ROUTERS`.
+- **Step 15** added `routes/whatif.py` and one entry in `app.ROUTERS` (see "What-if").
 
 ## Spark benchmarks (`bench/`, Step 10)
 Method, grid, memory per cell and the limits of single-host results: `docs/experiments.md`.
@@ -839,4 +841,59 @@ browser ── GET /api/races, /api/health ────────────�
     512 MiB, published on 127.0.0.1:3000 only;
   - headers `nosniff`, `no-referrer`, `frame-ancestors 'none'`, and no `X-Powered-By`;
   - Next.js telemetry is off (`NEXT_TELEMETRY_DISABLED=1`) in the image, the Makefile and CI.
+
+## What-if simulator (`sim/`, `api/routes/whatif.py`, `api/lap_log.py`, Step 15)
+The specification, every constant and the pre-registered checks are in `docs/sim_spec.md`.
+```
+offline:  clean laps + stints(_tracinginsights) + features/outlap_features  --sim/tyre_model (expanding window)-->
+          models/sim/tyre_model_{sample,full}.json   (one entry per race; never written to /f1/*)
+request:  Redis hashes (api/state)  +  lap log (race channel)  +  features/pit_loss, outlap_features
+          (+ TI stint starts in full mode)  --sim/whatif.build_state-->  DecisionState at the end of lap C
+          --sim/race_sim.run_all (seeded Monte Carlo, n=500, NumPy)-->  3 strategies x 2 defender responses
+```
+- **Question.** At the attacker's latest lap C, with the car directly ahead: P(attacker ahead once both cars have
+  stopped), the expected gap and its 80% interval for each strategy. The strategies are `pit_now` (A's in-lap
+  L = C+1), `pit_next_lap` (L+1) and `stay_out`, an overcut where A pits the lap after D. D covers one lap after A
+  (primary) or k = 2 laps after A (sensitivity). The stream's calibrated `undercut_prob` of the attacker is shown
+  next to it, unchanged; it is the stream's latest evaluated decision and may lag by one lap.
+- **Tyre model** (`sim/tyre_model.py`, offline, pure Python/NumPy through the API's read-only lake readers):
+  - target: lap time minus the driver's green median lap of that race;
+  - form `alpha + beta*age (+ gamma*age^2) + phi*lap`, quadratic only if it wins on leave-one-race-out RMSE;
+  - levels circuit x compound -> compound -> global -> none, with a source flag;
+  - `phi` (fuel trend) is one value per race from a joint fit, because within one stint age and lap are collinear;
+  - stop noise is the robust SD (1.4826 x MAD) of earlier races' stop and out-lap residuals;
+  - every fit uses strictly earlier races only, tested with x100 scaling.
+- **Simulator** (`sim/race_sim.py`): lap time is pace level + f(age, lap) + level noise + lap noise; the stop
+  loss is the pit-loss prior + the driver's stop delta + the out-lap residual prior (the Step 8 decomposition)
+  + noise. Rejoining 0-1.0 s behind a third car holds the car at 1.0 s behind it; this is monotone in arrival
+  time. Common random numbers across strategies, and one seed gives byte-identical results. About 1 ms per
+  request for n = 500.
+- **Decision state** (`sim/whatif.py`): one code path for live and backtest. Live, C is the attacker's latest
+  lap in the lap log, and records after C are dropped (tested with x100 scaling).
+  - The Redis channel carries no track flags, so the green-lap filter is causal: within 1.07 x the fastest of
+    the last 10 non-pit laps.
+  - In full mode, Redis has no compound, so the compound comes from the TracingInsights stint that started by
+    lap C (`start_lap`, `compound`, `tyre_age_at_start`; never `end_lap`; `compound_conflict` gives UNKNOWN).
+  - The race distance comes from the API catalog.
+- **Lap log** (`api/lap_log.py`): per race, the last 30 laps of every car from the race channel. It has two
+  feeds:
+  - a connected SSE stream, through its `on_sent` hook, with no second subscription;
+  - a Pub/Sub subscriber started by a replay start (`fresh`) or the first what-if request.
+
+  Pub/Sub keeps no history. Without laps, the what-if still answers from the Redis hash alone
+  (`history: none`, a warning).
+- **Lake access.** The readers gained a zone and table parameter. The what-if reads `clean/{races, laps, stints,
+  stints_tracinginsights}` and `features/{pit_loss, outlap_features}`; the race catalog keeps its four clean
+  tables. Still LISTSTATUS/OPEN only, `raw` is never readable, and 2025 needs `ALLOW_TEST_SEASON=1`. The tyre
+  model file is chosen per race from the catalog's `synthetic` flag (`API_SIM_DIR`, default `models/sim`).
+- **Consistency experiment** (`sim/consistency.py`, `sim/backtest.py`, `experiments/whatif_consistency.py`):
+  monotonicity, determinism, ordering on a synthetic grid, and a backtest over the labelled attempts at
+  G = 3.5, k = 2, with Brier, 10/5-bin calibration and agreement with the model. 2025 is a separate held-out row,
+  read only by `RECORD=1`, and the pre-registered stop rule runs before 2025 is read. Default runs write
+  `data/whatif/<source>_<run id>/`.
+- **Dashboard** (`web/src/components/WhatIfPanel.tsx`, `web/src/lib/whatif.ts`): labelled selects (the defender
+  follows the car ahead), Enter or button to run, a `role=status` line and a `role=alert` error line. The results
+  table has a caption and row headers. Each probability is text plus an `aria-hidden` bar (`--bar` token), with
+  the expected gap and interval as text. The sensitivity rows are a labelled row group, and the model P is text.
+  Reserved height, bar transition only without reduced motion, and the table scrolls inside the panel at 375 px.
 

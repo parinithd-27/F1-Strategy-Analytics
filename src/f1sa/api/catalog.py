@@ -18,6 +18,11 @@ Two readers, both read-only and limited to the clean zone:
   - Every path is normalised and must lie in ``{lake}/clean/<table>`` for one of ``TABLES``. So
     ``/f1/raw``, ``/f1/features`` and ``..`` tricks are refused before any request.
 
+The what-if simulator (Step 15) reads a few more tables through the same readers. Each reader is
+limited to one zone and an explicit table list: ``SIM_CLEAN_TABLES`` in ``clean`` and
+``SIM_FEATURE_TABLES`` in ``features`` (``sim_readers``). The race catalog itself keeps the default
+``clean`` zone and ``TABLES``. No reader can be pointed at ``raw``.
+
 Both readers skip ``season=2025`` directories (the sealed test season) unless
 ``allow_test_season`` is set: those directories are never listed into or opened. Spark writes
 the partition columns into the directory names only, so ``season`` and ``round`` come from the
@@ -45,7 +50,13 @@ from f1sa.lake.paths import hdfs_path, local_path
 from f1sa.streaming.processor import SEALED_SEASON
 
 TABLES: tuple[str, ...] = ("races", "results", "laps", "stints")
-"""The only clean tables the API reads."""
+"""The clean tables the race catalog reads."""
+SIM_CLEAN_TABLES: tuple[str, ...] = ("races", "laps", "stints", "stints_tracinginsights")
+"""Clean tables the what-if simulator reads (tyre model fit, current compound in full mode)."""
+SIM_FEATURE_TABLES: tuple[str, ...] = ("pit_loss", "outlap_features")
+"""Feature tables the what-if simulator reads (the stream's pre-race priors)."""
+ZONES: tuple[str, ...] = ("clean", "features")
+"""Lake zones a reader may be limited to (never ``raw``)."""
 ALLOWED_OPS: frozenset[str] = frozenset({"LISTSTATUS", "OPEN"})
 """The only HttpFS operations the API sends (both read-only)."""
 
@@ -66,9 +77,14 @@ class RaceInfo:
     synthetic: bool = False
 
 
-def _check_table(table: str) -> None:
-    if table not in TABLES:
-        raise CatalogError(f"table {table!r} is not readable by the API (allowed: {TABLES})")
+def _check_table(table: str, tables: Sequence[str] = TABLES) -> None:
+    if table not in tables:
+        raise CatalogError(f"table {table!r} is not readable by the API (allowed: {tuple(tables)})")
+
+
+def _check_zone(zone: str) -> None:
+    if zone not in ZONES:
+        raise CatalogError(f"zone {zone!r} is not readable by the API (allowed: {ZONES})")
 
 
 def _is_data_file(name: str) -> bool:
@@ -99,8 +115,9 @@ class LakeReader(Protocol):
 class _PartitionWalk(ABC):
     """The directory walk shared by both readers."""
 
-    def __init__(self, allow_test_season: bool) -> None:
+    def __init__(self, allow_test_season: bool, tables: Sequence[str] = TABLES) -> None:
         self.allow_test_season = allow_test_season
+        self.tables: tuple[str, ...] = tuple(tables)
 
     def _season_allowed(self, season: int) -> bool:
         return self.allow_test_season or season != SEALED_SEASON
@@ -111,10 +128,10 @@ class _PartitionWalk(ABC):
 
     @abstractmethod
     def _table_path(self, table: str) -> str:
-        """The directory of a clean table."""
+        """The directory of a table of the reader's zone."""
 
     def partitions(self, table: str, *, required: bool = True) -> list[tuple[int, int]]:
-        _check_table(table)
+        _check_table(table, self.tables)
         base = self._table_path(table)
         seasons = self._list_dirs(base)
         if seasons is None:
@@ -137,11 +154,14 @@ class _PartitionWalk(ABC):
 
 
 class FileLakeReader(_PartitionWalk):
-    """Clean zone on the local filesystem (``file://`` lake)."""
+    """One zone (``clean`` by default) on the local filesystem (``file://`` lake)."""
 
-    def __init__(self, clean_root: Path, *, allow_test_season: bool) -> None:
-        super().__init__(allow_test_season)
+    def __init__(
+        self, clean_root: Path, *, allow_test_season: bool, tables: Sequence[str] = TABLES
+    ) -> None:
+        super().__init__(allow_test_season, tables)
         self.clean_root = clean_root
+        """The zone directory (``{lake}/clean`` or ``{lake}/features``)."""
 
     def _table_path(self, table: str) -> str:
         return str(self.clean_root / table)
@@ -155,7 +175,7 @@ class FileLakeReader(_PartitionWalk):
     def read_rows(
         self, table: str, season: int, round_: int, columns: Sequence[str]
     ) -> list[dict[str, Any]]:
-        _check_table(table)
+        _check_table(table, self.tables)
         if not self._season_allowed(season):
             raise CatalogError(f"season {season} is the sealed test season")
         part = self.clean_root / table / f"season={season}" / f"round={round_}"
@@ -169,7 +189,8 @@ class FileLakeReader(_PartitionWalk):
 
 
 class HttpFsLakeReader(_PartitionWalk):
-    """Clean zone in HDFS, read through HttpFS with ``LISTSTATUS`` and ``OPEN`` only."""
+    """One zone (``clean`` by default) in HDFS, read through HttpFS with ``LISTSTATUS`` and
+    ``OPEN`` only. The attribute ``clean`` holds the zone directory."""
 
     def __init__(
         self,
@@ -179,11 +200,14 @@ class HttpFsLakeReader(_PartitionWalk):
         allow_test_season: bool,
         session: requests.Session | None = None,
         timeout_s: float = 10.0,
+        zone: str = "clean",
+        tables: Sequence[str] = TABLES,
     ) -> None:
-        super().__init__(allow_test_season)
+        super().__init__(allow_test_season, tables)
+        _check_zone(zone)
         if not lake_path.startswith("/"):
             raise CatalogError(f"HDFS lake path must be absolute, got {lake_path!r}")
-        self.clean = posixpath.normpath(f"{lake_path}/clean")
+        self.clean = posixpath.normpath(f"{lake_path}/{zone}")
         self._base = f"{settings.hdfs_httpfs_url}/webhdfs/v1"
         self._user = settings.hdfs_user
         self._session = session or requests.Session()
@@ -199,7 +223,7 @@ class HttpFsLakeReader(_PartitionWalk):
         if not norm.startswith(self.clean + "/"):
             raise CatalogError(f"HttpFS path {norm!r} is outside the clean zone {self.clean!r}")
         table = norm[len(self.clean) + 1 :].split("/", 1)[0]
-        _check_table(table)
+        _check_table(table, self.tables)
         return norm
 
     def _get(self, op: str, path: str) -> requests.Response | None:
@@ -240,7 +264,7 @@ class HttpFsLakeReader(_PartitionWalk):
     def read_rows(
         self, table: str, season: int, round_: int, columns: Sequence[str]
     ) -> list[dict[str, Any]]:
-        _check_table(table)
+        _check_table(table, self.tables)
         if not self._season_allowed(season):
             raise CatalogError(f"season {season} is the sealed test season")
         part = f"{self.clean}/{table}/season={season}/round={round_}"
@@ -271,6 +295,56 @@ def reader_for(settings: Settings, *, session: requests.Session | None = None) -
             raise CatalogError("DATA_LAKE_URI has no absolute HDFS path") from exc
         return HttpFsLakeReader(settings, path, allow_test_season=allow, session=session)
     raise CatalogError(f"unsupported lake URI scheme in {uri.split('://', 1)[0]!r}")
+
+
+def zone_reader(
+    settings: Settings,
+    zone: str,
+    tables: Sequence[str],
+    *,
+    allow_test_season: bool | None = None,
+    session: requests.Session | None = None,
+) -> LakeReader:
+    """A reader of ``{lake}/{zone}`` limited to ``tables`` (``file://`` or ``hdfs://``)."""
+    _check_zone(zone)
+    for t in tables:
+        if not t or "/" in t or t in (".", ".."):
+            raise CatalogError(f"invalid table name {t!r}")
+    uri = settings.data_lake_uri
+    allow = settings.allow_test_season if allow_test_season is None else allow_test_season
+    if uri.startswith("file://"):
+        return FileLakeReader(local_path(uri) / zone, allow_test_season=allow, tables=tables)
+    if uri.startswith("hdfs://"):
+        try:
+            path = hdfs_path(uri)
+        except ValueError as exc:
+            raise CatalogError("DATA_LAKE_URI has no absolute HDFS path") from exc
+        return HttpFsLakeReader(
+            settings, path, allow_test_season=allow, session=session, zone=zone, tables=tables
+        )
+    raise CatalogError(f"unsupported lake URI scheme in {uri.split('://', 1)[0]!r}")
+
+
+@dataclass(frozen=True)
+class SimReaders:
+    """The what-if simulator's two read-only readers."""
+
+    clean: LakeReader
+    features: LakeReader
+
+
+def sim_readers(
+    settings: Settings,
+    *,
+    allow_test_season: bool | None = None,
+    session: requests.Session | None = None,
+) -> SimReaders:
+    """Readers of ``SIM_CLEAN_TABLES`` (clean zone) and ``SIM_FEATURE_TABLES`` (features zone)."""
+    kw: dict[str, Any] = {"allow_test_season": allow_test_season, "session": session}
+    return SimReaders(
+        clean=zone_reader(settings, "clean", SIM_CLEAN_TABLES, **kw),
+        features=zone_reader(settings, "features", SIM_FEATURE_TABLES, **kw),
+    )
 
 
 def race_laps(results: Sequence[dict[str, Any]], laps: Sequence[dict[str, Any]]) -> int | None:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from fastapi import APIRouter
 
 from f1sa.api.deps import Deps, Race
@@ -21,11 +24,17 @@ router = APIRouter(tags=["events"])
 )
 async def race_events(race: Race, deps: Deps) -> SSEResponse:
     """Server-Sent Events from ``race:{season}:{round}:events``."""
+    lap_log = deps.lap_logs.attach(race.season, race.round)  # what-if lap history (S15)
+
+    def on_sent(event_id: str, data: Mapping[str, Any]) -> None:
+        deps.latency.remember(event_id, data)
+        lap_log.observe(data)
+
     stream = EventStream(
         deps.redis,
         race.season,
         race.round,
         heartbeat_s=deps.settings.api_sse_heartbeat_s,
-        on_sent=deps.latency.remember,
+        on_sent=on_sent,
     )
     return SSEResponse(stream)

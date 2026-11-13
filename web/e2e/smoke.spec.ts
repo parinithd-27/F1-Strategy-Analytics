@@ -60,6 +60,25 @@ test("sample race: a 60× replay fills the tower and updates laps", async ({ pag
   const before = (await lapNow.textContent())?.trim() ?? "";
   await expect.poll(async () => (await lapNow.textContent())?.trim(), { timeout: 60_000 }).not.toBe(before);
 
+  // What-if (S15), keyboard only: the defender defaults to the car ahead; run with Enter.
+  const panel = page.getByRole("region", { name: "What-if: pit strategy" });
+  const attacker = panel.getByLabel("Attacker");
+  await attacker.focus();
+  await page.keyboard.press("ArrowDown"); // the car in P3 (its defender is P2)
+  const chosen = await attacker.inputValue();
+  expect(chosen).not.toBe("");
+  await expect(panel.getByLabel("Defender (car ahead)")).not.toHaveValue("");
+  await panel.getByRole("button", { name: "Run what-if" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(panel.locator("#whatif-status")).toContainText(/at lap \d+/, { timeout: 20_000 });
+  const table = panel.getByRole("table");
+  for (const name of ["Pit now", "Pit next lap", "Stay out (overcut)"]) {
+    await expect(table.getByRole("rowheader", { name: new RegExp(name.replace(/[()]/g, "\\$&")) }).first()).toBeVisible();
+  }
+  await expect(table.locator("tbody").first()).toContainText(/\d+%|Not possible/);
+  await expect(panel).toContainText("Model (calibrated LR, from the stream):");
+  await expect(panel.getByRole("alert")).toHaveText("");
+
   // 375 px: no horizontal page scroll (the tower scrolls inside its own region).
   await page.setViewportSize({ width: 375, height: 812 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

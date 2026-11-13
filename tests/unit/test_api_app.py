@@ -23,6 +23,7 @@ ROUTES = {
     "/api/races/{season}/{round}/replay": {"post"},
     "/api/replays": {"get"},
     "/api/debug/latency": {"post"},
+    "/api/races/{season}/{round}/whatif": {"post"},
 }
 
 
@@ -38,7 +39,8 @@ async def test_docs_and_exact_routes(tmp_path: Path) -> None:
         spec = (await c.get("/api/openapi.json")).json()
     assert docs.status_code == 200 and "swagger" in docs.text.lower()
     assert {p: set(ops) for p, ops in spec["paths"].items()} == ROUTES
-    assert not any("whatif" in p for p in spec["paths"])
+    whatif = spec["paths"]["/api/races/{season}/{round}/whatif"]["post"]
+    assert {"200", "404", "409", "422", "503"} <= set(whatif["responses"])
     state = spec["paths"]["/api/races/{season}/{round}/state"]["get"]
     assert {"200", "404", "422", "500", "503"} <= set(state["responses"])
     replay = spec["paths"]["/api/races/{season}/{round}/replay"]["post"]

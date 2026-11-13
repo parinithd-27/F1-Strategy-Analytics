@@ -48,6 +48,22 @@ curl -N -s localhost:8000/api/races/2023/10/events
 `make demo-clean` lists those folders and their checkpoints; `make demo-clean CONFIRM=yes` deletes
 them (and nothing outside `data/demo` and `data/checkpoints`). Do not run it while a replay is running.
 
+## What-if simulator (Step 15)
+
+`POST /api/races/{season}/{round}/whatif {"attacker": "<driverId>", "defender": "<car ahead>"}`
+compares pit now / pit next lap / stay out (an overcut) at the attacker's latest lap. It returns P(attacker
+ahead once both cars have stopped), the expected gap and an 80% interval for each, next to the stream's
+calibrated model probability. The race page has a what-if panel. The tyre model is built offline:
+
+| Command | What it does |
+|---|---|
+| `make sim-tyre-model-sample` | tyre model from the sample lake -> `models/sim/tyre_model_sample.json` |
+| `make sim-tyre-model-full [TEST_SEASON=1]` | from the HDFS lake via HttpFS -> `models/sim/tyre_model_full.json` (2025 entries only with `TEST_SEASON=1`) |
+| `make whatif-consistency-sample` | consistency smoke test on the sample (`data/whatif/` only) |
+| `make whatif-consistency-full [RECORD=1]` | checks and backtest 2021-2024 in the app container; `RECORD=1` adds the 2025 held-out row and writes `results/whatif_consistency.*` |
+
+The method, constants and checks are pre-registered in `docs/sim_spec.md`.
+
 ## Dashboard (Step 14)
 
 A Next.js dashboard on the API: race picker, timing tower, gap-to-leader chart, tyres, undercut

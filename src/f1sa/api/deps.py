@@ -11,13 +11,15 @@ import requests
 from fastapi import Depends, HTTPException, Path, Request
 from fastapi.exceptions import RequestValidationError
 
-from f1sa.api.catalog import LakeReader, RaceCatalog, reader_for
+from f1sa.api.catalog import LakeReader, RaceCatalog, SimReaders, reader_for, sim_readers
 from f1sa.api.health import KafkaCheck, ModelStatus, kafka_check_for
+from f1sa.api.lap_log import LapLogManager
 from f1sa.api.latency import LatencyRecorder
 from f1sa.api.replay import Launcher, ReplayManager, subprocess_launcher
 from f1sa.config import Settings
 from f1sa.serving import keys as K
 from f1sa.serving.redis_store import AsyncRaceStore
+from f1sa.sim.whatif import WhatIfService
 
 
 @dataclass
@@ -30,6 +32,8 @@ class ApiDeps:
     replays: ReplayManager
     latency: LatencyRecorder
     kafka_check: KafkaCheck
+    whatif: WhatIfService
+    lap_logs: LapLogManager
 
     @classmethod
     def from_settings(
@@ -42,8 +46,15 @@ class ApiDeps:
         reader_factory: Callable[[], LakeReader] | None = None,
         http_session: requests.Session | None = None,
         model: ModelStatus | None = None,
+        sim_reader_factory: Callable[[], SimReaders] | None = None,
     ) -> ApiDeps:
         client = redis or aioredis.Redis.from_url(settings.redis_url, decode_responses=True)
+        sim_factory = sim_reader_factory or (lambda: sim_readers(settings, session=http_session))
+
+        def readers() -> tuple[LakeReader, LakeReader]:
+            r = sim_factory()
+            return r.clean, r.features
+
         return cls(
             settings=settings,
             redis=client,
@@ -64,6 +75,8 @@ class ApiDeps:
             ),
             latency=LatencyRecorder(settings.api_ui_latency_csv, enabled=settings.enable_debug),
             kafka_check=kafka_check or kafka_check_for(settings),
+            whatif=WhatIfService(readers=readers, sim_dir=settings.api_sim_dir),
+            lap_logs=LapLogManager(client),
         )
 
 

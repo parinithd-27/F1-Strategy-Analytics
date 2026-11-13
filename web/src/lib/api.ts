@@ -193,7 +193,7 @@ function detailOf(body: unknown): string | null {
   return isObj(body) && isStr(body.detail) ? body.detail : null;
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   parse: (v: unknown) => T | undefined,
   init: RequestInit & { okStatuses?: number[] } = {},

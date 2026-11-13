@@ -208,6 +208,11 @@ WINDOW_TARGETS = [
     ("demo-clean", "CONFIRM=yes"),
     ("stream-demo",),
     ("stream-demo", "FULL=1"),
+    ("sim-tyre-model-sample",),
+    ("sim-tyre-model-full", "TEST_SEASON=1"),
+    ("whatif-consistency-sample",),
+    ("whatif-consistency-full",),
+    ("whatif-consistency-full", "RECORD=1"),
 ]
 
 

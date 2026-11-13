@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from f1sa.serving.redis_store import StoredDriverState
 
@@ -141,3 +141,96 @@ class LatencyOut(_Out):
 
 class ErrorOut(BaseModel):
     detail: str
+
+
+# ------------------------------------------------------------------ what-if (Step 15)
+DRIVER_ID_PATTERN = r"^[a-z0-9_]{1,64}$"
+SimCompound = Literal["SOFT", "MEDIUM", "HARD", "INTERMEDIATE", "WET", "UNKNOWN"]
+
+
+class WhatIfIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    attacker: str = Field(pattern=DRIVER_ID_PATTERN, description="driverId of the car behind")
+    defender: str = Field(
+        pattern=DRIVER_ID_PATTERN, description="driverId of the car directly ahead"
+    )
+    n: StrictInt = Field(default=500, ge=100, le=5000, description="Monte Carlo draws")
+    seed: StrictInt = Field(default=42, ge=0, le=2**32 - 1)
+
+    @model_validator(mode="after")
+    def _distinct(self) -> WhatIfIn:
+        if self.attacker == self.defender:
+            raise ValueError("attacker and defender must differ")
+        return self
+
+
+class StrategyOut(_Out):
+    strategy: Literal["pit_now", "pit_next_lap", "stay_out"]
+    response: Literal["primary", "sensitivity"]
+    attacker_pit_lap: int
+    defender_pit_lap: int
+    evaluation_lap: int = Field(description="the later of the two out-laps")
+    feasible: bool
+    reason: str | None = Field(description="race_end | no_pit_loss_prior when not feasible")
+    p_attacker_ahead: float | None
+    expected_gap_s: float | None = Field(description="cum_D - cum_A; positive = attacker ahead")
+    interval80_s: tuple[float, float] | None = Field(description="10th and 90th percentile")
+    mc_se: float | None
+    attacker_new_compound: SimCompound
+    defender_new_compound: SimCompound
+
+
+class CarInputsOut(_Out):
+    driver_id: str
+    position: int
+    compound: SimCompound
+    compound_source: str
+    tyre_age: int
+    new_compound: SimCompound
+    pace_laps: int
+    noise_source: str
+    noise_sd_s: float
+    pace_level_s: float
+    stop_loss_s: float | None
+    stop_delta_s: float | None
+    outlap_residual_s: float | None
+    tyre_fit_source: str
+    tyre_fit_form: str
+
+
+class WhatIfInputsOut(_Out):
+    current_lap: int | None
+    decision_lap: int | None
+    race_laps: int | None
+    gap_s: float
+    gap_source: str
+    history: str
+    traffic_cars: int
+    attacker: CarInputsOut
+    defender: CarInputsOut
+    pit_loss_prior_s: float | None
+    pit_loss_source: str | None
+    stop_noise_sd_s: float
+    synthetic: bool
+    warnings: list[str]
+
+
+class WhatIfModelOut(_Out):
+    probability: float | None = Field(description="the stream's calibrated P for the attacker")
+    undercut_flag: bool
+    model_version: str
+    source: Literal["redis:undercut_prob"] = "redis:undercut_prob"
+
+
+class WhatIfOut(_Out):
+    season: int
+    round: int
+    attacker: str
+    defender: str
+    n: int
+    seed: int
+    strategies: list[StrategyOut] = Field(description="defender covers on the next lap")
+    sensitivity: list[StrategyOut] = Field(description="defender covers k = 2 laps later")
+    model: WhatIfModelOut
+    inputs: WhatIfInputsOut
+    runtime_ms: float

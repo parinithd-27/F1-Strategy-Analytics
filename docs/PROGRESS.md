@@ -930,10 +930,76 @@
     between x1 and x4 at 1 season, so they should fit under 5.40 GiB, but that is not measured.
   - `docs/architecture.md` memory budget: app 6 GiB, core about 9.6 GiB, full about 15 GiB of limits;
     api and web are stopped during the overnight grid (about 12.5 GiB). `docs/experiments.md` updated.
+- Step 15 (W7): what-if pit strategy simulator, API route and dashboard panel (#26, #32, #40, #41)
+  - User decisions (plan): `stay_out` is an overcut (A pits the lap after D); live lap history comes from an
+    API lap recorder on the race channel; the tyre model is an offline artefact in `models/sim/`.
+  - `docs/sim_spec.md`: pre-registration of the strategies, every constant, the checks, the 2025 held-out row and
+    the stop rule. It was written before any backtest run. Two amendments are recorded there, both decided before
+    any backtest, from the data and a unit test:
+    - the stop noise is a robust SD (1.4826 x MAD), because the sample SDs (3.4 s and 8.9 s) are dominated by
+      tails;
+    - the fuel trend phi is one joint value per race, because a per-compound phi is not identified.
+  - `sim/tyre_model.py`: per circuit x compound degradation from strictly earlier races. Linear unless quadratic
+    wins on leave-one-race-out RMSE; fallbacks circuit -> compound -> global -> none with flags. Real
+    TracingInsights compounds in full mode (`compound_conflict` gives UNKNOWN), synthetic and flagged in sample
+    mode. Written atomically to `models/sim/tyre_model_{sample,full}.json` only.
+    - Full lake 2021-2024: 90 races; phi median -0.046 s/lap (range -0.067 to -0.040); 2024 Catalunya MEDIUM
+      beta 0.071 s/lap; stop-noise SDs 0.76 s and 1.13 s.
+  - `sim/race_sim.py`: seeded Monte Carlo (n=500, NumPy) with common random numbers, traffic hold, race-end
+    infeasibility; about 1 ms per state.
+  - `sim/whatif.py`: one decision-state builder for live and backtest; a pure-Python port of
+    `streaming.priors.priors_from_frames`, equal to Spark on the sample lake; `WhatIfService` caches 8 races.
+  - API: `POST /api/races/{s}/{r}/whatif` (200 / 404 / 409 / 422 / 503) and `api/lap_log.py`, fed by the SSE
+    `on_sent` hook (no second subscription, so the Step 13 disconnect tests are unchanged) and a subscriber
+    started by a replay start or the first what-if.
+    - The lake readers gained a zone and table allowlist. The race catalog is unchanged; the what-if readers are
+      `clean/{races,laps,stints,stints_tracinginsights}` and `features/{pit_loss,outlap_features}`; raw is never
+      readable.
+    - Setting `API_SIM_DIR` (default `models/sim`); the tyre model file is chosen per race from the catalog's
+      `synthetic` flag.
+  - Dashboard: `WhatIfPanel` (labelled selects, the defender follows the car ahead, keyboard run, status and alert
+    lines, a captioned table with row headers, P as text plus an `aria-hidden` bar, sensitivity row group,
+    model P as text, reserved height, reduced motion respected, no overflow at 375 px), `lib/whatif.ts` (guards
+    and helpers).
+  - Experiment: `experiments/whatif_consistency.py` -> `sim/consistency.py` + `sim/backtest.py`;
+    `make whatif-consistency-{sample,full}`, `make sim-tyre-model-{sample,full}`. Only `RECORD=1` writes
+    `results/` (refuses to overwrite) and opens 2025.
+  - **Development run** (`make whatif-consistency-full`, 2021-2024, no 2025 read, output in
+    `data/whatif/full_20261113T142444Z/`, not committed):
+    - 157 labelled attempts (as in the Step 12 parity check), 155 feasible: the 2 infeasible ones have no
+      pit-loss prior (the first race).
+    - Mean P_sim - P_model = -0.025 (stop rule 0.20: not triggered); mean |difference| 0.138; Spearman 0.66.
+    - Simulator Brier 0.185 (model 0.152 on its own training and calibration rows), ECE (10 bins) 0.090 (model
+      0.058), mean P 0.295 against an observed 0.303.
+    - Monotonicity in the attacker's loss: 0 of 155 states with an increase (pass). Both cars' loss is flat, as
+      expected (info).
+    - Determinism: 157/157 byte-identical (pass); seed + 1 changes P by at most 0.06.
+    - Ordering grid: 17/18 pass/fail rows pass. **One failure**: opening at -0.5 s/lap with a 5.0 s gap,
+      P_next - P_now = +0.022. The mean gap moves against the attacker (-6.10 -> -6.58 s), but the extra
+      simulated lap widens the 80% interval (10.4 -> 12.1 s), and that raises a small tail probability (0.062
+      -> 0.084). Reported as it is; nothing was tuned.
+    - User decision (a): the pre-registered rule stays unchanged, and the failed cell is part of the result.
+      - A post-hoc supplementary column was added, labelled as such and never pass/fail: `check = ordering_posthoc`,
+        `post_hoc = true`, the sign of E[gap next] − E[gap now]. It is recorded in `docs/sim_spec.md`
+        ("Post-hoc supplement", dated).
+      - Rerun (`data/whatif/full_20261113T145605Z/`): identical pre-registered results; the expected-gap sign
+        follows the closing rate in 10/10 cells (−0.479 / +0.021 / +0.521 s); the failing cell's E[gap]
+        difference is −0.479 s.
+  - Test fix: `test_bench_grid.py::test_subprocess_cell_ok` read the host's live cgroup and `MemAvailable`. It
+    failed when the machine used more than 0.9 x 4 GiB, and it did here at 3.7 GiB. It now injects a fake cgroup
+    and meminfo through `sampler_kwargs`, as its sibling test does. The guard's behaviour in real runs is unchanged
+    (`src/f1sa/bench` is untouched).
+  - Verified live on the host (no container changed): `make api` with replay plus `next start` on :3001; a 60x
+    replay with the Playwright smoke test including the what-if steps (pass, 1.8 min); `POST …/whatif` 200 in
+    about 9 ms, byte-identical body for the same seed, 409 / 404 / 422 / 404 for the bad cases.
 ## Next
-- Step 15: the what-if panel on the race page (add `routes/whatif.py`, one `app.ROUTERS` entry and a panel
-  next to the alert feed).
-- Step 15: add `api/routes/whatif.py` and one entry in `app.ROUTERS`.
+- Step 15, user (ordering decision taken: rule kept, post-hoc column added): `make sim-tyre-model-full TEST_SEASON=1`
+  (adds the 2025 entries; the 2021-2024 entries are unchanged by construction) and
+  `make whatif-consistency-full RECORD=1` (adds the 2025 held-out row and writes `results/whatif_consistency.*`).
+  Then commit the results and fill the what-if part of the report.
+- Step 15, user: `make api-up` (recreates the api container with the what-if route) and rebuild the `web` image
+  (`docker compose build web`) so that the containers serve the panel; `make demo-clean` removes the demo output
+  of the interrupted verification replay.
 - S16: UI latency from `results/ui_latency.csv` (needs a dashboard run with `ENABLE_DEBUG=1`).
 - User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
   `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
@@ -969,6 +1035,18 @@
 - S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
   run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
 ## Known issues
+- Step 15: the ordering check fails in the far tail (opening car, 5 s gap). One more simulated lap adds variance,
+  so a small P can rise while the mean gap falls. The pre-registered rule compares P, not the mean gap, and was
+  kept (user decision); the post-hoc expected-gap sign is reported alongside it.
+- Step 15: the tyre target is relative to each driver's race median, so per-driver offsets stay in the residual
+  SD. The noise prior (about 1 s) is larger than real lap-to-lap noise; live states shrink it with the driver's
+  own laps (n0 = 3).
+- Step 15: traffic is third cars only, projected without stops; A and D are not traffic for each other.
+- Step 15: the lap log starts when a replay starts through the API, a dashboard connects or the first what-if
+  arrives. Pub/Sub has no history, so a what-if after a mid-race connect has fewer laps (`history: none` and a
+  warning when there are none).
+- Step 15: the model P shown next to the simulator is the stream's latest evaluated decision for the attacker,
+  which may be one lap behind lap C. The new compound after a stop follows a fixed rule (S->M, M->H, H->M).
 - Step 10: the grid estimate is an affine fit through two points (x1, x4 at local[4]) applied to every
   master. Costs that grow faster than the rows (single-partition prior windows, many small partitions,
   spills) are not in it, and single-run smoke times vary by about 20 % (local[1] x1: 52.7, 40.1, 44.5 s).
@@ -1199,6 +1277,11 @@ Step 14 (needs `make up`): `make web-test`, then `make api-up REPLAY=1`, then ei
 or `cd web && E2E_NO_SERVER=1 npx playwright test` against the container, and finally `git status --short results/` (expect
 empty). Python: `uv run pytest tests/unit/test_api_races.py tests/unit/test_api_health.py tests/unit/test_makefile_web.py -q`.
 
+
+Step 15: `make sim-tyre-model-sample && make whatif-consistency-sample`, then
+`uv run pytest tests/unit/test_sim_tyre_model.py tests/unit/test_race_sim.py tests/unit/test_whatif.py tests/unit/test_lap_log.py tests/unit/test_api_whatif.py tests/unit/test_sim_consistency.py tests/unit/test_makefile_sim.py -q`
+and `make web-test`. Full lake (needs `make up-full`): `make sim-tyre-model-full && make whatif-consistency-full`.
+Live: `ENABLE_REPLAY=1 make api`, then `curl -X POST localhost:8001/api/races/2024/5/whatif -H 'content-type: application/json' -d '{"attacker":"<P4>","defender":"<P3>"}'` during a replay.
 
 ## 9f approval
 - 2026-11-13: label-definition-v1, model-spec-v1 and model-spec-v2 approved for the single 2025 test run by Parinith D. on behalf of the team (Data Wranglers). No further sign-off required.

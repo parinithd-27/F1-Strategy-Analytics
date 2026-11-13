@@ -15,6 +15,7 @@ import { GapChart } from "./GapChart";
 import { ReplayControl } from "./ReplayControl";
 import { TimingTower } from "./TimingTower";
 import { TyrePanel } from "./TyrePanel";
+import { WhatIfPanel } from "./WhatIfPanel";
 
 export function RaceDashboard({ season, round }: { season: number; round: number }) {
   const { state, snapshotError } = useRaceStream(season, round);
@@ -63,6 +64,7 @@ export function RaceDashboard({ season, round }: { season: number; round: number
         <div className="dash-main">
           <TimingTower rows={rows} lapsDown={(id) => lapsDown(state, id)} />
           <GapChart state={state} />
+          <WhatIfPanel season={season} round={round} order={state.order} />
         </div>
         <div className="dash-side">
           <ReplayControl

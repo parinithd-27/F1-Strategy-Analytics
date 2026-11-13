@@ -178,6 +178,26 @@ endif
 stream-parity-full: ## Batch vs stream feature parity over 2021-2024 (app container, HDFS lake; 2025 never read)
 	$(APP_EXEC) python experiments/stream_parity.py --seasons 2021-2024
 
+# ---------------------------------------------------------------- what-if (Step 15)
+# Tyre models are written only to models/sim/ (never /f1/*). The consistency run writes to
+# data/whatif/<source>_<run id>/; only RECORD=1 writes results/whatif_consistency.* and adds the
+# 2025 held-out backtest row (it needs the tyre model built with TEST_SEASON=1). See docs/sim_spec.md.
+SIM_TEST_SEASON = $(if $(filter 1,$(TEST_SEASON)), --allow-test-season,)
+WHATIF_RECORD = $(if $(filter 1,$(RECORD)), --record --allow-test-season,)
+
+.PHONY: sim-tyre-model-sample sim-tyre-model-full whatif-consistency-sample whatif-consistency-full
+sim-tyre-model-sample: ## What-if tyre model from the sample lake -> models/sim/tyre_model_sample.json
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python -m f1sa.sim.tyre_model --source sample
+
+sim-tyre-model-full: ## What-if tyre model from the HDFS lake (host, via HttpFS) -> models/sim/tyre_model_full.json [TEST_SEASON=1]
+	DATA_LAKE_URI=$(HDFS_LAKE) HDFS_HTTPFS_URL=http://localhost:14000 $(UV) run python -m f1sa.sim.tyre_model --source lake$(SIM_TEST_SEASON)
+
+whatif-consistency-sample: ## What-if consistency smoke test on the sample lake (data/whatif/ only)
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python experiments/whatif_consistency.py --source sample
+
+whatif-consistency-full: ## What-if consistency + backtest 2021-2024 (app container) [RECORD=1 -> results/, adds the 2025 held-out row]
+	$(APP_EXEC) python experiments/whatif_consistency.py --source full$(WHATIF_RECORD)
+
 # ---------------------------------------------------------------- Spark experiments (Step 10)
 # The benchmarks run in the RUNNING app container (docker compose exec): no service is started,
 # stopped, rebuilt or recreated; docker stats is sampled on the host. Outputs go to
