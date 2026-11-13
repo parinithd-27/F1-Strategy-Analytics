@@ -847,9 +847,90 @@
     - CORS for both origins plus 5 refused origins; the origin list from settings and env;
     - Vitest 133: snapshot replacing stale flags, no dedupe, zset order, malformed and foreign snapshots;
     - `make web-e2e` passes (58.7 s).
+- Step 10 (W5): Spark scalability, partitioning and caching experiments (#27, #28, #33, #34, #38)
+  - New package `src/f1sa/bench/` (user-approved layout), thin entry points `experiments/scalability.py`,
+    `experiments/partitioning.py`, `experiments/_resources.py`. Method and limits: `docs/experiments.md`.
+    - `paths.py`: `check_bench_uri` allows only `hdfs://namenode:8020/f1/bench/**` and `./data/bench/**`
+      (refuses `/f1/raw`, `/f1/clean`, `/f1/features`, `..`, symlinked roots, other hosts and schemes);
+      run ids; outputs in `data/bench/<run_id>/`, `results/` only with `--record`; `bench-clean`.
+    - `replicate.py`: x1/x4/x16/x64 of the 9 clean feature inputs (season + 100·r, dates + 100·r years,
+      `driver_id__r<r>`, constructors unchanged, `is_replicated`); exactly factor x rows, unique keys.
+    - `workloads.py`: `compute_features` unchanged, written with `write_partitioned`; `undercut_attempts`
+      to `noop` (labels never read or persisted). Telemetry: `aggregate_samples` over the 2024 raw
+      samples (first 5/14/24 rounds for 1/3/5 seasons, x1 cells only), joined to laps, into `noop`.
+    - `cell.py` (one JVM per cell; local driver 2g + `MALLOC_ARENA_MAX=2`; cluster driver 1g, executors
+      768m x 2 cores, current `src/f1sa` shipped as a zip and checked on the executors), `grid.py`
+      (cells, guard, estimate, reduced grid), `timing.py` (warm-up + timed runs, median/IQR/min/max,
+      `MemoryGuard`), `spark_metrics.py` (REST API bytes per job group), `resources.py` (psutil +
+      cgroup sampler, `docker stats` sampler, window peaks), `partitioning.py` (2 layouts x 3 caching
+      variants x file/hdfs, result checksums, speed-ups), `report.py` (CSV, PNG, fingerprint), `host.py`.
+  - Makefile: `bench-dirs`, `bench-smoke`, `experiments-spark [RECORD=1] [GRID_ARGS=] [PART_ARGS=]`,
+    `bench-clean [CONFIRM=yes]`, `test-bench`. All use `docker compose exec` into the running app container.
+  - Compose: app `mem_limit` 1536m -> 4096m (user-approved); only the app container was recreated
+    (`up -d --no-deps --no-build --force-recreate app`), limit verified 4294967296.
+  - Changes from the approved plan, all forced by smoke-run measurements:
+    - local driver heap 2g instead of 2560m: at 2560m the driver RSS was 3.4 GB and the guard killed the
+      first cell (1 season, x1) at 3.61 GiB;
+    - no linear memory projection: it projected 3.16 GiB (x1) to 12.65 GiB (x4) and skipped a cell that
+      ran at 3.55 GiB. The guard now kills at 90 % of the container at runtime and then skips larger
+      factors of the same (phase, seasons, master);
+    - the telemetry summary uses every per-lap aggregate: with only three of them Spark pruned the
+      gear-change lag window from the plan (unit test checks the plan has a `Window`);
+    - partitioning averages over `decimal(20,6)`: a double average flipped a 6-decimal rounding between
+      layouts (108.706062 vs .063), caught by the checksum test;
+    - the smoke also runs local[4] at x4 so the estimate is an affine x1/x4 fit, not linear.
+  - Smoke runs (data/bench only; `results/` and HDFS raw/clean/features listings identical before/after):
+    - scalability `bench_20261113T072050Z_smoke`: 11/11 cells ok. Build at 1 season x1, one run:
+      local[1] 44.5 s, local[2] 37.0 s, local[4] 33.1 s, cluster 42.3 s; local[4] x4 94.0 s. Telemetry
+      (5 rounds): 8.5 / 6.8 / 5.5 / 7.7 s. Peak app container 2.9-3.1 GiB at x1, 3.55 GiB at x4.
+      Input ~75 MB, shuffle ~13 MB per x1 build run; executors imported the shipped zip.
+    - partitioning `bench_20261113T072933Z_psmoke` (laps x1, 5 telemetry rounds, 1 run): 84 rows,
+      every checksum identical across layouts, variants and file systems.
+    - Estimate (affine x1/x4 fit, excludes costs that grow faster than the rows): full grid 72 cells
+      ~119 h; partitioning ~0.5 h. Proposed reduced grid, ~6.3 h (45 cells): 1/3/5 seasons x every
+      master at x1 and x4, x16 for 1 season on local[4] and the cluster, no x64, 1 warm-up + 3 timed runs.
+  - Tests: 104 new (`test_bench_*.py`, `test_makefile_bench.py`): timing harness with a trivial and a
+    real Spark job, median/IQR, guard skip and runtime kill of a real child, bench-clean refusals
+    (10 roots) and fake HttpFS, replication x1/x4 row counts and unique keys, REST metrics, docker stats
+    parsing, plots, record vs default outputs. Full unit suite: 1400 passed in 744 s, results guard silent.
+- Step 10 follow-up (user request): resumable `make experiments-spark`
+  - The grid appends each finished cell's row to `data/bench/<run_id>/scalability.csv` at once
+    (`report.append_rows_atomic`: temp file, fsync, rename), with the host's docker peaks of that cell
+    (read from the shared `docker_stats.jsonl`) and the git sha passed into the container.
+  - `RESUME=<run_id>` (the exact command is printed at the start of every run): the stored
+    `grid_spec.json` is used (`GRID_ARGS` must not differ); stale cell processes of the run are killed;
+    cells with a row are skipped; an interrupted cell reruns from its warm-up (its old result file and
+    outputs are removed first); a prep with pending cells reruns and reuses its HDFS copy via the
+    `_BENCH_PREP.json` marker (or prepares it again); the guard's skips are restored from the CSV.
+  - Partitioning resumes by group (dataset, fs, layout, variant), reusing its marked layouts.
+  - `RECORD=1`: `results/` only when the grid (then partitioning) is complete; one fingerprint per run id.
+    HDFS data are deleted only after a complete run. The host exits 0 when complete (aborted or
+    skipped cells are recorded results), so make goes on to partitioning; before, a single aborted
+    cell would have stopped make before partitioning.
+  - Tests (`test_bench_resume.py`, updated host, workload and make tests): fake grid killed after 2 cells
+    then resumed (every cell exactly once; a second grid on the same run is refused by a flock; the interrupted cell rerun, prep rerun without a second row);
+    a real grid process SIGKILLed mid-cell then resumed (orphan killed, CSV complete, each cell once);
+    guard state restored; refusals; atomic CSV/JSONL append with a partial last line; marker reuse of
+    the replicated copy and of the partitioning layouts (Spark); record only when complete.
+  - Live check on the stack (`bench_20261113T100000Z_smoke`): the grid was SIGKILLed in the container
+    after 2 cells; the resume killed the orphaned cell (pid 50092), reused the x1 copy (0.3 s), ran the
+    other 9 cells, and the CSV has all 11 cells once; HDFS data deleted at completion.
+  - Finding: in that run `build_s1_x4_local4` was killed by the guard at 3.64 GiB (it passed at 3.55 GiB
+    in the previous smoke). Local x4 cells at 3 and 5 seasons in the approved grid will very likely be
+    killed too (see Next).
+- Step 10 follow-up (user-approved): app container `mem_limit` 4096m -> 6144m
+  - Only the app container was recreated (`up -d --no-deps --no-build --force-recreate app`); limit
+    6442450944 bytes (docker inspect and the container's cgroup `memory.max`); every other service kept
+    running. The local driver heap stays 2g.
+  - Re-run of the cell alone (`bench_20261113T095530Z`: `--seasons 1 --factors 4 --masters local4
+    --warmup 0 --repeats 1`, prep + build): `build_s1_x4_local4` ok, 74.5 s; peak app container memory
+    3.49 GiB (process tree RSS 3.61 GiB, docker stats 3.28 GiB) against the 5.40 GiB guard (90 % of 6 GiB);
+    host MemAvailable never below 5.98 GiB (api and web still running). The prep peaked at 1.29 GiB.
+  - The x4 cells at 3 and 5 seasons have 2.9x and 4.7x the rows. Memory grew from 3.14 to 3.49-3.64 GiB
+    between x1 and x4 at 1 season, so they should fit under 5.40 GiB, but that is not measured.
+  - `docs/architecture.md` memory budget: app 6 GiB, core about 9.6 GiB, full about 15 GiB of limits;
+    api and web are stopped during the overnight grid (about 12.5 GiB). `docs/experiments.md` updated.
 ## Next
-- User: raise the WSL VM to 14 GB (`memory=14GB` in `%UserProfile%\.wslconfig`, then `wsl --shutdown`).
-  The full profile's limits now add up to about 10 GiB.
 - Step 15: the what-if panel on the race page (add `routes/whatif.py`, one `app.ROUTERS` entry and a panel
   next to the alert feed).
 - Step 15: add `api/routes/whatif.py` and one entry in `app.ROUTERS`.
@@ -871,7 +952,16 @@
   already handles them (tested on hand-made FastF1 Parquet).
 - Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
   using 2021-2024 only.
-- Step 10: scalability and partitioning experiments.
+- Overnight run (user): first `docker compose stop api web` (the full profile's limits are about 15 GiB with
+  the 6 GiB app container, above the 14 GB VM; with api and web stopped about 12.5 GiB), then
+  `make experiments-spark RECORD=1 GRID_ARGS="..."` (below); afterwards `docker compose start api web`.
+- User (overnight, nothing else running): `make experiments-spark RECORD=1 GRID_ARGS="--seasons 1 3 5
+  --factors 1 4 16 --masters local1 local2 local4 cluster --warmup 1 --repeats 3 --large-from 16
+  --large-repeats 3 --large-masters local4 cluster --large-seasons 1"` (~6.3 h + ~0.5 h partitioning,
+  estimate). The full grid (no GRID_ARGS) is ~119 h. Then commit `results/scalability.*`,
+  `results/partitioning.*` and `results/README.md` right away, and fill the Results of `docs/experiments.md`.
+- Optional, after the record run: stop api and web for it (`docker compose stop api web`) to give the
+  benchmark the memory headroom; that is a service stop and needs a decision first.
 - After committing Step 9c, optionally run `make model-save-full FORCE=1` so that `git_dirty` is false in the
   deployment metadata.
 - S16: rerun `uv run python experiments/redis_latency.py` with only the core profile up (`make down` and then
@@ -879,6 +969,22 @@
 - S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
   run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
 ## Known issues
+- Step 10: the grid estimate is an affine fit through two points (x1, x4 at local[4]) applied to every
+  master. Costs that grow faster than the rows (single-partition prior windows, many small partitions,
+  spills) are not in it, and single-run smoke times vary by about 20 % (local[1] x1: 52.7, 40.1, 44.5 s).
+- Step 10: x16 local cells will probably be killed by the guard (x4 already peaked at 3.55 GiB of the
+  3.6 GiB guard). That is recorded as `aborted_memory_guard`, not hidden. Executor memory on the workers
+  is not guarded: an executor OOM shows as `failed`.
+- Step 10: the build at x1 is overhead-dominated (about 25 s fixed per run): local[4] is only 1.3x faster
+  than local[1]. Per-core scaling shows only at larger factors.
+- Step 10: `docker stats --no-stream` takes 1-2 s per call, so container peaks are 2 s samples and can
+  miss short spikes. The in-container sampler (0.5 s) is the finer one.
+- Step 10: `input_bytes` is what Spark reports: reads from a cached DataFrame count as input, and file://
+  and hdfs:// readers report differently. Compare bytes within one file system and variant.
+- Step 10: if the host script dies, `docker compose exec` may leave the grid running in the container.
+  A `RESUME=` while it still runs is refused ("another grid is running", flock on the run folder);
+  stop it (`docker compose exec app pkill -f f1sa.bench.grid`) or let it finish. Cells orphaned by a
+  hard-killed grid are killed by the resume itself.
 - Step 14: ESLint 9.39.5 is marked "no longer supported" by npm. ESLint 10 cannot be used until
   `eslint-plugin-react`, `-jsx-a11y` and `-import` (pulled in by `eslint-config-next` 16.4.5) accept it. It
   is a lint-time tool only.

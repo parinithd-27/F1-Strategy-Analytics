@@ -149,7 +149,9 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-    mem_limit: 1536m
+    # 6 GiB (Step 10): local[N] benchmark cells run a 2g driver heap (~3-3.6 GB RSS) + PySpark
+    # workers. Stop api and web while the overnight benchmark grid runs (docs/architecture.md).
+    mem_limit: 6144m
     healthcheck:
       test:
         - CMD-SHELL

@@ -178,6 +178,45 @@ endif
 stream-parity-full: ## Batch vs stream feature parity over 2021-2024 (app container, HDFS lake; 2025 never read)
 	$(APP_EXEC) python experiments/stream_parity.py --seasons 2021-2024
 
+# ---------------------------------------------------------------- Spark experiments (Step 10)
+# The benchmarks run in the RUNNING app container (docker compose exec): no service is started,
+# stopped, rebuilt or recreated; docker stats is sampled on the host. Outputs go to
+# data/bench/<run_id>/; only RECORD=1 writes results/scalability.* and results/partitioning.* and
+# appends the fingerprints to results/README.md. Benchmark data lives only in HDFS /f1/bench and
+# ./data/bench (make bench-clean CONFIRM=yes). experiments-spark takes hours: run it with nothing
+# else running. GRID_ARGS / PART_ARGS pass options through (e.g. the reduced grid bench-smoke prints).
+# Resumable: each finished grid cell is appended to data/bench/<run_id>/scalability.csv at once (and
+# each partitioning group to data/bench/<run_id>_part/); RESUME=<run_id> (printed at the start of
+# every run) reuses that run's prepared data, skips finished cells and continues. With RECORD=1,
+# results/ is written only when the whole grid (and then partitioning) is complete.
+GRID_ARGS ?=
+PART_ARGS ?=
+RESUME ?=
+BENCH_RECORD = $(if $(filter 1,$(RECORD)), --record,)
+# := so both scripts get the same run id (evaluated once per make invocation)
+BENCH_RUN := $(or $(RESUME),bench_$(shell date -u +%Y%m%dT%H%M%SZ))
+BENCH_RUN_ARGS = --run-id $(BENCH_RUN)$(if $(RESUME), --resume,)$(BENCH_RECORD)
+
+.PHONY: bench-dirs bench-smoke experiments-spark bench-clean test-bench
+bench-dirs: ## Create HDFS /f1/bench (owned by the app user) and ./data/bench (idempotent)
+	@mkdir -p data/bench
+	$(COMPOSE) exec -T namenode hdfs dfs -mkdir -p /f1/bench
+	$(COMPOSE) exec -T namenode hdfs dfs -chown f1sa /f1/bench
+
+bench-smoke: bench-dirs ## Spark smoke (1 season, x1, every master, 1 run; partitioning x1) + the full-grid estimate; data/bench only
+	$(UV) run python experiments/scalability.py --smoke
+	$(UV) run python experiments/partitioning.py --smoke
+
+experiments-spark: bench-dirs ## FULL Spark grid + partitioning (hours, nothing else running) [RECORD=1 -> results/] [GRID_ARGS=] [PART_ARGS=] [RESUME=<run_id>]
+	$(UV) run python experiments/scalability.py $(BENCH_RUN_ARGS) $(GRID_ARGS)
+	$(UV) run python experiments/partitioning.py $(BENCH_RUN_ARGS) $(PART_ARGS)
+
+bench-clean: ## Delete benchmark data ./data/bench/* and HDFS /f1/bench/* (CONFIRM=yes; lists first)
+	$(UV) run python -m f1sa.bench.paths$(if $(filter yes,$(CONFIRM)), --yes,)
+
+test-bench: ## Step 10 benchmark unit tests
+	$(UV) run pytest tests/unit/test_bench_*.py tests/unit/test_makefile_bench.py -q
+
 # ---------------------------------------------------------------- API (Step 13)
 # `make api` runs the FastAPI backend on the host (uvicorn, 127.0.0.1:$(API_PORT)) against the file
 # lake; it needs `make up` for Redis and Kafka. API_PORT defaults to 8001 because the compose `api`

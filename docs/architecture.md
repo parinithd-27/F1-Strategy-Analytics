@@ -32,6 +32,7 @@ flowchart LR
 | `serving` | Redis key contract and store (TTL on session end) |
 | `sim` | What-if race simulation (pit now / pit next lap / stay out) |
 | `api` | FastAPI routes and the SSE stream for the dashboard |
+| `bench` | Step 10 Spark benchmarks: replication, timing, resource sampling, scalability grid, partitioning/caching (docs/experiments.md) |
 
 ## Rules
 - Storage root comes **only** from `f1sa.config.Settings.data_lake_uri`. No other module hardcodes paths or endpoints.
@@ -62,14 +63,14 @@ Defined in `docker-compose.yml`, project name `f1sa`. `make up` starts `core`; `
 - The api container mounts the repo and `data/` read-only, with `data/demo` and `data/checkpoints` read-write on top (a replay's outputs and stream-job state), `results/` read-write (`ui_latency.csv`) and `models/` read-only. `make up`, `up-full` and `api-up` create the two host folders first, because Docker would otherwise create them owned by root. A write anywhere else under `/workspace/data` fails with EROFS (checked: `manifest.json`).
 
 ### Memory budget
-The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserProfile%\.wslconfig`. On the dev machine the VM currently has about 9 GiB and 6 CPUs (`free -g`, `nproc`). Each container has a hard `mem_limit`:
+The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserProfile%\.wslconfig`. On the dev machine the VM now has 14 GB and 12 CPUs (`free -g`, `nproc`; it had about 9 GiB and 6 CPUs before Step 10). Each container has a hard `mem_limit`:
 
 | Container | Limit | Notes |
 |---|---|---|
 | kafka | 768 MiB | JVM heap 512 MiB |
 | kafka-init | 512 MiB | exits after creating the topic |
 | redis | 384 MiB | dataset capped at 256 MiB (`maxmemory`) |
-| app | 1.5 GiB | driver for local Spark jobs |
+| app | 6 GiB | driver for local Spark jobs; Step 10 benchmark cells run a 2g driver heap (`local[N]`) plus PySpark Python workers: 3.1-3.6 GiB measured at 1 season x1/x4, which hit the 90 % guard of the earlier 4 GiB limit |
 | api | 2 GiB | uvicorn (≈ 100 MiB) + one replay: stream job JVM + producer JVM (measured peaks 1.33 and 1.49 GiB) |
 | web | 512 MiB | Next.js standalone server (`node server.js`) |
 | namenode | 768 MiB | heap ≤ 512 MiB |
@@ -77,8 +78,8 @@ The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserPro
 | httpfs | 384 MiB | heap ≤ 256 MiB |
 | spark-master | 512 MiB | daemon heap 256 MiB |
 | spark-worker-1, -2 | 1.5 GiB each | `SPARK_WORKER_MEMORY=1g` for executors + 256 MiB daemon |
-| **core total** | **≈ 5.1 GiB** | ≈ 2.6 GiB before the api (Step 13) and web (Step 14) services |
-| **full total** | **≈ 10.5 GiB** (limits) | needs the WSL VM raised to 14 GB (`memory=14GB` in `.wslconfig`, being done by the user); measured idle use is ≈ 1.6 GiB (before httpfs and api) |
+| **core total** | **≈ 9.6 GiB** | ≈ 2.6 GiB before the api (Step 13) and web (Step 14) services; app 1.5 → 4 → 6 GiB in Step 10 |
+| **full total** | **≈ 15 GiB** (limits) | above the 14 GB WSL VM (12 CPUs) as ceilings; measured idle use is ≈ 1.6 GiB (before httpfs and api). **During the overnight `make experiments-spark` run, api (2 GiB) and web (0.5 GiB) are stopped (`docker compose stop api web`), leaving ≈ 12.5 GiB of limits**; start them again afterwards (`docker compose start api web`) |
 
 These are ceilings, not reservations. If the full profile runs into memory pressure, lower `SPARK_WORKER_MEMORY` and `SPARK_WORKER_CONTAINER_MEM` in `.env`, or raise `memory=` in `.wslconfig` and run `wsl --shutdown`.
 
@@ -752,6 +753,20 @@ Docs: `/api/docs`, `/api/openapi.json`.
   (`method, path, status, duration_ms`; no query string), written when the response ends, so an SSE line
   carries the stream's duration. Exceptions are logged by class name only.
 - **Step 15** adds `routes/whatif.py` and one entry in `app.ROUTERS`.
+
+## Spark benchmarks (`bench/`, Step 10)
+Method, grid, memory per cell and the limits of single-host results: `docs/experiments.md`.
+- `experiments/scalability.py` / `partitioning.py` run on the host (they sample `docker stats`,
+  write CSV/PNG) and execute `python -m f1sa.bench.grid` / `f1sa.bench.partitioning` in the running
+  app container with `docker compose exec` (no restart). Each grid cell is its own process and
+  JVM (`bench/cell.py`) under a psutil/cgroup sampler with a memory guard (`bench/grid.py`).
+- Benchmark data only in `hdfs://namenode:8020/f1/bench` and `./data/bench` (`bench/paths.check_bench_uri`);
+  outputs in `data/bench/<run_id>/`, `results/` only with `RECORD=1`.
+- The workload calls the production code unchanged: `features.build.compute_features`,
+  `etl.io.write_partitioned`, `features.telemetry_agg.aggregate_samples`. `undercut_attempts` goes
+  to Spark's `noop` sink (labels are never persisted or read).
+- Cluster cells ship the current `src/f1sa` to the executors as a zip (`addPyFile`): the worker
+  image holds the `f1sa` of its build, and the cell checks which copy the executors import.
 
 ## Dashboard (`web/`, Step 14)
 ```
