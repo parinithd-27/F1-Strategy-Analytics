@@ -147,6 +147,10 @@ model-test-full: ## THE single test-season run (docs/model_spec_v2.md): 3 featur
 	@if [ -n "$(filter-out $(TEST_FEATURE_SETS),$(FEATURE_SET))" ] || [ "$(words $(FEATURE_SET))" -gt 1 ]; then echo "Refusing: FEATURE_SET must be one of: $(TEST_FEATURE_SETS) (docs/model_spec_v2.md)." >&2; exit 1; fi
 	$(foreach fs,$(TEST_RUN_SETS),$(call test_season_runs,$(fs)))
 
+.PHONY: model-test-summary
+model-test-summary: ## 2025 test summary from the COMMITTED 9f files (no evaluation): results/model_test_summary.csv + Results tables in docs/model_results.md
+	$(UV) run python experiments/model_test_summary.py
+
 nuke: ## DESTRUCTIVE: remove containers AND volumes (requires CONFIRM=yes)
 	@echo "WARNING: this deletes all f1sa volumes (Kafka log data, HDFS namenode/datanode data)."
 	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: re-run as 'make nuke CONFIRM=yes'." >&2; exit 1; fi

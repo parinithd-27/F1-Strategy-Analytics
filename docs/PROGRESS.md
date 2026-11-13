@@ -860,7 +860,12 @@
 - User: commit Step 9e and `git tag model-spec-v2` (the v2 freeze). Then, only when the user says so,
   `make model-test-full CONFIRM=yes` (opens 2025 once per feature set and setting: 6 runs).
 - Step 16 `experiments/ablation.py`: the paired race-cluster bootstrap intervals of the feature-set differences
-  (`docs/model_spec_v2.md` §4), plus the 2025 missing rates from `results/missing_rates_{real_tyre,real_ti}_G*.csv`.
+  (`docs/model_spec_v2.md` §4; deferred here from the 9f summary). Method: score 2025 with the SAVED frozen
+  test-run models (`models/undercut/full_{real,real_tyre,real_ti}_G*_k*`, no retraining, no re-tuning, no
+  re-calibration). First check the point metrics reproduce the committed `results/model_eval*_G*_k*.csv` values
+  EXACTLY, per model and setting; on any mismatch stop and report, and write no interval. Then compute the paired
+  intervals (same resampled races for both sets, 1000 resamples, seed 42) for PR-AUC and Brier. The 2025 missing
+  rates are already reported in `docs/model_results.md`.
   `race_control` is not a model input yet.
 - User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
   already handles them (tested on hand-made FastF1 Parquet).
@@ -1138,3 +1143,22 @@ empty). Python: `uv run pytest tests/unit/test_api_races.py tests/unit/test_api_
     `tests/conftest.py` (`tests/_results_guard.py`), and `tests/unit/test_results_untouched.py`, which runs the six
     test-mode commands (refused, nothing touched) and the `real_tyre`/`real_ti` dev runs (only their own files
     change) against a placeholder copy of `results/`, and checks that no Makefile recipe or window target deletes or moves.
+- 2026-11-13: 9f 2025 summary written: `results/model_test_summary.csv` and `docs/model_results.md`.
+  - Copied from the committed test-run outputs (`model_eval*_G*_k*.csv`, `missing_rates_*`). Nothing was
+    retrained, rerun or re-evaluated. Baselines were checked identical across the three feature-set files.
+  - Primary (`real` calibrated LR, G=3.5 k=2): PR-AUC 0.670 [0.421, 0.898] vs rule 0.513 [0.246, 0.799];
+    Brier 0.177 vs 0.273. The point estimates favour the primary model on every metric, all intervals overlap,
+    and no significance claim is made.
+  - Open (spec v2 §4): paired race-cluster bootstrap intervals for the feature-set differences are not in any
+    committed output (no per-attempt test scores are saved). They need a separate, agreed step; until then no
+    ablation difference is interpreted.
+- 2026-11-13: the 9f summary is reproducible: `make model-test-summary` (`experiments/model_test_summary.py`,
+  logic in `src/f1sa/model/test_summary.py`, tests in `tests/unit/test_model_test_summary.py`).
+  - It reads only the six committed `results/model_eval*_G*_k*.csv` files (refuses with exit 2 if one is
+    untracked or differs from HEAD). It writes `results/model_test_summary.csv` and the body of the `## Results`
+    section of `docs/model_results.md`, and leaves the rest of the doc as it is.
+  - Rerun on the committed inputs: both outputs were byte-identical to the hand-run versions (sha256 `57a8e546…`
+    for the CSV, `39ecd4b8…` for the doc), and identical again on a second run.
+  - Decision: the paired ablation intervals (`docs/model_spec_v2.md` §4) are deferred to Step 16. They will be
+    computed from the saved frozen test-run models, after an exact-match check against the committed model_eval
+    metrics (see Next). Until then no ablation difference is interpreted.
