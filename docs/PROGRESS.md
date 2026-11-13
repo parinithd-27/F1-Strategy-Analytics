@@ -1085,3 +1085,31 @@ empty). Python: `uv run pytest tests/unit/test_api_races.py tests/unit/test_api_
 ## 9f approval
 - 2026-11-13: label-definition-v1, model-spec-v1 and model-spec-v2 approved for the single 2025 test run by Parinith D. on behalf of the team (Data Wranglers). No further sign-off required.
 - 2026-11-12 21:02 UTC: first 9f attempt aborted. The app container went down overnight mid-run. No results files were written and no 2025 test numbers were seen. The partial model folder is kept as models/undercut/_aborted_20261112T2102Z_full_real_G3.5_k2 and its log as data/test_run_aborted_20261112.log (both gitignored). Rerun allowed under the rerun rule (crash with no test number seen).
+- 2026-11-13: 9f bug in the test run, fixed before anyone viewed the `real` test results.
+  - What happened: `make model-test-full CONFIRM=yes` completed the two `real` runs. Then the first
+    ablation run (`--source full --allow-test-season --feature-set real_tyre`) stopped with "TracingInsights
+    inputs need explicit races or seasons".
+  - Where: inside `pipeline.load_frame`, **before any `real_tyre`/`real_ti` data was read, and before any
+    training or evaluation**. No `real_tyre`/`real_ti` test files exist (checked by file name only).
+  - Root cause: test mode sent the TracingInsights sets to `dataset.load_attempts(races=None, ti_root)`,
+    which refuses TracingInsights inputs without races. The dev path (`--no-test`) calls
+    `load_attempts_for_seasons` with explicit seasons, so it never hit this.
+  - Fix (plumbing only, `src/f1sa/model/pipeline.py`):
+    - test mode with a TracingInsights set now calls the dev path's loader (`load_attempts_for_seasons`,
+      through the shared `_load_seasons`) for the seasons of the frozen split;
+    - that split is `pipeline.TEST_SPLIT = SplitSpec()`: train 2021-2023, validation 2024, test 2025, the
+      split `build_dataset(split=None)` already uses.
+  - Unchanged: the `real` path (still `load_attempts(features, None, None)`), features, models, grids,
+    calibration, threshold, metrics, `scorer.json` and every spec doc.
+  - Tests (`tests/unit/test_model_pipeline.py`):
+    - `test_test_mode_ti_sets_load_tracinginsights_for_the_frozen_split[real_tyre|real_ti]` checks that
+      the TracingInsights loader receives seasons 2021-2025 and nothing raises. It fails on the old code
+      at the same call.
+    - `test_test_mode_real_path_is_unchanged` and `test_test_split_is_the_frozen_split`.
+  - The existing tests confirm that `make model-test-full CONFIRM=yes FEATURE_SET=real_tyre` runs only
+    `real_tyre` at both settings (`make -n`), that its own files block a rerun, and that the `real` files
+    neither block it nor change.
+  - Dev outputs are byte-identical: `make model-dev-tyre-full model-dev-ti-full` (2021-2024 only), then
+    `sha256sum -c data/dev_ti_tyre_reference.sha` gave 42/42 OK.
+  - No `--allow-test-season` command was run, and no protected test-run file was opened, read or hashed.
+    The `real_tyre`/`real_ti` test runs are for the user to start.

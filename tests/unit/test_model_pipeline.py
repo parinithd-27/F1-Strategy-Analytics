@@ -775,3 +775,99 @@ def test_test_run_overwrite_guard_covers_real_tyre_and_real_ti(
     assert sensitivity.output("missing_rates", "csv").read_text() == "sensitivity missing rates"
     real_files = cfg("real").result_paths() + cfg("real", 5.0, 3).result_paths()
     assert all(p.read_text() == "real result" for p in real_files)
+
+
+# ------------------------------------------------------------------ Step 9f: TI sets in test mode
+@pytest.fixture(scope="module")
+def test_mode_lake(
+    sample_clean_lake: SampleLake,
+    sample_features_root: str,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Path:
+    """A copy of the sample lake (features + clean laps) for test-mode ``load_frame`` calls. It
+    has no 2025 data: these tests build the input frame only, never train or evaluate."""
+    import shutil
+
+    base = tmp_path_factory.mktemp("test_mode")
+    lake = base / "data" / "lake"
+    shutil.copytree(Path(sample_features_root.removeprefix("file://")), lake / "features")
+    shutil.copytree(sample_clean_lake.lake / "clean" / "laps", lake / "clean" / "laps")
+    return lake
+
+
+def _test_mode_env(monkeypatch: pytest.MonkeyPatch, lake: Path) -> None:
+    from f1sa.config import get_settings
+
+    monkeypatch.chdir(lake.parent.parent)  # the lake must be ./data/lake (resolve_feature_roots)
+    monkeypatch.setenv("DATA_LAKE_URI", f"file://{lake}")
+    get_settings.cache_clear()
+    for name in ("tune", "evaluate_test", "build_dataset"):
+        monkeypatch.setattr(P, name, lambda *a, **k: pytest.fail("load_frame must only load"))
+
+
+def test_test_split_is_the_frozen_split() -> None:
+    from f1sa.model.dataset import SplitSpec
+
+    assert SplitSpec() == P.TEST_SPLIT  # what build_dataset(split=None) uses in test mode
+    seasons = (*P.TEST_SPLIT.train, *P.TEST_SPLIT.validation, *P.TEST_SPLIT.test)
+    assert seasons == (2021, 2022, 2023, 2024, 2025)
+    assert (P.TEST_SPLIT.train, P.TEST_SPLIT.validation) == (
+        P.DEV_SPLIT.train,
+        P.DEV_SPLIT.validation,
+    )
+
+
+@pytest.mark.parametrize("feature_set", ["real_tyre", "real_ti"])
+def test_test_mode_ti_sets_load_tracinginsights_for_the_frozen_split(
+    spark: SparkSession,
+    test_mode_lake: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    feature_set: str,
+) -> None:
+    """Regression (Step 9f): ``--allow-test-season --feature-set real_tyre|real_ti`` raised
+    "TracingInsights inputs need explicit races or seasons" in ``load_frame``. It must use the
+    development loader with the frozen split's seasons, 2021-2025."""
+    from f1sa.model import dataset as D
+    from f1sa.model import features as MF
+
+    _test_mode_env(monkeypatch, test_mode_lake)
+    calls: list[tuple[int, ...]] = []
+    original = D.load_ti_inputs
+
+    def spy(spark_: Any, root: str, seasons: Any, *rest: Any, **kw: Any) -> Any:
+        calls.append(tuple(seasons))
+        return original(spark_, root, seasons, *rest, **kw)
+
+    monkeypatch.setattr(D, "load_ti_inputs", spy)
+    real_frame = P.load_frame(spark, P.RunConfig(source="full", allow_test_season=True))
+    monkeypatch.setattr(P, "load_attempts", lambda *a, **k: pytest.fail("needs explicit races"))
+
+    cfg = P.RunConfig(source="full", allow_test_season=True, feature_set=feature_set)
+    frame = P.load_frame(spark, cfg)  # raised DatasetError before the fix
+
+    assert calls == [(2021, 2022, 2023, 2024, 2025)]
+    real_inputs = {s.name for s in MF.specs_for("real")}
+    ti_inputs = [s.name for s in MF.specs_for(feature_set) if s.name not in real_inputs]
+    assert ti_inputs and all(name in frame.columns for name in ti_inputs)
+    assert frame.count() == real_frame.count()  # the TI joins add columns, never rows
+
+
+def test_test_mode_real_path_is_unchanged(
+    spark: SparkSession, test_mode_lake: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``real`` in test mode still reads through ``load_attempts(features, None, None)``; the
+    Step 9f branch is only for TracingInsights sets."""
+    _test_mode_env(monkeypatch, test_mode_lake)
+    calls: list[tuple[Any, ...]] = []
+    original = P.load_attempts
+
+    def spy(*args: Any) -> Any:
+        calls.append(args[1:])
+        return original(*args)
+
+    monkeypatch.setattr(P, "load_attempts", spy)
+    monkeypatch.setattr(
+        P, "load_attempts_for_seasons", lambda *a, **k: pytest.fail("real changed path")
+    )
+    P.load_frame(spark, P.RunConfig(source="full", allow_test_season=True))
+    assert calls == [(f"file://{test_mode_lake}/features", None, None)]

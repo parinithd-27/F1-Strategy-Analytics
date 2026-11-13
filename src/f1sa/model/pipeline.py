@@ -122,6 +122,9 @@ DEV_EXTRA_FILES: tuple[tuple[str, str], ...] = (
     ("metadata", "json"),
 )
 DEV_SPLIT = SplitSpec(train=(2021, 2022, 2023), validation=(2024,), test=())
+TEST_SPLIT = SplitSpec()
+"""The frozen split of the test run (train 2021-2023, validation 2024, test 2025): the split
+``build_dataset`` uses when a test-mode run passes ``split=None``."""
 DEV_STAMP = (
     "DEVELOPMENT: validation season 2024 only, not a final result. Validation numbers from so few "
     "labelled attempts (about 50) are noisy, and 2024 is used both to select hyperparameters and "
@@ -296,16 +299,28 @@ def load_frame(spark: SparkSession, cfg: RunConfig) -> DataFrame:
     ti_root = clean_root if MF.uses_tracinginsights(cfg.feature_set) else None
     if cfg.no_test:
         seasons = (*DEV_SPLIT.train, *DEV_SPLIT.validation)
-        for table in ("undercut_attempts", "stints", "telemetry_lap_features"):
-            paths = season_partition_paths(spark, features_root, table, seasons)
-            print(f"reading {table} partitions: {[p.rsplit('/', 1)[-1] for p in paths]}")
-        if ti_root is not None:
-            for table in TI_CLEAN_TABLES:
-                paths = season_partition_paths(spark, ti_root, table, seasons)
-                print(f"reading clean {table} partitions: {[p.rsplit('/', 1)[-1] for p in paths]}")
-        return load_attempts_for_seasons(spark, features_root, seasons, ti_root)
+        return _load_seasons(spark, features_root, ti_root, seasons)
+    if cfg.source == "full" and ti_root is not None:
+        # Test mode with TracingInsights inputs: the development loader, for the frozen split's
+        # seasons (2021-2025). ``load_attempts`` below needs explicit races for those inputs.
+        seasons = (*TEST_SPLIT.train, *TEST_SPLIT.validation, *TEST_SPLIT.test)
+        return _load_seasons(spark, features_root, ti_root, seasons)
     races = set(sample_races(settings)) if cfg.source == "sample" else None
     return load_attempts(spark, features_root, races, ti_root)
+
+
+def _load_seasons(
+    spark: SparkSession, features_root: str, ti_root: str | None, seasons: tuple[int, ...]
+) -> DataFrame:
+    """``load_attempts_for_seasons`` for ``seasons``, printing the partitions it reads."""
+    for table in ("undercut_attempts", "stints", "telemetry_lap_features"):
+        paths = season_partition_paths(spark, features_root, table, seasons)
+        print(f"reading {table} partitions: {[p.rsplit('/', 1)[-1] for p in paths]}")
+    if ti_root is not None:
+        for table in TI_CLEAN_TABLES:
+            paths = season_partition_paths(spark, ti_root, table, seasons)
+            print(f"reading clean {table} partitions: {[p.rsplit('/', 1)[-1] for p in paths]}")
+    return load_attempts_for_seasons(spark, features_root, seasons, ti_root)
 
 
 # ------------------------------------------------------------------ outputs
