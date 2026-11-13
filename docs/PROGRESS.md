@@ -1028,6 +1028,13 @@
   (e.g. `isEmpty`/`limit` on Python-RDD-backed frames). Results are unaffected.
 - `real` excludes compounds and tyre age, so the model cannot use compound effects until FastF1 stints replace the
   synthetic compounds (`with_synthetic` is then allowed in full mode).
+- Uncommitted files in `results/` can be deleted by the editor's Source Control "Discard Changes" (it runs
+  `git clean -f` on untracked files, irreversibly on WSL). That is how the first 9f `real` results were lost
+  (see 9f approval). Commit run outputs right after a run, and never discard changes under `results/`.
+  Optionally, in the editor's user settings, enable `git.discardUntrackedChangesToTrash` where a trash exists.
+- `tests/conftest.py` fails any pytest session that deletes, overwrites or adds a file in the repo's `results/`
+  (stat snapshot at start and end, contents never read). A make target writing `results/` at the same time as
+  the tests also trips it: run the tests after the target finishes.
 
 ## Verify
 `uv sync --all-extras && make lint && make typecheck && make test && make up-full && make test-int && make down`
@@ -1114,3 +1121,20 @@ empty). Python: `uv run pytest tests/unit/test_api_races.py tests/unit/test_api_
   - No `--allow-test-season` command was run, and no protected test-run file was opened, read or hashed.
     The `real_tyre`/`real_ti` test runs are for the user to start.
 - 2026-11-13: 9f `real` results files (results/*_G3.5_k2.*, *_G5.0_k3.*) from the 04:38 UTC run were deleted from the working tree before being committed (cause under investigation; not a user command). Nobody had viewed them. The saved models and metadata survived (kept as models/undercut/_lostresults_20261113T043[89]Z_full_real_*). The `real` runs were regenerated with the same frozen code; the new metadata.json files and the filtered console output are IDENTICAL to the first run (checked key by key and line by line without printing values). The regenerated files are therefore the first run's results; committed in b6aae52. Ablation results (real_tyre, real_ti) were not affected and were committed separately.
+- 2026-11-13: cause of the lost 9f `real` results found; it was not repo code, a test or a make target.
+  - Evidence: the editor's git log (`~/.vscode-server/data/logs/20261113T043245/exthost1/vscode.git/Git.log`, line 146)
+    has `2026-11-13 04:51:21.551 [info] > git clean -f -q -- results/calibration_G3.5_k2.csv ... results/reliability_G5.0_k3.png`,
+    exactly the 12 lost files. This is the command the Source Control view runs for "Discard Changes" on untracked
+    files (after a confirmation dialog). `remoteagent.log` logs a watched path deleted at 04:51:21.655.
+  - Why only those files: at 04:51:21 they were the only untracked files and no tracked file was modified;
+    `models/` is gitignored, so `git clean` (without `-x`) left `models/undercut/full_real_*`; the `real_tyre`/`real_ti`
+    files did not exist yet (written 05:23-05:28).
+  - Ruled out: the bug-fix session ran no delete (its 04:51:15 `git status` still listed the 12 files); every writer
+    in `src/`/`experiments/` uses `check_results_dir` and tmp+replace on its own names; the only deleter
+    (`demo_runs.clean`) is pinned to `./data/demo` and `./data/checkpoints`; every test and module fixture works in a
+    tmp dir; no Makefile recipe deletes, moves or cleans; `git fsck` shows no dropped stash from 11-13.
+  - The earlier line "cause under investigation; not a user command" is corrected by this one: it was an editor action.
+  - Safeguards added (tests only; no pipeline, label, Redis or layout change): the session-wide results guard in
+    `tests/conftest.py` (`tests/_results_guard.py`), and `tests/unit/test_results_untouched.py`, which runs the six
+    test-mode commands (refused, nothing touched) and the `real_tyre`/`real_ti` dev runs (only their own files
+    change) against a placeholder copy of `results/`, and checks that no Makefile recipe or window target deletes or moves.

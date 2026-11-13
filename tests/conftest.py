@@ -9,9 +9,33 @@ from pathlib import Path
 import pytest
 from pyspark.sql import SparkSession
 
+from _results_guard import describe_changes, results_changes, results_snapshot
 from f1sa.config import Settings, get_settings
 
 SETTINGS_ENV_VARS = tuple(name.upper() for name in Settings.model_fields)
+REPO_RESULTS = Path(__file__).resolve().parents[1] / "results"
+_RESULTS_AT_START = pytest.StashKey[dict[str, tuple[int, int, int]]]()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Snapshot the committed results/ (stat only, contents never read)."""
+    session.stash[_RESULTS_AT_START] = results_snapshot(REPO_RESULTS)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Fail the run if any test deleted, overwrote or added a file in the committed results/."""
+    before = session.stash.get(_RESULTS_AT_START, None)
+    if before is None:
+        return
+    report = describe_changes(results_changes(before, results_snapshot(REPO_RESULTS)))
+    if report:
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        if reporter is not None:
+            reporter.write("\n")  # the progress line "[100%]" has no newline yet
+            reporter.write_line(f"RESULTS GUARD FAILED: {report}", red=True, bold=True)
+        else:
+            print(f"RESULTS GUARD FAILED: {report}")
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 @pytest.fixture(scope="session")
