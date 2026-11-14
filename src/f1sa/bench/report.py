@@ -479,17 +479,26 @@ def _missing_build_cells(
 ) -> list[tuple[Mapping[str, Any], str]]:
     """Build rows without a timing (failed, aborted, skipped) that no merged ok re-run replaces,
     each with a short reason."""
-    rerun = {r.get("cell_id") for r in rows if r.get("rerun_of") and r.get("status") == "ok"}
+    rerun_ids = {r.get("cell_id") for r in rows if r.get("rerun_of")}
+    first_overflow = {
+        r.get("cell_id")
+        for r in rows
+        if not r.get("rerun_of") and "StackOverflowError" in str(r.get("reason", ""))
+    }
     out = []
     for r in rows:
-        if r.get("phase") != "build" or r.get("status") == "ok" or r.get("cell_id") in rerun:
+        if r.get("phase") != "build" or r.get("status") == "ok":
             continue
+        cell = r.get("cell_id")
         if r.get("rerun_of"):
-            why = f"{r.get('status')} again in the supplementary re-run"
+            why = f"{r.get('status')} in the supplementary re-run"
+            if cell in first_overflow:
+                why += " (the first attempt failed with StackOverflowError in select_races, fixed)"
+        elif cell in rerun_ids:
+            continue  # superseded: described once, by its re-run row
         elif "StackOverflowError" in str(r.get("reason", "")):
             why = (
-                "failed with StackOverflowError in select_races (fixed after this run; "
-                "supplementary re-run pending)"
+                "failed with StackOverflowError in select_races (fixed after this run; not re-run)"
             )
         else:
             why = str(r.get("status"))

@@ -309,13 +309,23 @@ def test_not_drawn_groups_cells_by_reason() -> None:
     lines = R.not_drawn(ROWS)
     assert len(lines) == 1
     assert lines[0].startswith("build_s1_x16_local4, build_s5_x4_{local1, local2}: failed with ")
+    assert "pending" not in lines[0] and "not re-run" in lines[0]
     rerun = [*ROWS, _build("build_s1_x16_local4", 1, 16, "local4", 280.0, rerun_of=ORIG)]
     assert R.not_drawn(rerun)[0].startswith("build_s5_x4_{local1, local2}:")
-    again = [
+    aborted = [
         *ROWS,
         _build("build_s5_x4_local1", 5, 4, "local1", 0.0, "aborted_memory_guard", rerun_of=ORIG),
     ]
-    assert any("again in the supplementary re-run" in ln for ln in R.not_drawn(again))
+    out = R.not_drawn(aborted)
+    # one line per cell: the superseded original row is not listed a second time
+    assert len(out) == 2
+    assert any(
+        ln.startswith("build_s5_x4_local1: aborted_memory_guard in the supplementary re-run")
+        and "first attempt failed with StackOverflowError" in ln
+        for ln in out
+    )
+    assert any(ln.startswith("build_s1_x16_local4, build_s5_x4_local2:") for ln in out)
+    assert not any("again" in ln or "pending" in ln for ln in out)
 
 
 def test_build_plot_and_replot_write_only_the_png(tmp_path: Path) -> None:

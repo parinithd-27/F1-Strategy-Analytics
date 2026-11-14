@@ -176,6 +176,11 @@ near or over the 90 % guard for local cells: the runtime guard decides, and the 
 - **Replication is synthetic.** Larger lap inputs are exact copies with shifted keys (above), and
   telemetry is real but at most one season. Trends with input size are therefore indicative. The
   absolute costs of skew, cardinality and compression are not measured.
+- **Memory limits decide the largest cells.** The app container has 6 GiB and a 5.40 GiB guard, so local-mode
+  cells at the largest sizes have no timing, and a cluster cell can finish only because its executors sit in other
+  containers (see the supplement). That says something about this host's limits, not about speed.
+- **Executor loss.** Two supplement cluster cells lost an executor (heartbeat timeout) and Spark recovered, so
+  their medians may include recovery time.
 - **Trends only.** Read the results as relative trends with their IQR: how a cell scales against
   its neighbours and which choices help (partition pruning, caching). They are not absolute
   throughput figures to compare with other systems. Run-to-run variance on this WSL2/Docker Desktop
@@ -186,6 +191,93 @@ The recorded run writes `results/scalability.csv`, `results/partitioning.csv` an
 and appends the environment fingerprint (git sha, CPU, memory, container limits, Spark and Python
 versions, topology, grid parameters) to `results/README.md`. The smoke run below is plumbing
 evidence only (one repetition, no warm-up) and is not a result.
+
+The recorded grid is the reduced one proposed after the smoke run (1 warm-up + 3 timed runs per cell, 1/3/5
+seasons, x1/x4, x16 for 1 season on `local[4]` and the cluster, no x64), run as `bench_20261113T152740Z`; six
+build cells failed and were re-run (see the supplement). All numbers below are medians read from
+`results/scalability.csv` and `results/partitioning.csv`. Every statement is for this single host (see the
+limits above), and speed-ups are ratios of medians.
+
+### Final findings
+
+#### Telemetry aggregation (real 2024 data; `results/scalability_telemetry.png`)
+| Rounds (about % of bytes) | local[1] | local[2] | local[4] | 2-worker cluster |
+|---|---|---|---|---|
+| 5 (20 %) | 3.85 s | 2.53 s (1.52x) | 1.72 s (2.24x) | 2.17 s (1.77x) |
+| 14 (60 %) | 11.01 s | 6.46 s (1.70x) | 4.53 s (2.43x) | 5.13 s (2.15x) |
+| 24 (100 %) | 18.01 s | 10.44 s (1.72x) | 7.49 s (2.40x) | 8.24 s (2.19x) |
+
+Speed-up in brackets is over local[1] at the same rounds. The cost grows about linearly with the rounds
+(local[1]: 3.85, 11.01, 18.01 s for 5, 14, 24 rounds), and the speed-up from more cores is about 1.7x for two
+and 2.4x for four at 14 and 24 rounds, i.e. 85 % and 60 % per core. The cluster (2 x 2 cores) is about 10 %
+slower than `local[4]` at equal cores, which is the scheduling and serialisation overhead (no network here). At
+5 rounds the fixed cost of a job is a larger share, so the speed-ups are lower.
+
+#### Feature build (`results/scalability_build.png`; cells before the `select_races` fix)
+Real seasons at x1 (laps: 26,574 / 74,489 / 124,834):
+
+| Seasons | local[1] | local[2] | local[4] | cluster |
+|---|---|---|---|---|
+| 1 (2024) | 80.5 s | 51.4 s | 48.0 s | 40.3 s |
+| 3 (2022-24) | 57.9 s | 55.9 s | 49.4 s | 50.7 s |
+| 5 (2021-25) | 84.0 s | 70.8 s | 65.8 s | 69.0 s |
+
+Replication at 1 and 3 seasons (laps 106,296 at s1 x4 and 297,956 at s3 x4):
+
+| Cell | local[1] | local[2] | local[4] | cluster |
+|---|---|---|---|---|
+| 1 season x4 | 131.8 s | 79.2 s | 64.7 s | 71.7 s |
+| 3 seasons x4 | 257.8 s | 230.5 s | 200.5 s | 161.9 s |
+
+- **Fixed overhead dominates at small sizes.** Going from 1 to 5 real seasons multiplies the lap rows by 4.7 but
+  the `local[4]` time only by 1.37 (48.0 to 65.8 s), and at x1 the four masters are within 1.2x to 2x of each
+  other. The job's fixed cost (JVM start, reading and planning the nine tables, many small season/round
+  partitions) is most of the run. The 1-season `local[1]` value (80.5 s, IQR 7.8 s) is above its 3-season value
+  (57.9 s); the series is not monotonic there, and this is not explained here.
+- **Per-core scaling shows only with more work.** At 3 seasons x4 the order is the expected one: `local[1]`
+  257.8 s, `local[2]` 230.5 s (1.12x), `local[4]` 200.5 s (1.29x), and **the cluster was fastest at 161.9 s
+  [160.9, 164.8] (1.59x over `local[1]`)**. At 1 season x4 `local[4]` (64.7 s) was still ahead of the cluster
+  (71.7 s). The cluster spreads the work over separate executor JVMs as well as 4 cores, so its lead is not only
+  a core count effect.
+- **Growth with rows.** `local[1]` took 1.64x as long for 4x the rows at 1 season (80.5 to 131.8 s) and 4.45x at
+  3 seasons (57.9 to 257.8 s): once the fixed cost is paid, it grows at least linearly, with the single-partition
+  prior windows and the many small partitions as the costs that can grow faster (Known issue of Step 6).
+- The cells at 1 season x16 and 5 seasons x4 are in the supplement below.
+
+#### Partitioning and caching (`results/partitioning.csv`, `results/partitioning_speedup.png`)
+Master `local[4]`, 1 warm-up + 5 timed runs, 84 rows. Every result checksum matches across layouts, variants and
+file systems. Speed-ups are against the simplest baseline (file://, unpartitioned, no cache) unless stated;
+"same fs" is against unpartitioned without cache on the same file system.
+
+- **Pruning helps the narrow lap queries, mostly on file://.** `partitionBy(season, round)`, laps x16, no cache:
+
+  | Query | file:// | HDFS |
+  |---|---|---|
+  | one race, time | 0.164 to 0.095 s (1.74x) | 0.127 to 0.106 s (1.20x same fs; 1.56x vs simplest) |
+  | one race, input | 1.29 MB to 4 KB | 11.1 MB to 8.7 KB |
+  | one season, time | 0.147 to 0.091 s (1.62x) | 0.121 to 0.120 s (1.005x same fs; 1.23x vs simplest) |
+  | one season, input | 764 KB to 96 KB | 8.6 MB to 208 KB |
+
+  The input bytes fall by a large factor on both file systems, but the time gain is the 1.6-1.7x on file:// and
+  only up to 1.2x on HDFS. All these queries run in 0.1-0.2 s, where the fixed per-query cost is a large share.
+  For the 2024 telemetry (one season, 24 rounds) pruning gives no speed-up (0.93-1.04x), although the one-race
+  input falls from 1.7 MB to 27 KB on file://.
+- **Full scans and joins get slower on the partitioned layout** because it has many small files: laps
+  `full_scan` and `join_agg` at 0.30x and 0.32x on file://, and 0.14x and 0.12x on HDFS against the simplest
+  baseline (0.145x and 0.109x against unpartitioned on the same HDFS). HDFS is the worst case: each small file
+  is a separate open and read through the namenode and datanode (the mechanism is not measured separately).
+- **Caching helps only the small lap queries.** Unpartitioned file:// laps: `cache()` gives 1.41x (one race) and
+  1.25x (one season), about 0.03-0.05 s per query, while `cache()` + `count()` itself takes 1.13 s, so it pays
+  back only after roughly 25-40 queries of that kind. It gives 1.00x on `full_scan` and 1.06x on `join_agg`
+  (HDFS unpartitioned laps: 1.01-1.08x). On the partitioned layout it hurts the pruned queries (one race 0.160 s
+  cached against 0.095 s uncached), because it caches everything, and it recovers only part of the full-scan
+  loss (0.85x and 0.82x on file://, against 0.30x and 0.32x uncached).
+- **Caching does not help telemetry**: 0.93-1.05x in every query, layout and file system, and materialising the
+  cache costs about 4.3 s (4.25-4.40 s) against queries of 0.3-2.6 s.
+- **`persist(DISK_ONLY)` is mostly slower than no caching.** On telemetry and on HDFS laps it is slower in every
+  query (0.71-0.95x, same fs), with 4.5-4.7 s materialisation on telemetry. The exception is the small file://
+  lap queries, unpartitioned: 1.29x and 1.33x (and 1.08x on the join, 0.89x on the full scan), with 1.08 s
+  materialisation.
 
 ### Memory re-check at 6 GiB (2026-11-13)
 After the app container went to 6144m, `build_s1_x4_local4` alone (run `bench_20261113T095530Z`)
@@ -269,20 +361,41 @@ Each master is one line: the median, with IQR bars. A hollow marker is a merged 
 are marked in the panel and named in the note. The plot was redrawn with `make bench-replot RECORD=1`, and only
 that file changed.
 
-### Supplementary re-run of the six cells (not yet run)
-Stop api and web first, as for the overnight grid:
+### Supplementary re-run of the six cells (run 2026-11-14)
+Run `bench_20261114T052031Z_supp` (`make bench-supplement RECORD=1 SUPPLEMENT_OF=bench_20261113T152740Z ...`, api
+and web stopped): 8 cells, the 2 prep cells and the 6 build cells that had failed with the StackOverflowError, with
+the recorded grid's settings (1 warm-up, 3 timed runs). Its 6 rows are in `results/scalability.csv` (`rerun_of`
+and `note` set; the original failed rows stay). Log: `data/bench_supp.log` (not committed).
 
-    make bench-supplement RECORD=1 SUPPLEMENT_OF=bench_20261113T152740Z CELLS="build_s1_x16_local4 build_s1_x16_cluster build_s5_x4_local1 build_s5_x4_local2 build_s5_x4_local4 build_s5_x4_cluster"
+| Cell | Result | Median [Q1, Q3] | App container peak |
+|---|---|---|---|
+| `build_s1_x16_local4` | `aborted_memory_guard` (5.46 GiB) | none | 5.46 GiB |
+| `build_s5_x4_local1` | `aborted_memory_guard` (5.50 GiB) | none | 5.50 GiB |
+| `build_s5_x4_local2` | `aborted_memory_guard` (5.56 GiB) | none | 5.56 GiB |
+| `build_s5_x4_local4` | `aborted_memory_guard` (5.44 GiB) | none | 5.44 GiB |
+| `build_s1_x16_cluster` | ok | 175.6 s [169.6, 186.7] | 5.20 GiB |
+| `build_s5_x4_cluster` | ok | 213.6 s [211.2, 216.6] | 2.48 GiB |
 
-**Cells.** 8 in all: 2 prep cells (they rebuild the replicated input, which was deleted) and the 6 build cells.
-The settings come from the recorded grid: 1 warm-up and 3 timed runs.
+(The guard is 5.40 GiB of the 6 GiB container; the figures in the reasons are the values at the kill.)
 
-**Estimate.** The recorded s3_x4 times, scaled linearly in lap rows (298k → s1_x16 425k, s5_x4 499k):
-- s5_x4: about 430 / 390 / 335 / 270 s per run on local[1] / local[2] / local[4] / the cluster;
-- s1_x16: about 285 / 230 s on local[4] / the cluster.
+**Read this as a single-host scale-out observation, not a speed claim.** After the fix the build ran in the
+standalone cluster at both of the largest sizes, but all four local[N] cells at those sizes were stopped by the
+memory guard. In local mode the driver and all task execution share one JVM in the app container, so the
+container is what fills up. In the cluster the executors live in the worker containers, and the driver
+container holds the driver only. That explains `s5_x4` clearly (2.48 GiB in the app container). It explains
+`s1_x16` only partly: its driver container also reached 5.20 GiB, 0.2 GiB under the guard, and the lowest host
+`MemAvailable` was 1.51 GiB against a 1.5 GiB guard. The cluster cell finished with very little margin. Nothing
+here says the cluster is faster than local mode, because the local cells at these sizes have no timing.
 
-With 4 runs per cell and the two preps, that is about 2.3 h; allow 3 h, since growth was superlinear in places and
-the fix makes each run somewhat faster. `build_s1_x16_local4` may reach the memory guard (s3_x4 local[4]
-peaked at about 4.1 GiB container memory, guard 5.4 GiB). If it does, it is recorded as `aborted_memory_guard`,
-not hidden.
+**Comparability.** The re-run cells use the flat `IN` filter; the original cells use the OR chain (about 10 s
+per run faster at 96 races, see above). Compare the re-run cells only with each other, not with the neighbours
+in the plot. The two cluster medians (175.6 s at 1 season x16, 213.6 s at 5 seasons x4) differ in both rows and
+races, so they are two points, not a scaling line.
 
+**Executor loss in both completed cluster cells.** `data/bench_supp.log` records
+`Lost executor 0 ... Executor heartbeat timed out` during `build_s1_x16_cluster` (05:35:34, heartbeat silent for 169.4 s) and
+during `build_s5_x4_cluster` (06:21:34, silent for 166.7 s). Spark replaced the executor and the cells finished, but
+each median may include recovery time. The IQRs (17.1 s and 5.4 s) do not show it separately.
+
+The final plot footnote names the four aborted cells and says the first attempt failed with the
+StackOverflowError (fixed). Hollow markers in the plot are the two merged re-runs.

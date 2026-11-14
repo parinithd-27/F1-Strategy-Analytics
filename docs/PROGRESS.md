@@ -1027,58 +1027,30 @@
     - It refuses before running if a cell's recorded row is ok or already re-run.
     - Tests are in `tests/unit/test_bench_supplement.py` and `test_makefile_bench.py`, and the results-guard
       windows cover the new targets.
+- Step 10 wrap-up (2026-11-14, write-up only, no new measurements): **Step 10 is Done** (#27, #28, #33, #34, #38)
+  - Supplement run `bench_20261114T052031Z_supp` is committed. After the `select_races` fix, `build_s1_x16_local4`
+    and `build_s5_x4_local1/2/4` were aborted by the memory guard (5.44-5.56 GiB of the 6 GiB container); the
+    standalone cluster completed `s1_x16` (175.6 s) and `s5_x4` (213.6 s). Documented as a single-host scale-out
+    observation, not a speed claim; the cluster `s1_x16` cell also peaked at 5.20 GiB (guard 5.40).
+  - `docs/experiments.md`: final findings for telemetry (speed-up over local[1]: 1.5-1.7x local[2], 2.2-2.4x
+    local[4], 1.8-2.2x cluster), the feature build (fixed overhead at small sizes; cluster fastest at 3 seasons
+    x4), the supplement, and partitioning and caching (pruning 1.6-1.7x on file:// but only up to 1.2x on HDFS;
+    full scans and joins 0.12-0.32x on the partitioned layout; caching only for small lap queries).
+  - Plot footnote: `bench/report._missing_build_cells` now describes a cell with a re-run row once, by its
+    re-run outcome, and no longer says "pending" or "again". `make bench-replot RECORD=1` redrew only
+    `results/scalability_build.png`. Test: `tests/unit/test_bench_supplement.py::test_not_drawn_groups_cells_by_reason`.
+  - `docs/traceability.md` rows 27, 28, 33, 34 and 38 are marked Done with their result files.
 ## Next
-- Step 10, user: `make bench-supplement RECORD=1 SUPPLEMENT_OF=bench_20261113T152740Z CELLS="build_s1_x16_local4
-  build_s1_x16_cluster build_s5_x4_local1 build_s5_x4_local2 build_s5_x4_local4 build_s5_x4_cluster"` with api and
-  web stopped (about 2.3 h, allow 3 h). Then commit `results/scalability.csv`, `scalability_build.png`,
-  `scalability_telemetry.png` and `README.md`, and fill the Results of `docs/experiments.md`.
-- Step 15, user (ordering decision taken: rule kept, post-hoc column added): `make sim-tyre-model-full TEST_SEASON=1`
-  (adds the 2025 entries; the 2021-2024 entries are unchanged by construction) and
-  `make whatif-consistency-full RECORD=1` (adds the 2025 held-out row and writes `results/whatif_consistency.*`).
-  Then commit the results and fill the what-if part of the report.
-- Step 15, user: `make api-up` (recreates the api container with the what-if route) and rebuild the `web` image
-  (`docker compose build web`) so that the containers serve the panel; `make demo-clean` removes the demo output
-  of the interrupted verification replay.
-- S16: UI latency from `results/ui_latency.csv` (needs a dashboard run with `ENABLE_DEBUG=1`).
-- User: run `docker compose exec namenode hdfs dfs -setrep -R -w 1 /f1`, then
-  `docker compose exec namenode hdfs fsck /f1 | grep -i under-replicated` (expect 0). This changes metadata only;
-  no bytes or checksums change.
-- User: commit Step 9e and `git tag model-spec-v2` (the v2 freeze). Then, only when the user says so,
-  `make model-test-full CONFIRM=yes` (opens 2025 once per feature set and setting: 6 runs).
-- Step 16 `experiments/ablation.py`: the paired race-cluster bootstrap intervals of the feature-set differences
-  (`docs/model_spec_v2.md` §4; deferred here from the 9f summary). Method: score 2025 with the SAVED frozen
-  test-run models (`models/undercut/full_{real,real_tyre,real_ti}_G*_k*`, no retraining, no re-tuning, no
-  re-calibration). First check the point metrics reproduce the committed `results/model_eval*_G*_k*.csv` values
-  EXACTLY, per model and setting; on any mismatch stop and report, and write no interval. Then compute the paired
-  intervals (same resampled races for both sets, 1000 resamples, seed 42) for PR-AUC and Brier. The 2025 missing
-  rates are already reported in `docs/model_results.md`.
-  `race_control` is not a model input yet.
-- User: the FastF1 pass (needs the F1 TV login) adds exact track status, real stints and telemetry. The clean job
-  already handles them (tested on hand-made FastF1 Parquet).
-- Re-check the 74% out-lap stop-time share per circuit, and the heuristic thresholds (1.10 / 50%) on wet races,
-  using 2021-2024 only.
-- Overnight run (user): first `docker compose stop api web` (the full profile's limits are about 15 GiB with
-  the 6 GiB app container, above the 14 GB VM; with api and web stopped about 12.5 GiB), then
-  `make experiments-spark RECORD=1 GRID_ARGS="..."` (below); afterwards `docker compose start api web`.
-- User (overnight, nothing else running): `make experiments-spark RECORD=1 GRID_ARGS="--seasons 1 3 5
-  --factors 1 4 16 --masters local1 local2 local4 cluster --warmup 1 --repeats 3 --large-from 16
-  --large-repeats 3 --large-masters local4 cluster --large-seasons 1"` (~6.3 h + ~0.5 h partitioning,
-  estimate). The full grid (no GRID_ARGS) is ~119 h. Then commit `results/scalability.*`,
-  `results/partitioning.*` and `results/README.md` right away, and fill the Results of `docs/experiments.md`.
-- Optional, after the record run: stop api and web for it (`docker compose stop api web`) to give the
-  benchmark the memory headroom; that is a service stop and needs a decision first.
-- After committing Step 9c, optionally run `make model-save-full FORCE=1` so that `git_dirty` is false in the
-  deployment metadata.
-- S16: rerun `uv run python experiments/redis_latency.py` with only the core profile up (`make down` and then
-  `make up`) and compare it with the Step 11 run (see Known issues).
 - S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
   run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
 ## Known issues
-- Step 10 follow-up: the 20 recorded ok build cells (telemetry cells do not use the filter) were timed with the
-  old OR-chain filter, while the
-  supplementary rows will be timed with the flat `IN`. That is about 10 s per run faster at 96 races and grows
-  with the race count, so the supplementary points are not strictly comparable with their neighbours. A full
-  re-run of the grid would remove the mix; it was not done (hours).
+- Step 10: the 20 recorded ok build cells (telemetry cells do not use the filter) were timed with the old
+  OR-chain filter, the two re-run cells with the flat `IN` (about 10 s per run faster at 96 races), so the re-run
+  points are comparable only with each other. A full re-run of the grid was not done (hours).
+- Step 10: four local-mode cells at the largest sizes (`s1_x16_local4`, `s5_x4_local1/2/4`) have no timing
+  (`aborted_memory_guard`, 5.44-5.56 GiB). The two completed cluster cells each lost an executor to a heartbeat
+  timeout (Spark recovered), so their medians may include recovery time. `build_s1_x16_cluster` had only 0.2 GiB
+  of margin in the app container and the lowest host `MemAvailable` was 1.51 GiB (guard 1.5 GiB).
 - Step 15: the ordering check fails in the far tail (opening car, 5 s gap). One more simulated lap adds variance,
   so a small P can rise while the mean gap falls. The pre-registered rule compares P, not the mean gap, and was
   kept (user decision); the post-hoc expected-gap sign is reported alongside it.
@@ -1094,9 +1066,6 @@
 - Step 10: the grid estimate is an affine fit through two points (x1, x4 at local[4]) applied to every
   master. Costs that grow faster than the rows (single-partition prior windows, many small partitions,
   spills) are not in it, and single-run smoke times vary by about 20 % (local[1] x1: 52.7, 40.1, 44.5 s).
-- Step 10: x16 local cells will probably be killed by the guard (x4 already peaked at 3.55 GiB of the
-  3.6 GiB guard). That is recorded as `aborted_memory_guard`, not hidden. Executor memory on the workers
-  is not guarded: an executor OOM shows as `failed`.
 - Step 10: the build at x1 is overhead-dominated (about 25 s fixed per run): local[4] is only 1.3x faster
   than local[1]. Per-core scaling shows only at larger factors.
 - Step 10: `docker stats --no-stream` takes 1-2 s per call, so container peaks are 2 s samples and can
