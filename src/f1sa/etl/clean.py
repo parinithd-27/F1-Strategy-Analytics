@@ -141,12 +141,22 @@ def empty(spark: SparkSession, schema: StructType) -> DataFrame:
 def select_races(
     df: DataFrame, seasons: Sequence[int] | None, races: set[RaceKey] | None
 ) -> DataFrame:
-    """Keep only the requested seasons / (season, round) pairs."""
+    """Keep only the requested seasons / (season, round) pairs.
+
+    The pairs are one flat ``struct(season, round) IN (...)``, so the expression depth does not
+    grow with the number of races. A chain of one ``OR`` per race overflowed the JVM stack while
+    Spark converted the Column at about 300+ races (Step 10 follow-up). A row is kept iff its
+    (season, round) equals a listed pair; a null season or round matches nothing. The predicate
+    reads only the partition columns, so partition pruning is kept."""
     if seasons:
         df = df.where(F.col("season").isin(list(seasons)))
     if races:
-        conds = [(F.col("season") == s) & (F.col("round") == r) for s, r in sorted(races)]
-        df = df.where(reduce(lambda a, b: a | b, conds))
+        key = F.struct(F.col("season").alias("season"), F.col("round").alias("round"))
+        wanted = [
+            F.struct(F.lit(int(s)).alias("season"), F.lit(int(r)).alias("round"))
+            for s, r in sorted(races)
+        ]
+        df = df.where(key.isin(*wanted))
     return df
 
 

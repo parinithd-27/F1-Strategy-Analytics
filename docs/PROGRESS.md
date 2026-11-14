@@ -992,7 +992,46 @@
   - Verified live on the host (no container changed): `make api` with replay plus `next start` on :3001; a 60x
     replay with the Playwright smoke test including the what-if steps (pass, 1.8 min); `POST …/whatif` 200 in
     about 9 ms, byte-identical body for the same seed, 409 / 404 / 422 / 404 for the bad cases.
+- Step 10 follow-up (2026-11-14): StackOverflowError in 6 build cells (`build_s1_x16_{local4,cluster}`,
+  `build_s5_x4_{local1,local2,local4,cluster}` of `bench_20261113T152740Z`)
+  - **Root cause.** `etl/clean.select_races` OR-ed one `(season, round)` condition per race (`reduce(|, ...)`).
+    The benchmark passes every replicated race to the unchanged `compute_features`, and Spark's recursive
+    Column conversion overflowed at the `.filter` call (trace in `data/bench.log`). Reproduced: 264 race keys
+    pass, 384 and 456 overflow.
+  - **Fix.** One flat `struct(season, round) IN (...)` (an `InSet` after optimisation). Same rows, nulls match
+    nothing, partition pruning is kept, no `-Xss`. The full `compute_features` now runs on the real s5_x4
+    input (456 races).
+  - **Same result.** `compute_features` with the old and the fixed filter on s1_x4 (96 races) and s3_x1 (68
+    races): all 9 persisted feature tables have identical checksums. A rerun of `build_s1_x4_local4` /
+    `build_s3_x1_local4` with the fix (no RECORD) gives identical `output_bytes`, with input and shuffle bytes
+    within 0.31 %.
+  - **Timing.** Both cells are faster than their recorded IQR: 54.0 s against 64.7 s [64.2, 70.6], and 43.7 s
+    against 49.4 s [48.6, 51.8].
+    - The cause is mostly the fix: filtering the 9 cached input tables once takes 5.38 s with the OR chain
+      and 3.08 s with `IN` at 96 races, planning of the deep tree included.
+    - Some environment variance is likely too (the unaffected prep cell was faster as well).
+    - Cells timed with the fix are therefore not strictly comparable with the recorded ones (documented
+      in `docs/experiments.md` and in the supplementary rows' `note`).
+  - **Regression test.** `tests/unit/test_select_races.py`: 540 / 2000 keys of 600+ synthetic race keys,
+    null keys, a flat `InSet` plan, `restrict`, and partition pruning. 4 of its 6 tests fail on the old
+    implementation with StackOverflowError.
+  - **Build plot.** `bench/report.plot_build_axes` draws (a) real seasons at x1 and (b)–(d) replication per
+    season count, from the same data. Missing cells are marked and named; a hollow marker is a re-run.
+    `make bench-replot [RECORD=1]` redraws it. Only `results/scalability_build.png` changed (the CSV, README
+    and telemetry PNG were checked byte-identical).
+  - **Supplementary re-run tooling (not run).**
+    - `GridSpec.only` / `--only-cells` selects cells plus their prep, stored in `grid_spec.json`.
+    - `--supplement-of <run>` takes the original grid's settings.
+    - `make bench-supplement [RECORD=1]` merges the rows into `results/scalability.csv` with the new
+      columns `rerun_of` and `note`; the failed rows stay, and the run's own `run_id` and `git_sha` are kept.
+    - It refuses before running if a cell's recorded row is ok or already re-run.
+    - Tests are in `tests/unit/test_bench_supplement.py` and `test_makefile_bench.py`, and the results-guard
+      windows cover the new targets.
 ## Next
+- Step 10, user: `make bench-supplement RECORD=1 SUPPLEMENT_OF=bench_20261113T152740Z CELLS="build_s1_x16_local4
+  build_s1_x16_cluster build_s5_x4_local1 build_s5_x4_local2 build_s5_x4_local4 build_s5_x4_cluster"` with api and
+  web stopped (about 2.3 h, allow 3 h). Then commit `results/scalability.csv`, `scalability_build.png`,
+  `scalability_telemetry.png` and `README.md`, and fill the Results of `docs/experiments.md`.
 - Step 15, user (ordering decision taken: rule kept, post-hoc column added): `make sim-tyre-model-full TEST_SEASON=1`
   (adds the 2025 entries; the 2021-2024 entries are unchanged by construction) and
   `make whatif-consistency-full RECORD=1` (adds the 2025 held-out row and writes `results/whatif_consistency.*`).
@@ -1035,6 +1074,11 @@
 - S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
   run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
 ## Known issues
+- Step 10 follow-up: the 20 recorded ok build cells (telemetry cells do not use the filter) were timed with the
+  old OR-chain filter, while the
+  supplementary rows will be timed with the flat `IN`. That is about 10 s per run faster at 96 races and grows
+  with the race count, so the supplementary points are not strictly comparable with their neighbours. A full
+  re-run of the grid would remove the mix; it was not done (hours).
 - Step 15: the ordering check fails in the far tail (opening car, 5 s gap). One more simulated lap adds variance,
   so a small P can rise while the mean gap falls. The pre-registered rule compares P, not the mean gap, and was
   kept (user decision); the post-hoc expected-gap sign is reported alongside it.

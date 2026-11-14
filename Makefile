@@ -217,7 +217,7 @@ BENCH_RECORD = $(if $(filter 1,$(RECORD)), --record,)
 BENCH_RUN := $(or $(RESUME),bench_$(shell date -u +%Y%m%dT%H%M%SZ))
 BENCH_RUN_ARGS = --run-id $(BENCH_RUN)$(if $(RESUME), --resume,)$(BENCH_RECORD)
 
-.PHONY: bench-dirs bench-smoke experiments-spark bench-clean test-bench
+.PHONY: bench-dirs bench-smoke experiments-spark bench-supplement bench-replot bench-clean test-bench
 bench-dirs: ## Create HDFS /f1/bench (owned by the app user) and ./data/bench (idempotent)
 	@mkdir -p data/bench
 	$(COMPOSE) exec -T namenode hdfs dfs -mkdir -p /f1/bench
@@ -230,6 +230,24 @@ bench-smoke: bench-dirs ## Spark smoke (1 season, x1, every master, 1 run; parti
 experiments-spark: bench-dirs ## FULL Spark grid + partitioning (hours, nothing else running) [RECORD=1 -> results/] [GRID_ARGS=] [PART_ARGS=] [RESUME=<run_id>]
 	$(UV) run python experiments/scalability.py $(BENCH_RUN_ARGS) $(GRID_ARGS)
 	$(UV) run python experiments/partitioning.py $(BENCH_RUN_ARGS) $(PART_ARGS)
+
+# Supplementary re-run of selected cells of a recorded grid (Step 10 follow-up): the grid settings
+# come from data/bench/$(SUPPLEMENT_OF)/grid_spec.json; RECORD=1 appends the re-run rows to
+# results/scalability.csv (columns rerun_of, note; the original failed rows stay) and redraws the
+# plots. Only the scalability script runs (no partitioning). RESUME=<run_id> continues it.
+SUPPLEMENT_OF ?=
+CELLS ?=
+SUPP_RUN := $(or $(RESUME),bench_$(shell date -u +%Y%m%dT%H%M%SZ)_supp)
+bench-supplement: bench-dirs ## Re-run CELLS="..." of the recorded run SUPPLEMENT_OF=<run_id> with its grid [RECORD=1 -> merge into results/] [RESUME=]
+	@test -n "$(SUPPLEMENT_OF)" -a -n "$(CELLS)" || { echo 'bench-supplement needs SUPPLEMENT_OF=<run_id> CELLS="<cell ids>"' >&2; exit 2; }
+	$(UV) run python experiments/scalability.py --run-id $(SUPP_RUN)$(if $(RESUME), --resume,)$(BENCH_RECORD) --supplement-of $(SUPPLEMENT_OF) --only-cells $(CELLS)
+
+# Redraw the build plot from a scalability CSV (no measurement). RECORD=1 redraws
+# results/scalability_build.png only; otherwise the plot goes to data/bench/replot/.
+REPLOT_OUT = $(if $(filter 1,$(RECORD)),results/scalability_build.png,data/bench/replot/scalability_build.png)
+bench-replot: ## Redraw the build plot from results/scalability.csv [RECORD=1 -> results/scalability_build.png only]
+	@mkdir -p $(dir $(REPLOT_OUT))
+	$(UV) run python -m f1sa.bench.report --replot results/scalability.csv --out $(REPLOT_OUT)
 
 bench-clean: ## Delete benchmark data ./data/bench/* and HDFS /f1/bench/* (CONFIRM=yes; lists first)
 	$(UV) run python -m f1sa.bench.paths$(if $(filter yes,$(CONFIRM)), --yes,)

@@ -29,6 +29,7 @@ import json
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -41,11 +42,16 @@ from f1sa.bench.paths import HDFS_BENCH, HttpFsBench, new_run_id, output_dir, ru
 from f1sa.bench.report import (
     PARTITIONING_COLUMNS,
     SCALABILITY_COLUMNS,
+    SUPPLEMENT_COLUMNS,
+    SupplementError,
     append_readme,
     fingerprint,
+    merge_supplement,
+    plot_build_axes,
     plot_partitioning,
     plot_scaling,
     read_csv_rows,
+    supplement_note,
     write_csv,
 )
 from f1sa.bench.resources import DockerStatsSampler
@@ -97,11 +103,26 @@ def exec_cmd(module: str, args: Sequence[str], env: Mapping[str, str] | None = N
     return ["docker", "compose", "exec", "-T", *env_args, "app", "python", "-m", module, *args]
 
 
-def resume_command(run_id: str, *, record: bool, smoke: bool, script: str) -> str:
+def resume_command(
+    run_id: str,
+    *,
+    record: bool,
+    smoke: bool,
+    script: str,
+    supplement_of: str | None = None,
+    only: Sequence[str] = (),
+) -> str:
     """The exact command that continues ``run_id``."""
     if smoke:
         return f"uv run python experiments/{script}.py --smoke --resume --run-id {run_id}"
-    return f"make experiments-spark {'RECORD=1 ' if record else ''}RESUME={run_id}"
+    rec = "RECORD=1 " if record else ""
+    if supplement_of:
+        cells = " ".join(only)
+        return (
+            f"make bench-supplement {rec}SUPPLEMENT_OF={supplement_of} "
+            f'CELLS="{cells}" RESUME={run_id}'
+        )
+    return f"make experiments-spark {rec}RESUME={run_id}"
 
 
 class RunError(RuntimeError):
@@ -182,25 +203,45 @@ def main_scalability(
     p.add_argument(
         "--smoke", action="store_true", help="1 season, x1 all masters + x4 local[4], 1 run"
     )
+    p.add_argument(
+        "--supplement-of",
+        default=None,
+        help="re-run --only-cells of this recorded run with its grid; RECORD merges the rows",
+    )
     _common(p)
     G.add_grid_args(p)
     args = p.parse_args(list(argv) if argv is not None else None)
     if args.smoke and args.record:
         p.error("--smoke cannot be recorded")
+    if args.supplement_of and args.smoke:
+        p.error("--supplement-of cannot be combined with --smoke")
     if args.resume and not args.run_id:
         p.error("--resume needs --run-id (RESUME=<run_id>)")
     repo: Path = args.repo.resolve()
     now = now or datetime.now(UTC)
-    run_id = args.run_id or (new_run_id(now) + ("_smoke" if args.smoke else ""))
+    suffix = "_smoke" if args.smoke else ("_supp" if args.supplement_of else "")
+    run_id = args.run_id or (new_run_id(now) + suffix)
     try:
         rdir = run_dir(run_id, repo)
-        spec = _scalability_spec(args, rdir)
+        if args.supplement_of:
+            spec = _supplement_spec(args, rdir, repo)
+            if args.record:
+                _check_mergeable(repo, args.supplement_of, spec.only or ())
+        else:
+            spec = _scalability_spec(args, rdir)
     except (RunError, ValueError) as exc:
         out(f"scalability: {exc}")
         return 2
     if not args.resume:
         rdir.mkdir(parents=True, exist_ok=False)
-    resume_cmd = resume_command(run_id, record=args.record, smoke=args.smoke, script="scalability")
+    resume_cmd = resume_command(
+        run_id,
+        record=args.record,
+        smoke=args.smoke,
+        script="scalability",
+        supplement_of=args.supplement_of,
+        only=spec.only or (),
+    )
     out(f"scalability: run {run_id}, {sum(1 for _ in G.cells(spec))} cells -> {rdir}")
     out(f"scalability: to resume this run: {resume_cmd}")
     sha, dirty = git_info()
@@ -223,7 +264,35 @@ def main_scalability(
     out(f"scalability: complete, {len(rows)} rows in {csv_path}")
     if not args.keep_data:
         _cleanup_hdfs(run_id, out)
-    if args.record:
+    if args.record and args.supplement_of:
+        dest = output_dir(run_id, record=True, base=repo)
+        try:
+            merged = merge_supplement(
+                read_csv_rows(dest / G.CSV_NAME),
+                rows,
+                original_run_id=args.supplement_of,
+                cells=spec.only or (),
+                note=supplement_note(now),
+            )
+        except SupplementError as exc:
+            out(f"scalability: results/ not written: {exc}")
+            return 2
+        write_csv(dest / G.CSV_NAME, merged, SUPPLEMENT_COLUMNS)
+        _scalability_plots(merged, dest)
+        params = {
+            "run_id": run_id,
+            "supplement_of": args.supplement_of,
+            "cells": "/".join(spec.only or ()),
+            **_spec_params(spec),
+        }
+        if not fingerprinted(dest / "README.md", run_id):
+            append_readme(
+                dest / "README.md",
+                G.CSV_NAME,
+                fingerprint(now=now, git_sha=sha, git_dirty=dirty, params=params),
+            )
+        out(f"scalability: merged {len(spec.only or ())} re-run row(s) into {dest / G.CSV_NAME}")
+    elif args.record:
         dest = output_dir(run_id, record=True, base=repo)
         write_csv(dest / G.CSV_NAME, rows, SCALABILITY_COLUMNS)
         _scalability_plots(rows, dest)
@@ -236,6 +305,37 @@ def main_scalability(
     if args.smoke:
         print_estimate(G.read_records(rdir / G.RECORDS_NAME), out)
     return 0
+
+
+def _supplement_spec(args: argparse.Namespace, rdir: Path, repo: Path) -> G.GridSpec:
+    """A supplementary re-run: the original run's grid (``data/bench/<run>/grid_spec.json``:
+    same seasons, factors, masters, warm-up and repetitions) limited to ``--only-cells``. No other
+    grid option may be given; a resumed supplement must name the same cells."""
+    if not args.only_cells:
+        raise RunError("--supplement-of needs --only-cells (CELLS=...)")
+    without_cells = argparse.Namespace(**{**vars(args), "only_cells": None})
+    if G.spec_from_args(without_cells) != G.GridSpec():
+        raise RunError(
+            "a supplementary re-run takes its grid from the original run; drop GRID_ARGS"
+        )
+    only = tuple(args.only_cells)
+    orig_path = run_dir(args.supplement_of, repo) / G.SPEC_NAME
+    if not orig_path.exists():
+        raise RunError(f"original run not found: {orig_path} does not exist")
+    original = G.spec_from_json(json.loads(orig_path.read_text(encoding="utf-8")))
+    if original.only is not None:
+        raise RunError(f"{args.supplement_of} is itself a supplementary run")
+    spec = replace(original, only=only)  # validates the cells against the original grid
+    if args.resume:
+        stored_path = rdir / G.SPEC_NAME
+        if not stored_path.exists():
+            raise RunError(f"nothing to resume: {stored_path} does not exist")
+        stored = G.spec_from_json(json.loads(stored_path.read_text(encoding="utf-8")))
+        if stored != spec:
+            raise RunError(f"{rdir.name} re-runs other cells or another grid; use the same CELLS")
+    elif rdir.exists():
+        raise RunError(f"{rdir} already exists; resume it with RESUME={rdir.name}")
+    return spec
 
 
 def _scalability_spec(args: argparse.Namespace, rdir: Path) -> G.GridSpec:
@@ -255,13 +355,7 @@ def _scalability_spec(args: argparse.Namespace, rdir: Path) -> G.GridSpec:
 
 
 def _scalability_plots(rows: Sequence[Mapping[str, Any]], dest: Path) -> None:
-    plot_scaling(
-        rows,
-        dest / "scalability_build.png",
-        phase="build",
-        x_col="laps_rows",
-        x_label="lap rows (seasons x replication)",
-    )
+    plot_build_axes(rows, dest / "scalability_build.png")
     plot_scaling(
         rows,
         dest / "scalability_telemetry.png",
@@ -269,6 +363,16 @@ def _scalability_plots(rows: Sequence[Mapping[str, Any]], dest: Path) -> None:
         x_col="telemetry_rounds",
         x_label="2024 rounds of raw telemetry",
     )
+
+
+def _check_mergeable(repo: Path, original_run_id: str, cells: Sequence[str]) -> None:
+    """Refuse a recorded supplement before it runs (hours) if its rows could not be merged."""
+    recorded = read_csv_rows(output_dir(original_run_id, record=True, base=repo) / G.CSV_NAME)
+    fake = [{"cell_id": c} for c in cells]
+    try:
+        merge_supplement(recorded, fake, original_run_id=original_run_id, cells=cells, note="")
+    except SupplementError as exc:
+        raise RunError(f"cannot merge into results/: {exc}") from exc
 
 
 def _spec_params(spec: G.GridSpec) -> dict[str, Any]:

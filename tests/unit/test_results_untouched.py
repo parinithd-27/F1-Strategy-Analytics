@@ -213,6 +213,10 @@ WINDOW_TARGETS = [
     ("whatif-consistency-sample",),
     ("whatif-consistency-full",),
     ("whatif-consistency-full", "RECORD=1"),
+    ("bench-supplement", "SUPPLEMENT_OF=bench_x", "CELLS=build_s1_x16_local4"),
+    ("bench-supplement", "RECORD=1", "SUPPLEMENT_OF=bench_x", "CELLS=build_s1_x16_local4"),
+    ("bench-replot",),
+    ("bench-replot", "RECORD=1"),
 ]
 
 

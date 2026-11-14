@@ -75,6 +75,10 @@ SCALABILITY_COLUMNS: tuple[str, ...] = (
     "started_at_utc",
     "ended_at_utc",
 )
+SUPPLEMENT_COLUMNS: tuple[str, ...] = (*SCALABILITY_COLUMNS, "rerun_of", "note")
+"""``results/scalability.csv`` once a supplementary re-run is merged into it: ``rerun_of`` is the
+run whose failed row the re-run replaces, ``note`` says why (both empty on every other row). The
+grid's own run CSVs keep :data:`SCALABILITY_COLUMNS`."""
 PARTITIONING_COLUMNS: tuple[str, ...] = (
     "run_id",
     "git_sha",
@@ -276,6 +280,48 @@ def read_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(fh))
 
 
+# ============================================================================== supplement
+class SupplementError(ValueError):
+    """A supplementary re-run cannot be merged into the recorded results."""
+
+
+def supplement_note(now: datetime) -> str:
+    return (
+        f"re-run {now:%Y-%m-%d} after the select_races fix (one flat IN instead of one OR per "
+        "race; the original cell failed with StackOverflowError)"
+    )
+
+
+def merge_supplement(
+    recorded: Sequence[Mapping[str, Any]],
+    rerun: Sequence[Mapping[str, Any]],
+    *,
+    original_run_id: str,
+    cells: Sequence[str],
+    note: str,
+) -> list[dict[str, Any]]:
+    """``recorded`` plus the re-run rows of ``cells``, marked ``rerun_of = original_run_id``.
+
+    The recorded rows are kept as they are (the failed rows stay: they are what happened). Each
+    cell must have exactly one recorded row of ``original_run_id`` that is not ``ok``, no earlier
+    re-run row, and exactly one row in ``rerun``; anything else is refused before writing."""
+    out = [dict(r) for r in recorded]
+    new: list[dict[str, Any]] = []
+    for cid in cells:
+        orig = [r for r in recorded if r.get("cell_id") == cid and not r.get("rerun_of")]
+        if len(orig) != 1 or orig[0].get("run_id") != original_run_id:
+            raise SupplementError(f"{cid}: expected one recorded row of {original_run_id}")
+        if orig[0].get("status") == "ok":
+            raise SupplementError(f"{cid}: the recorded row is ok; only failed cells are re-run")
+        if any(r.get("cell_id") == cid and r.get("rerun_of") for r in recorded):
+            raise SupplementError(f"{cid}: a re-run of this cell is already merged")
+        got = [r for r in rerun if r.get("cell_id") == cid]
+        if len(got) != 1:
+            raise SupplementError(f"{cid}: expected one row in the re-run, found {len(got)}")
+        new.append({**got[0], "rerun_of": original_run_id, "note": note})
+    return out + new
+
+
 # ============================================================================== plots
 def _style(ax: Any) -> None:
     ax.grid(True, which="major", color="#e4e3df", linewidth=0.8)
@@ -360,6 +406,210 @@ def plot_scaling(
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path)
     plt.close(fig)
+    return True
+
+
+SEASONS_LABEL = {1: "1 (2024)", 3: "3 (2022-24)", 5: "5 (2021-25)"}
+SEASONS_TITLE = {1: "1 season (2024)", 3: "3 seasons (2022-24)", 5: "5 seasons (2021-25)"}
+MUTED = "#52514e"
+
+
+def _build_points(
+    rows: Sequence[Mapping[str, Any]],
+    master: str,
+    *,
+    factor: float | None = None,
+    n_seasons: float | None = None,
+) -> list[tuple[float, float, float, float, bool, float]]:
+    """``(n_seasons, median, q1, q3, is_rerun, factor)`` of the ok build rows of ``master``,
+    limited to one ``factor`` and/or one ``n_seasons`` when given."""
+    pts = []
+    for r in rows:
+        if r.get("phase") != "build" or r.get("status") != "ok" or r.get("master") != master:
+            continue
+        if factor is not None and _num(r.get("factor")) != factor:
+            continue
+        if n_seasons is not None and _num(r.get("n_seasons")) != n_seasons:
+            continue
+        vals = [_num(r.get(c)) for c in ("n_seasons", "median_s", "q1_s", "q3_s", "factor")]
+        if any(v is None for v in vals):
+            continue
+        n, med, q1, q3, f = (float(v) for v in vals)  # type: ignore[arg-type]
+        pts.append((n, med, q1, q3, bool(r.get("rerun_of")), f))
+    return pts
+
+
+def _draw(
+    ax: Any, xs: Sequence[float], pts: Sequence[tuple[float, ...]], color: str, label: str
+) -> None:
+    ys = [p[1] for p in pts]
+    err = [
+        [y - p[2] for y, p in zip(ys, pts, strict=True)],
+        [p[3] - y for y, p in zip(ys, pts, strict=True)],
+    ]
+    ax.errorbar(
+        xs,
+        ys,
+        yerr=err,
+        color=color,
+        linewidth=2,
+        marker="o",
+        markersize=6,
+        markeredgecolor="white",
+        markeredgewidth=1.5,
+        capsize=3,
+        label=label,
+    )
+    rerun = [(x, y) for x, y, p in zip(xs, ys, pts, strict=True) if p[4]]
+    if rerun:  # re-run points: hollow marker over the line
+        ax.plot(
+            [x for x, _ in rerun],
+            [y for _, y in rerun],
+            linestyle="none",
+            marker="o",
+            markersize=9,
+            markerfacecolor="white",
+            markeredgecolor=color,
+            markeredgewidth=2,
+        )
+
+
+def _missing_build_cells(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[tuple[Mapping[str, Any], str]]:
+    """Build rows without a timing (failed, aborted, skipped) that no merged ok re-run replaces,
+    each with a short reason."""
+    rerun = {r.get("cell_id") for r in rows if r.get("rerun_of") and r.get("status") == "ok"}
+    out = []
+    for r in rows:
+        if r.get("phase") != "build" or r.get("status") == "ok" or r.get("cell_id") in rerun:
+            continue
+        if r.get("rerun_of"):
+            why = f"{r.get('status')} again in the supplementary re-run"
+        elif "StackOverflowError" in str(r.get("reason", "")):
+            why = (
+                "failed with StackOverflowError in select_races (fixed after this run; "
+                "supplementary re-run pending)"
+            )
+        else:
+            why = str(r.get("status"))
+        out.append((r, why))
+    return out
+
+
+def not_drawn(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Footnote lines for build cells without a timing, one line per reason, with the cells of
+    one (seasons, factor) written together: ``build_s5_x4_{local1, local2}``."""
+    by_reason: dict[str, dict[str, list[str]]] = {}
+    for r, why in _missing_build_cells(rows):
+        stem, _, master = str(r.get("cell_id")).rpartition("_")
+        by_reason.setdefault(why, {}).setdefault(stem, []).append(master)
+    lines = []
+    for why, groups in by_reason.items():
+        cells = [
+            f"{stem}_{ms[0]}" if len(ms) == 1 else f"{stem}_{{{', '.join(ms)}}}"
+            for stem, ms in groups.items()
+        ]
+        lines.append(f"{', '.join(cells)}: {why}")
+    return lines
+
+
+def plot_build_axes(rows: Sequence[Mapping[str, Any]], path: Path) -> bool:
+    """The feature build on its two axes, from the same rows (no new measurement):
+    (a) real seasons 1/3/5 at x1; (b)-(d) replication x1/x4/x16 for 1, 3 and 5 seasons (shared
+    y). One line per master, median with IQR bars; a hollow marker is a merged re-run; cells
+    without a timing are named in the footnote. Returns False when there is nothing to plot."""
+    builds = [r for r in rows if r.get("phase") == "build" and r.get("status") == "ok"]
+    if not builds:
+        return False
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8.2), dpi=150)
+    ax_s, ax_r = axes[0][0], [axes[0][1], axes[1][0], axes[1][1]]
+    for ax in ax_r[1:]:
+        ax.sharey(ax_r[0])
+    seasons = sorted({int(float(r["n_seasons"])) for r in builds})
+    factors = sorted(
+        {int(f) for r in rows if r.get("phase") == "build" and (f := _num(r.get("factor")))}
+    )
+    for i, master in enumerate(MASTER_ORDER):
+        color, label = SERIES_COLORS[i], MASTER_LABEL[master]
+        pts = sorted(_build_points(rows, master, factor=1.0))
+        if pts:
+            _draw(ax_s, [p[0] for p in pts], pts, color, label)
+        for ax, n in zip(ax_r, (1, 3, 5), strict=True):
+            sel = sorted(_build_points(rows, master, n_seasons=float(n)), key=lambda p: p[5])
+            if sel:
+                _draw(ax, [p[5] for p in sel], sel, color, label)
+    for ax, n in zip(ax_r, (1, 3, 5), strict=True):
+        gone = sorted(
+            {
+                f
+                for r, _why in _missing_build_cells(rows)
+                if _num(r.get("n_seasons")) == n and (f := _num(r.get("factor"))) is not None
+            }
+        )
+        for f in gone:  # where a timing is missing, say so in the panel (named in the footnote)
+            ax.axvline(f, color="#d0cfca", linewidth=1, linestyle=":", zorder=0)
+            ax.annotate(
+                "no timing\n(see note)",
+                (f, 0.04),
+                xycoords=("data", "axes fraction"),
+                ha="center",
+                fontsize=7,
+                color=MUTED,
+            )
+    ax_s.set_xticks(seasons, [SEASONS_LABEL.get(n, str(n)) for n in seasons])
+    ax_s.set_xlabel("real seasons (replication x1)", color="#52514e")
+    ax_s.set_title("(a) Real seasons at x1", loc="left", fontsize=10, color="#0b0b0b")
+    for ax, n in zip(ax_r, (1, 3, 5), strict=True):
+        ax.set_xscale("log", base=2)
+        own = (
+            sorted(
+                {
+                    int(f)
+                    for r in rows
+                    if r.get("phase") == "build"
+                    and _num(r.get("n_seasons")) == n
+                    and (f := _num(r.get("factor")))
+                }
+            )
+            or factors
+        )  # this season count's own factors (failed cells included)
+        ax.set_xticks(own, [f"x{f}" for f in own])
+        ax.minorticks_off()
+        ax.set_xlabel("replication factor (synthetic copies)", color="#52514e")
+        ax.set_title(
+            f"({'bcd'[(1, 3, 5).index(n)]}) Replication at {SEASONS_TITLE[n]}",
+            loc="left",
+            fontsize=10,
+            color="#0b0b0b",
+        )
+    for ax in (ax_s, *ax_r):
+        ax.set_ylabel("median wall time per run (s), IQR bars", color="#52514e")
+        _style(ax)
+    # the legend goes on panel (a), or on the first panel with lines when (a) has none
+    with_lines = [a for a in (ax_s, *ax_r) if a.get_legend_handles_labels()[0]]
+    if with_lines:
+        with_lines[0].legend(frameon=False, fontsize=8, loc="upper left")
+    notes = not_drawn(rows)
+    if any(r.get("rerun_of") for r in builds):
+        notes.append(
+            "hollow marker: supplementary re-run after the select_races fix (rerun_of, note)"
+        )
+    fig.suptitle(
+        "Feature build: real seasons and replication, single host, trends only",
+        x=0.01,
+        ha="left",
+        fontsize=11,
+        color="#0b0b0b",
+    )
+    if notes:
+        fig.text(0.01, 0.01, "Note: " + "\n".join(notes), fontsize=7.5, color=MUTED, va="bottom")
+    fig.tight_layout(rect=(0, 0.02 + 0.022 * len(notes), 1, 0.97))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.stem + ".tmp.png")
+    fig.savefig(tmp)
+    plt.close(fig)
+    tmp.replace(path)
     return True
 
 
@@ -512,3 +762,33 @@ def append_readme(path: Path, csv_name: str, pairs: Sequence[tuple[str, str]]) -
         fh.write(f"\n## `{csv_name}` ({pairs[0][1]})\n\n| Item | Value |\n|---|---|\n")
         for k, v in pairs:
             fh.write(f"| {k} | {v.replace('|', '/')} |\n")
+
+
+# ============================================================================== replot
+def main(argv: Sequence[str] | None = None) -> int:
+    """``python -m f1sa.bench.report --replot <scalability.csv> [--out <png>]``: redraw the build
+    plot from a recorded CSV (no measurement). Default output: ``scalability_build.png`` next to
+    the CSV; only that file is written."""
+    import argparse
+
+    p = argparse.ArgumentParser(prog="f1sa-bench-report", description=main.__doc__)
+    p.add_argument("--replot", type=Path, required=True, help="a scalability.csv")
+    p.add_argument("--out", type=Path, default=None)
+    args = p.parse_args(list(argv) if argv is not None else None)
+    rows = read_csv_rows(args.replot)
+    if not rows:
+        print(f"replot: no rows in {args.replot}")
+        return 2
+    out = args.out or args.replot.with_name("scalability_build.png")
+    if out.suffix != ".png":
+        print(f"replot: {out} is not a .png")
+        return 2
+    if not plot_build_axes(rows, out):
+        print("replot: no ok build rows to plot")
+        return 2
+    print(f"replot: wrote {out} from {len(rows)} rows of {args.replot}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

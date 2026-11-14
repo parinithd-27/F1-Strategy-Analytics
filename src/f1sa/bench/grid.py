@@ -76,6 +76,9 @@ class GridSpec:
     large_masters: tuple[str, ...] | None = None
     large_seasons: tuple[int, ...] | None = None
     """Season sets that run factors >= ``large_from`` (None = all)."""
+    only: tuple[str, ...] | None = None
+    """Run only these build/telemetry cell ids of the grid (plus the prep cells they need), with
+    the grid's own settings: a supplementary re-run of selected cells (None = every cell)."""
 
     def __post_init__(self) -> None:
         for n in self.seasons:
@@ -91,6 +94,13 @@ class GridSpec:
             raise ValueError(f"factors must be ascending and >= 1, got {self.factors}")
         if self.repeats < 1 or self.warmup < 0 or (self.large_repeats or 1) < 1:
             raise ValueError("repeats >= 1 and warmup >= 0 are required")
+        if self.only is not None:
+            if not self.only:
+                raise ValueError("only must name at least one cell")
+            grid = {c.cell_id for c in cells(replace(self, only=None)) if c.phase != "prep"}
+            unknown = sorted(set(self.only) - grid)
+            if unknown:
+                raise ValueError(f"cells not in this grid (build/telemetry only): {unknown}")
 
     def repeats_for(self, factor: int) -> int:
         if factor >= self.large_from and self.large_repeats is not None:
@@ -128,6 +138,8 @@ class GridSpec:
             args += ["--large-masters", *self.large_masters]
         if self.large_seasons is not None:
             args += ["--large-seasons", *map(str, self.large_seasons)]
+        if self.only is not None:
+            args += ["--only-cells", *self.only]
         return args
 
 
@@ -146,19 +158,23 @@ class Cell:
 
 
 def cells(spec: GridSpec) -> Iterator[Cell]:
-    """Every cell of ``spec`` in run order (prep cells run on local[4], no repetitions)."""
+    """Every cell of ``spec`` in run order (prep cells run on local[4], no repetitions). With
+    ``spec.only``: the selected cells, each (seasons, factor) preceded by its prep cell."""
     for n in spec.seasons:
         for f in spec.factors:
             masters = spec.masters_for(f)
             if not spec.runs_factor(n, f) or not masters:
                 continue
-            yield Cell("prep", n, f, "local4", 0, 1)
             reps = spec.repeats_for(f)
-            for m in masters:
-                yield Cell("build", n, f, m, spec.warmup, reps)
+            group = [Cell("build", n, f, m, spec.warmup, reps) for m in masters]
             if f == 1:
-                for m in spec.masters_for(f):
-                    yield Cell("telemetry", n, f, m, spec.warmup, reps)
+                group += [Cell("telemetry", n, f, m, spec.warmup, reps) for m in masters]
+            if spec.only is not None:
+                group = [c for c in group if c.cell_id in spec.only]
+                if not group:
+                    continue
+            yield Cell("prep", n, f, "local4", 0, 1)
+            yield from group
 
 
 # ============================================================================== estimate
@@ -693,6 +709,12 @@ def add_grid_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--large-repeats", type=int, default=None)
     p.add_argument("--large-masters", nargs="+", default=None, choices=sorted(MASTERS))
     p.add_argument("--large-seasons", type=int, nargs="+", default=None)
+    p.add_argument(
+        "--only-cells",
+        nargs="+",
+        default=None,
+        help="run only these build/telemetry cells of the grid (and their prep cells)",
+    )
 
 
 def spec_from_args(args: argparse.Namespace) -> GridSpec:
@@ -706,6 +728,7 @@ def spec_from_args(args: argparse.Namespace) -> GridSpec:
         large_repeats=args.large_repeats,
         large_masters=tuple(args.large_masters) if args.large_masters else None,
         large_seasons=tuple(args.large_seasons) if args.large_seasons else None,
+        only=tuple(args.only_cells) if args.only_cells else None,
     )
 
 

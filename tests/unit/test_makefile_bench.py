@@ -83,3 +83,37 @@ def test_data_bench_is_gitignored() -> None:
         check=False,
     )
     assert out.returncode == 0
+
+
+SIX = (
+    "build_s1_x16_local4 build_s1_x16_cluster build_s5_x4_local1 build_s5_x4_local2 "
+    "build_s5_x4_local4 build_s5_x4_cluster"
+)
+
+
+def test_bench_supplement_runs_only_the_scalability_script() -> None:
+    out = _make("bench-supplement", "SUPPLEMENT_OF=bench_20261113T152740Z", f"CELLS={SIX}")
+    lines = _python_lines(out)
+    assert len(lines) == 1 and "experiments/scalability.py" in lines[0]
+    assert "--supplement-of bench_20261113T152740Z" in lines[0]
+    assert lines[0].rstrip().endswith(f"--only-cells {SIX}")
+    rid = lines[0].split("--run-id ")[1].split()[0]
+    assert re.fullmatch(r"bench_\d{8}T\d{6}Z_supp", rid)
+    assert "--record" not in lines[0] and "--resume" not in lines[0]
+    rec = _python_lines(
+        _make("bench-supplement", "RECORD=1", "SUPPLEMENT_OF=x", "CELLS=y", "RESUME=bench_r_supp")
+    )[0]
+    assert "--run-id bench_r_supp --resume --record --supplement-of x --only-cells y" in rec
+
+
+def test_bench_supplement_needs_its_arguments() -> None:
+    out = _make("bench-supplement")
+    assert "SUPPLEMENT_OF=<run_id>" in out  # the guard line is printed by -n and fails when run
+
+
+def test_bench_replot_writes_results_only_with_record_1() -> None:
+    plain = _make("bench-replot")
+    assert "--replot results/scalability.csv --out data/bench/replot/scalability_build.png" in plain
+    rec = _make("bench-replot", "RECORD=1")
+    assert "--replot results/scalability.csv --out results/scalability_build.png" in rec
+    assert "scalability.csv --out results/scalability.csv" not in rec
