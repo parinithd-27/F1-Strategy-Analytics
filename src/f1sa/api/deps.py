@@ -72,6 +72,7 @@ class ApiDeps:
                 demo_dir=settings.demo_dir,
                 ready_timeout_s=settings.api_replay_ready_timeout_s,
                 end_timeout_s=settings.api_replay_end_timeout_s,
+                model_dir=settings.api_model_dir,
             ),
             latency=LatencyRecorder(settings.api_ui_latency_csv, enabled=settings.enable_debug),
             kafka_check=kafka_check or kafka_check_for(settings),

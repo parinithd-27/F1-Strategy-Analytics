@@ -11,11 +11,11 @@ setup: ## Install Python deps (incl. dev extras) into .venv
 	$(UV) sync --all-extras
 
 lint: ## Ruff lint + format check
-	$(UV) run ruff check src tests experiments
-	$(UV) run ruff format --check src tests experiments
+	$(UV) run ruff check src tests experiments scripts
+	$(UV) run ruff format --check src tests experiments scripts
 
-typecheck: ## mypy (strict) on src
-	$(UV) run mypy src
+typecheck: ## mypy (strict) on src and scripts/check_traceability.py
+	$(UV) run mypy src scripts/check_traceability.py
 
 test: ## Unit tests
 	$(UV) run pytest tests/unit -q
@@ -41,6 +41,13 @@ test-int: ## Integration tests (needs infra); exit 5 = none collected is OK
 
 # ---------------------------------------------------------------- infrastructure (Docker Compose)
 COMPOSE := docker compose
+# Without a project .env (a fresh clone, CI), build the app image for the current user, so the
+# containers can write the bind-mounted data/, models/ and results/ (Step 17). An existing .env,
+# or APP_UID set in the environment, wins.
+ifeq ($(wildcard .env),)
+APP_UID ?= $(shell id -u)
+export APP_UID
+endif
 CORE_SERVICES := kafka redis app api web
 FULL_SERVICES := $(CORE_SERVICES) namenode datanode httpfs spark-master spark-worker-1 spark-worker-2
 
@@ -312,13 +319,14 @@ test-bench: ## Step 10 benchmark unit tests
 API_PORT ?= 8001
 API_HDFS_LAKE := hdfs://namenode:8020/f1
 API_FILE_LAKE := file:///workspace/data/lake
+API_DEFAULT_MODEL_DIR := models/undercut/deploy_real_G3.5_k2
 flag01 = $(if $(filter 1,$(1)),1,0)
 
 .PHONY: api api-up api-dirs demo-clean test-api
 api: ## FastAPI on the host at 127.0.0.1:$(API_PORT) (default 8001; docs /api/docs; needs make up)
 	DATA_LAKE_URI=file://$(CURDIR)/data/lake API_PORT=$(API_PORT) $(UV) run python -m f1sa.api
 
-api-up: api-dirs ## Recreate only the api container: FULL=1 (HDFS lake; needs make up-full) REPLAY=1 DEBUG=1 TEST_SEASON=1 [UI_LATENCY_CSV=data/demo/...]
+api-up: api-dirs ## Recreate only the api container: FULL=1 (HDFS lake; needs make up-full) REPLAY=1 DEBUG=1 TEST_SEASON=1 [UI_LATENCY_CSV=data/demo/...] [MODEL_DIR=models/undercut/...]
 ifeq ($(call flag01,$(FULL)),1)
 	@scripts/wait_for.sh -t 5 namenode datanode httpfs >/dev/null 2>&1 || { echo "FULL=1 needs the hdfs profile (namenode, datanode, httpfs healthy): run 'make up-full' first." >&2; exit 1; }
 endif
@@ -326,12 +334,13 @@ endif
 	ENABLE_REPLAY=$(call flag01,$(REPLAY)) ENABLE_DEBUG=$(call flag01,$(DEBUG)) \
 	ALLOW_TEST_SEASON=$(call flag01,$(TEST_SEASON)) \
 	API_UI_LATENCY_CSV=$(or $(UI_LATENCY_CSV),results/ui_latency.csv) \
+	API_MODEL_DIR=$(or $(MODEL_DIR),$(API_DEFAULT_MODEL_DIR)) \
 	$(COMPOSE) --profile core up -d --no-deps --no-build --force-recreate api
 	scripts/wait_for.sh -t 120 api
-	@echo "api: lake=$(if $(filter 1,$(FULL)),hdfs (full),file (sample)) replay=$(call flag01,$(REPLAY)) debug=$(call flag01,$(DEBUG)) test_season=$(call flag01,$(TEST_SEASON)) ui_latency_csv=$(or $(UI_LATENCY_CSV),results/ui_latency.csv)"
+	@echo "api: lake=$(if $(filter 1,$(FULL)),hdfs (full),file (sample)) replay=$(call flag01,$(REPLAY)) debug=$(call flag01,$(DEBUG)) test_season=$(call flag01,$(TEST_SEASON)) ui_latency_csv=$(or $(UI_LATENCY_CSV),results/ui_latency.csv) model_dir=$(or $(MODEL_DIR),$(API_DEFAULT_MODEL_DIR))"
 
-api-dirs: # host folders of the api's read-write mounts (Docker would create them root-owned)
-	@mkdir -p data/demo data/checkpoints
+api-dirs: # host folders of the bind mounts (Docker would create missing ones root-owned)
+	@mkdir -p data/demo data/checkpoints models/undercut models/sim
 
 demo-clean: ## Delete demo outputs data/demo/<run_id> and demo/replay checkpoints (CONFIRM=yes; lists first)
 	$(UV) run python -m f1sa.demo_runs $(if $(filter yes,$(CONFIRM)),--yes,)
@@ -365,3 +374,41 @@ web-e2e: web/node_modules ## Playwright smoke test (needs make api-up REPLAY=1; 
 	@node web/scripts/check-port.mjs 127.0.0.1 3000
 	cd web && npx playwright install chromium
 	cd web && $(WEB_ENV) npm run build && $(WEB_ENV) npm run test:e2e
+
+# ---------------------------------------------------------------- demo (Step 17)
+# make demo: the sample pipeline and a 60x replay from a fresh clone (no credentials, no HDFS).
+# Needs `make up` (core profile) and `make sample-data`. Every Spark step runs in the running app
+# container (no Java on the host): sample ETL and features into data/lake (the undercut counts go
+# to data/demo/<run>/, never results/), the SAMPLE deployment model
+# models/undercut/sample_deploy_real_G3.5_k2 (smoke test; the real deploy_* folder is never
+# written) and the what-if tyre model. Then only the api container is recreated (replay on, the
+# sample model) and f1sa.demo_replay starts the replay, waits for the cars in Redis and prints the
+# dashboard URL. DEMO_WAIT=finished (CI) also waits for the replay to finish.
+DEMO_SEASON ?= 2024
+DEMO_ROUND ?= 5
+DEMO_SPEED ?= 60
+DEMO_WAIT ?= state
+DEMO_MODEL_DIR := models/undercut/sample_deploy_real_G3.5_k2
+DEMO_RUN := demo_$(shell date -u +%Y%m%dT%H%M%SZ)
+DEMO_EXEC = $(COMPOSE) exec -T -e PYTHONPATH=/workspace/src -e DATA_LAKE_URI=$(API_FILE_LAKE) -e F1SA_GIT_SHA=$(GIT_SHA) -e F1SA_GIT_DIRTY=$(GIT_DIRTY) app
+
+.PHONY: demo demo-pipeline demo-replay test-demo
+demo: demo-pipeline demo-replay ## Sample pipeline + sample model in the app container, then a 60x replay; prints the dashboard URL (needs make up, make sample-data)
+
+demo-pipeline: api-dirs ## Sample ETL, features, sample deployment model and tyre model in the app container (data/lake, models/; never results/)
+	@scripts/wait_for.sh -t 10 kafka redis app >/dev/null || { echo "make demo needs the core stack (kafka, redis, app healthy): run 'make up' first." >&2; exit 1; }
+	@test -d data/sample/raw || { echo "Missing data/sample: run 'make sample-data' first." >&2; exit 1; }
+	@mkdir -p data/demo/$(DEMO_RUN)
+	$(DEMO_EXEC) python -m f1sa.etl.clean --source sample
+	$(DEMO_EXEC) python -m f1sa.features.build --source sample --results-dir data/demo/$(DEMO_RUN)
+	$(DEMO_EXEC) python experiments/model_save.py --source sample --force
+	$(DEMO_EXEC) python -m f1sa.sim.tyre_model --source sample
+
+demo-replay: ## Recreate only the api (REPLAY=1, sample model), start a DEMO_SPEED replay of DEMO_SEASON/DEMO_ROUND, print the URL [DEMO_WAIT=finished]
+	@test -f $(DEMO_MODEL_DIR)/lr/scorer.json || { echo "Missing $(DEMO_MODEL_DIR): run 'make demo-pipeline' (or 'make demo') first." >&2; exit 1; }
+	$(MAKE) --no-print-directory api-up REPLAY=1 MODEL_DIR=$(DEMO_MODEL_DIR)
+	@scripts/wait_for.sh -t 120 web >/dev/null || { echo "the web container is not healthy: run 'make up'." >&2; exit 1; }
+	$(DEMO_EXEC) python -m f1sa.demo_replay --api http://api:8000 --season $(DEMO_SEASON) --round $(DEMO_ROUND) --speed $(DEMO_SPEED) --wait $(DEMO_WAIT) --model-version $(notdir $(DEMO_MODEL_DIR))
+
+test-demo: ## Step 17 unit tests (demo client, Makefile, CI workflow, traceability check)
+	$(UV) run pytest tests/unit/test_demo_replay.py tests/unit/test_makefile_demo.py tests/unit/test_ci_workflow.py tests/unit/test_check_traceability.py -q

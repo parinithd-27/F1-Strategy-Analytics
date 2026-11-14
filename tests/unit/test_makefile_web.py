@@ -35,7 +35,7 @@ def _web() -> dict[str, Any]:
 def test_web_service_is_hardened_and_local_only() -> None:
     web = _web()
     assert set(web["profiles"]) == {"core", "full"}
-    assert web["image"] == "f1sa-web:dev"
+    assert web["image"] == "f1sa-web:${F1SA_IMAGE_TAG:-dev}"
     assert web["build"]["context"] == "./web"
     assert web["build"]["dockerfile"] == "../docker/web/Dockerfile"
     assert web["ports"] == ["127.0.0.1:${WEB_HOST_PORT:-3000}:3000"]

@@ -126,6 +126,7 @@ async def test_202_runs_stream_job_then_producer_and_finishes(tmp_path: Path) ->
         "--ready-file", f"data/checkpoints/api_{RID}.ready",
         "--results-dir", f"data/demo/{RID}",
         "--timeout-s", str(int(5 + 7200 / 60 + 5)),
+        "--model-dir", str(api.deps.settings.api_model_dir),
     )  # fmt: skip
     for _ in range(100):
         if launcher.of("producer"):
@@ -331,6 +332,24 @@ def test_argv_builders() -> None:
         "--stop-after-session-end", "2025:1", "--ready-file", "r", "--results-dir", "d",
         "--timeout-s", "99", "--allow-test-season",
     ]  # fmt: skip
+    with_model = stream_job_argv(
+        2024, 5, checkpoint=Path("c"), ready_file=Path("r"), results_dir=Path("d"),
+        timeout_s=10, allow_test_season=False, python="py",
+        model_dir=Path("models/undercut/sample_deploy_real_G3.5_k2"),
+    )  # fmt: skip
+    assert with_model[-2:] == ["--model-dir", "models/undercut/sample_deploy_real_G3.5_k2"]
+
+
+async def test_replay_scores_with_the_api_model_dir(tmp_path: Path) -> None:
+    """``API_MODEL_DIR`` (the dir ``/api/health`` loads) reaches the replay's stream job."""
+    sample = tmp_path / "models" / "undercut" / "sample_deploy_real_G3.5_k2"
+    launcher = FakeLauncher(hold_producer=True)
+    api = _api(tmp_path, launcher, api_model_dir=sample)
+    code, _body = await _post(api)
+    assert code == 202
+    argv = launcher.of("stream_job")[0].argv
+    assert argv[argv.index("--model-dir") + 1] == str(sample)
+    await api.deps.replays.shutdown()
 
 
 # ------------------------------------------------------------------ real subprocesses: no orphans

@@ -23,6 +23,7 @@ from pyspark.ml import PipelineModel
 from pyspark.ml.base import Estimator
 from pyspark.sql import DataFrame, DataFrameReader, SparkSession
 
+from conftest import SAMPLE_DIR
 from f1sa.model import deploy as D
 from f1sa.model import evaluate as E
 from f1sa.model import features as MF
@@ -271,7 +272,6 @@ def test_setting_folders_are_distinct_and_never_the_test_run_folder() -> None:
 @pytest.mark.parametrize(
     "argv",
     [
-        ["--source", "sample"],
         ["--source", "rehearsal"],
         ["--source", "full", "--allow-test-season"],
         ["--source", "full", "--no-test"],
@@ -323,3 +323,98 @@ def test_cli_refuses_models_dir_outside_models(
         raise AssertionError("spark must not start")
 
     assert D.main(["--source", "full", "--models-dir", "/tmp/x"], spark_factory=no_spark) == 2
+
+
+# ------------------------------------------------------------------ sample source (Step 17)
+@pytest.fixture(scope="module")
+def deployed_sample(
+    spark: SparkSession, sample_features_root: str, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[dict[str, Any]]:
+    """``--source sample`` on a copy of the sample feature zone, with no development run."""
+    base = tmp_path_factory.mktemp("deploy_sample")
+    lake = base / "data" / "lake"
+    shutil.copytree(Path(sample_features_root.removeprefix("file://")), lake / "features")
+    mp = pytest.MonkeyPatch()
+    mp.setenv("DATA_LAKE_URI", f"file://{lake}")
+    mp.setenv("SAMPLE_DIR", str(SAMPLE_DIR))
+    for k, v in GIT_ENV.items():
+        mp.setenv(k, v)
+    cwd = os.getcwd()
+    os.chdir(base)
+    from f1sa.config import get_settings
+
+    get_settings.cache_clear()
+    lines: list[str] = []
+    opened: list[int] = []
+    spy = pytest.MonkeyPatch()
+    spy.setattr(E, "evaluate_test", lambda *a, **k: opened.append(1))
+    spy.setattr(P, "evaluate_test", lambda *a, **k: opened.append(1))
+    try:
+        cfg = D.DeployConfig(source="sample", train=SMALL)
+        result = D.save_deployment(spark, cfg, out=lines.append)
+        yield {"result": result, "lines": lines, "base": base, "opened": opened}
+    finally:
+        spy.undo()
+        os.chdir(cwd)
+        mp.undo()
+        get_settings.cache_clear()
+
+
+def test_sample_source_writes_only_the_sample_folder(deployed_sample: dict[str, Any]) -> None:
+    base = deployed_sample["base"]
+    assert deployed_sample["result"].target == Path("models/undercut/sample_deploy_real_G3.5_k2")
+    target = base / "models/undercut/sample_deploy_real_G3.5_k2"
+    assert (target / "lr" / "scorer.json").is_file()
+    assert (target / "reproduction.json").is_file()
+    assert not (base / "models/undercut/deploy_real_G3.5_k2").exists()
+    assert not (base / "results").exists(), "the sample deployment must not write results/"
+    assert not list(target.parent.glob(".staging-*"))
+    assert deployed_sample["opened"] == []
+
+
+def test_sample_metadata_is_stamped_and_has_no_test_season(
+    deployed_sample: dict[str, Any],
+) -> None:
+    target = deployed_sample["base"] / "models/undercut/sample_deploy_real_G3.5_k2"
+    for kind in ("lr", "gbt"):
+        meta = json.loads((target / kind / "metadata.json").read_text())
+        assert meta["source"] == "sample" and meta["smoke_test"] is True
+        assert meta["stamp"].startswith("SMOKE TEST")
+        assert meta["test_season_read"] is False
+        assert meta["test_season_statement"] == D.SAMPLE_TEST_SEASON_STATEMENT
+        assert meta["training_seasons"] == [2021, 2022, 2023]
+        assert meta["calibration_seasons"] == [2024]
+        for field_name in D.REQUIRED_METADATA:
+            assert field_name in meta, field_name
+
+
+def test_sample_reproduction_skips_only_the_development_comparison(
+    deployed_sample: dict[str, Any],
+) -> None:
+    report = deployed_sample["result"].reproduction
+    assert report["development_run"] == D.SAMPLE_DEV_SKIPPED
+    assert all(report["round_trip_exact"].values())
+    assert report["scorer_vs_spark"]["max_abs_diff"] <= D.SCORER_TOLERANCE
+    assert report["match"] is True
+    assert "reproduction: MATCH" in deployed_sample["lines"]
+    assert any(D.SAMPLE_DEV_SKIPPED in line for line in deployed_sample["lines"])
+
+
+def test_sample_model_loads_with_the_stream_jobs_loader(deployed_sample: dict[str, Any]) -> None:
+    from f1sa.streaming.stream_job import load_model
+
+    target = deployed_sample["base"] / "models/undercut/sample_deploy_real_G3.5_k2"
+    scorer, params, meta = load_model(target)
+    assert params.gap_threshold_s == 3.5 and meta["smoke_test"] is True
+    assert [s.name for s in scorer.inputs] == meta["features"]
+
+
+def test_sample_and_full_targets_differ_and_sources_are_checked() -> None:
+    full, sample = D.DeployConfig().target, D.DeployConfig(source="sample").target
+    assert full.name == "deploy_real_G3.5_k2" and sample.name == "sample_deploy_real_G3.5_k2"
+    assert full.parent == sample.parent
+    rc = D.DeployConfig(source="sample").run_config()
+    assert rc.source == "sample" and rc.no_test is False and rc.allow_test_season is False
+    with pytest.raises(D.DeployError, match="unknown source"):
+        D.DeployConfig(source="rehearsal")
+    assert D.parse_args(["--source", "sample"]).source == "sample"

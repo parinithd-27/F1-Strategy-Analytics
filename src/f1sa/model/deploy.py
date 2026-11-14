@@ -22,6 +22,13 @@ parameters, raw validation PR-AUC and calibrated validation Brier / PR-AUC must 
 development run's files (``results/model_dev_*``); the pure-Python LR scorer must equal Spark within
 ``SCORER_TOLERANCE``. Any difference raises ``ReproductionError`` (exit 4) and leaves the staging
 folder for inspection; nothing is adjusted.
+
+**Sample source (Step 17, ``make demo``).** ``--source sample`` runs the same procedure on the two
+sample races (2023 R5 trains, 2024 R5 calibrates) so a fresh clone has a model for the stream job
+and the API. It writes ``models/undercut/sample_deploy_real_G{g}_k{k}/`` (never ``deploy_*``),
+stamps every metadata file as a SMOKE TEST, and skips only the comparison with the development
+run (the sample has none); the reload round trip and the scorer-vs-Spark check still run. Its
+probabilities come from 4 training attempts and are not findings.
 """
 
 from __future__ import annotations
@@ -80,6 +87,17 @@ from f1sa.model.train import (
 )
 
 DEPLOY_SOURCE = "deploy"
+SOURCES = ("full", "sample")
+SAMPLE_PREFIX = "sample_"
+SAMPLE_STAMP = (
+    "SMOKE TEST: trained on the 2 sample races (Jolpica laps, SYNTHETIC tyres); demo only, "
+    "not findings"
+)
+SAMPLE_TEST_SEASON_STATEMENT = (
+    "The sample has no 2025 race: only the sample races 2023 R5 (training) and 2024 R5 "
+    "(calibration) were read, and evaluate.evaluate_test was not called."
+)
+SAMPLE_DEV_SKIPPED = "skipped: the sample source has no development run to compare with"
 MODEL_SPEC = "model-spec-v1"
 PRIMARY_MODEL = "lr_calibrated"
 SCORER_TOLERANCE = 1e-9
@@ -142,16 +160,24 @@ class DeployConfig:
     force: bool = False
     train: TrainConfig = field(default_factory=TrainConfig)
     platt_below_n: int = PLATT_BELOW_N
+    source: str = "full"
 
     def __post_init__(self) -> None:
         if self.feature_set != "real":
             raise DeployError("the deployment model uses the 'real' feature set only")
+        if self.source not in SOURCES:
+            raise DeployError(f"unknown source {self.source!r}; choose from {SOURCES}")
+
+    @property
+    def is_sample(self) -> bool:
+        return self.source == "sample"
 
     def run_config(self) -> P.RunConfig:
-        """The development-mode run configuration (2021-2024 only) the deployment reuses."""
+        """The development-mode run configuration (2021-2024 only) the deployment reuses; for the
+        sample source the sample run configuration (its races are 2023 R5 and 2024 R5)."""
         return P.RunConfig(
-            source="full",
-            no_test=True,
+            source=self.source,
+            no_test=not self.is_sample,
             g=self.g,
             k=self.k,
             feature_set=self.feature_set,
@@ -163,10 +189,11 @@ class DeployConfig:
 
     @property
     def target(self) -> Path:
+        prefix = SAMPLE_PREFIX if self.is_sample else ""
         return (
             self.models_dir
             / "undercut"
-            / f"{DEPLOY_SOURCE}_{self.feature_set}_G{float(self.g)}_k{int(self.k)}"
+            / f"{prefix}{DEPLOY_SOURCE}_{self.feature_set}_G{float(self.g)}_k{int(self.k)}"
         )
 
 
@@ -235,7 +262,7 @@ def train_frozen(
         & (F.col("response_window_laps") == cfg.k)
         & F.col("outcome_category").isin(*LABELLED)
     )
-    check_feature_policy(labelled, cfg.feature_set, "full")
+    check_feature_policy(labelled, cfg.feature_set, cfg.source)
     ds = build_dataset(df, g=cfg.g, k=cfg.k, feature_set=cfg.feature_set, split=P.DEV_SPLIT)
     if ds.split.test:
         raise DeployError(f"deployment split must have no test seasons, got {ds.split.test}")
@@ -317,7 +344,11 @@ def _metadata(
     files = {"pipeline": "pipeline", "calibrator": "calibrator.json"}
     if kind == "lr":
         files["scorer"] = "scorer.json"
+    sample: dict[str, Any] = (
+        {"source": "sample", "smoke_test": True, "stamp": SAMPLE_STAMP} if cfg.is_sample else {}
+    )
     return {
+        **sample,
         "model": kind,
         "model_spec": MODEL_SPEC,
         "primary_model": PRIMARY_MODEL,
@@ -344,7 +375,9 @@ def _metadata(
         "git_sha": git.sha,
         "git_dirty": git.dirty,
         "test_season_read": False,
-        "test_season_statement": TEST_SEASON_STATEMENT,
+        "test_season_statement": (
+            SAMPLE_TEST_SEASON_STATEMENT if cfg.is_sample else TEST_SEASON_STATEMENT
+        ),
         "partitions_read": list(partitions),
         "files": files,
         "created_utc": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -496,7 +529,12 @@ def reproduction_check(
         if not same:
             diff = float(np.max(np.abs(val.scores[name] - again.scores[name])))
             mismatches.append(f"round trip {name}: reloaded != in-memory (max diff {diff:.3e})")
-    dev_rows, dev_bad = compare_with_dev(cfg, models, cals, again)
+    dev_rows: list[dict[str, Any]] | str
+    dev_bad: list[str]
+    if cfg.is_sample:
+        dev_rows, dev_bad = SAMPLE_DEV_SKIPPED, []
+    else:
+        dev_rows, dev_bad = compare_with_dev(cfg, models, cals, again)
     scorer_summary, scorer_bad = compare_scorer(
         LRScorer.load(staging / "lr" / "scorer.json"), raw_rows, again
     )
@@ -517,9 +555,13 @@ def check_target(cfg: DeployConfig) -> None:
         raise DeployError(f"{cfg.target} exists; pass --force to replace it")
 
 
-def _partitions(spark: SparkSession, frame: DataFrame | None) -> list[str]:
+def _partitions(
+    spark: SparkSession, frame: DataFrame | None, cfg: DeployConfig | None = None
+) -> list[str]:
     if frame is not None:
         return ["(frame supplied by the caller)"]
+    if cfg is not None and cfg.is_sample:
+        return ["(sample races: data/lake/features, via pipeline.load_frame --source sample)"]
     _clean, root = resolve_feature_roots(get_settings())
     seasons = (*P.DEV_SPLIT.train, *P.DEV_SPLIT.validation)
     return [p for t in FEATURE_TABLES for p in season_partition_paths(spark, root, t, seasons)]
@@ -533,7 +575,7 @@ def save_deployment(
 ) -> DeployResult:
     check_target(cfg)
     git = git_info()
-    partitions = _partitions(spark, frame)
+    partitions = _partitions(spark, frame, cfg)
     for p in partitions:
         out(f"partition: {p}")
     df = frame if frame is not None else P.load_frame(spark, cfg.run_config())
@@ -574,7 +616,11 @@ def reproduction_lines(report: Mapping[str, Any]) -> list[str]:
     lines = [f"reproduction check on {report['n_validation']} validation attempts:"]
     for name, ok in report["round_trip_exact"].items():
         lines.append(f"  round trip {name}: {'exact' if ok else 'DIFFERS'}")
-    for r in report["development_run"]:
+    dev = report["development_run"]
+    if isinstance(dev, str):
+        lines.append(f"  development run: {dev}")
+        dev = []
+    for r in dev:
         flag = "MATCH" if r["match"] else "DIFFERS"
         lines.append(f"  {r['check']:<26} {r['model']:<4} saved={r['saved']} dev={r['dev']} {flag}")
     s = report["scorer_vs_spark"]
@@ -592,9 +638,10 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="experiments/model_save.py",
         description="Train the frozen specification on 2021-2023, calibrate on 2024 and save it "
-        "(the 2025 test season is never read).",
+        "(the 2025 test season is never read). --source sample: the same on the 2 sample races, "
+        "into models/undercut/sample_deploy_*, stamped SMOKE TEST (make demo).",
     )
-    p.add_argument("--source", choices=("full",), required=True)
+    p.add_argument("--source", choices=SOURCES, required=True)
     p.add_argument("--g", type=float, default=DEFAULT_GAP_S)
     p.add_argument("--k", type=int, default=DEFAULT_WINDOW_LAPS)
     p.add_argument("--models-dir", type=Path, default=Path("models"))
@@ -618,6 +665,7 @@ def main(
             results_dir=args.results_dir,
             force=args.force,
             train=train or TrainConfig(),
+            source=args.source,
         )
         P.check_results_dir(cfg.results_dir)
         check_target(cfg)

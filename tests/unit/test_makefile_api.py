@@ -78,7 +78,7 @@ def test_make_test_api_runs_the_api_tests() -> None:
 def test_compose_api_service() -> None:
     api = _compose()["services"]["api"]
     assert set(api["profiles"]) == {"core", "full"}
-    assert api["image"] == "f1sa-app:dev"
+    assert api["image"] == "f1sa-app:${F1SA_IMAGE_TAG:-dev}"
     assert api["command"] == ["python", "-m", "f1sa.api"]
     assert api["volumes"] == [
         "./:/workspace:ro",
@@ -127,4 +127,4 @@ def test_make_up_waits_for_the_api() -> None:
 @pytest.mark.parametrize("target", ["up", "up-full", "api-up"])
 def test_rw_mount_folders_are_created_first(target: str) -> None:
     lines = [ln for ln in _make(target).splitlines() if not ln.startswith("make")]
-    assert lines[0] == "mkdir -p data/demo data/checkpoints"
+    assert lines[0] == "mkdir -p data/demo data/checkpoints models/undercut models/sim"

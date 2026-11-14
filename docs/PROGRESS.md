@@ -1128,10 +1128,93 @@
   - **Tests.** New: `test_ablation.py`, `test_oracle_dev.py`, `test_experiments_runner.py`,
     `test_streaming_runs.py`. Extended: `test_demo.py`, `test_latency.py`, `test_latency_bench.py`,
     `test_makefile_api.py`, `test_model_test_summary.py`. New gated `web/e2e/latency.spec.ts`.
+- Step 17 (2026-11-14): clone-and-run for others (#42). **Done.**
+  - **Why.** A fresh clone could not run a demo: there was no `make demo`, `models/` is gitignored (the stream job and
+    the API need a deployment model), and the sample Spark steps ran on the host (Java 17 needed).
+  - **`make demo`** = `demo-pipeline` + `demo-replay`. It needs `make up` and `make sample-data`, and no credentials,
+    HDFS or host Java.
+    - The sample ETL, features (counts to `data/demo/<run>/`; `features.build.check_results_dir` now also accepts
+      `./data/demo/<run>`), the sample deployment model and the tyre model all run in the app container.
+    - Then only the api is recreated (`make api-up REPLAY=1 MODEL_DIR=...`).
+    - `f1sa.demo_replay` (new, stdlib) checks health (model version, synthetic lake), the race, starts a 60x replay
+      and waits for 20 cars in Redis (`DEMO_WAIT=finished` also waits for the end). It prints the dashboard URL
+      with SYNTHETIC DEMO DATA.
+  - **Sample deployment model** (`model/deploy.py --source sample`, user decision: built at demo time, nothing
+    committed).
+    - It writes `models/undercut/sample_deploy_real_G3.5_k2/`, never `deploy_*`, and never `results/`.
+    - Metadata: `source: sample`, `smoke_test: true`, a SMOKE TEST stamp.
+    - The development comparison is skipped and recorded as skipped. The round trip and the scorer-vs-Spark check
+      still run: MATCH, max diff 0.
+    - The full path is unchanged (`--source full` default, same target and checks).
+  - **API.** `API_MODEL_DIR` reaches the replay's stream job (`replay.stream_job_argv(model_dir=...)`), so
+    `/api/health` and the replay use the same model. Compose default unchanged (`deploy_real_G3.5_k2`).
+  - **Fresh-clone fixes.**
+    - `api-dirs` also creates `models/undercut` and `models/sim`, which Docker would otherwise create as root.
+    - Without a `.env`, the Makefile exports `APP_UID=$(id -u)`. With one (this machine), nothing changes.
+    - Compose images `f1sa-{app,web}:${F1SA_IMAGE_TAG:-dev}`.
+  - **CI** (`.github/workflows/ci.yml`): three parallel jobs, each ≤ 30 min, with the uv and npm caches.
+    - `python`: ruff (now also `experiments scripts`), format, mypy (+ `scripts/check_traceability.py`),
+      traceability, unit tests.
+    - `web`: unchanged.
+    - New `e2e`: free disk, `make up`, `make sample-data`, `make demo DEMO_WAIT=finished`, a `results/`-unchanged
+      check, `npx playwright install --with-deps chromium`, the smoke test against the web container, logs on
+      failure, `make down`.
+    - `tests/integration` stays out of CI (documented).
+  - **`scripts/check_traceability.py`** (+ `make lint`/`typecheck`).
+    - It found two stale matrix entries, both fixed in the matrix:
+      - `lake/writer.py` never existed (git log empty). The writers are `ingest/sinks.py` and
+        `etl/io.write_partitioned`.
+      - `results/calibration.*` became `results/calibration_*.csv` and `results/reliability_*.png`.
+    - Now OK 227, GENERATED 5 (gitignored outputs), PENDING 2 (S18 `docs/report/`, `docs/demo_script.md`), MISSING 0.
+  - **Docs.**
+    - README rewritten: purpose, mermaid architecture, quickstart for WSL 2 and Linux/macOS, full-data mode, the
+      experiment table, key results copied from model_results.md / experiments.md and the committed
+      `results/whatif_consistency.csv` (the 2025 what-if row is in no doc), limitations, licensing, team, course.
+    - New `docs/reproduce.md` (sample and full mode, every target that writes `results/` and whether it refuses,
+      tests and CI, clean-up) and `CITATION.cff`.
+    - `docs/architecture.md` reviewed: the "skeleton" note, the diagram (TracingInsights, LR + GBT), the module table
+      (no lake writers), API model mount, image tag/UID, and a "Demo and CI" section.
+    - `DATA_LICENSES.md`: models, demo and CI.
+  - **On the dev stack** (user approved; api recreated, then restored by `make up-full`):
+    - `make demo` took 110 s, and the Playwright smoke passed (1.9 min).
+    - sha256 of `data/lake` + `models/` before and after: 501 files identical, 3 changed, 76 removed, 126 added.
+      - All 19 rewritten lake tables have identical content checksums (row count + xxhash64): only part-file names
+        changed.
+      - The changed files are `clean/_quality/report.json` (+ `.crc`: `generated_at`, and `clean_root`/`raw_root`
+        now `/workspace/...`) and `models/sim/tyre_model_sample.json` (`created_utc`, `git_sha`).
+      - Added: the 50 files of `sample_deploy_real_G3.5_k2`.
+    - `data/manifest*.json` byte-identical; nothing under `/f1/` touched.
+  - **Clean-clone check** (user approved).
+    - `make down` (volumes kept), then a GitHub clone at `df48f66` + the Step 17 patch (26 files) in
+      `/tmp/f1sa-clone`, project `f1sa-clone`, tag `:clone`, no `.env`.
+    - Times: build `--no-cache` 224 s + `make up` 26 s + `make sample-data` 4 s + `make demo` 103 s = **357 s**
+      (target 15 min).
+    - The Playwright smoke passed (1.8 min), and `results/` was unchanged in the clone.
+    - Clone containers and `:clone` images removed; volume `f1sa-clone_kafka-data` left (no volume deletion).
+    - `make up-full`: all 11 services healthy, api back on `deploy_real_G3.5_k2` with replay off.
+  - **Tests.**
+    - New: `test_demo_replay.py`, `test_makefile_demo.py`, `test_check_traceability.py`, `test_ci_workflow.py`,
+      `test_repo_docs.py`.
+    - Extended: `test_model_deploy.py` (sample source), `test_api_replay.py`, `test_api_config.py`,
+      `test_features_build.py`.
+    - Updated for the intended changes: `test_makefile_api.py` and `test_makefile_web.py` (image tag, mkdir line).
+    - Full unit suite: 1688 passed. `make web-test`: 152 passed.
 ## Next
-- S17: reproducible end-to-end pipeline (#42): `docs/reproduce.md`, CI; point it at `make experiments` /
-  `make experiments-sample` for the regeneration check.
+- S18: report, docs and demo rehearsal (#44): `docs/report/`, `docs/demo_script.md`.
+- Push and watch the first CI run of the `e2e` job on GitHub (runner build time and disk are unmeasured).
 ## Known issues
+- Step 17: `make stream-demo RECORD=1` (the Step 12 files) and `make experiments-spark RECORD=1` overwrite their
+  `results/` files without refusing (documented in `docs/reproduce.md`; not changed in this step).
+- Step 17: the sample deployment model is degenerate by design: 4 training attempts, 1 validation attempt, identity
+  calibration. Its probabilities in the demo are plumbing, not findings.
+- Step 17: the CI `e2e` job has not run on GitHub yet. The app image is about 7 GB, so the job frees runner disk
+  first. Its time on a hosted runner is unmeasured.
+- Step 17: the clean-clone time (357 s) had warm base images and warm uv, npm and Playwright caches on the host. A
+  first run on a new machine adds the downloads.
+- Step 17: `make up-full` after the clone check rebuilt `f1sa-app:dev` and `f1sa-web:dev` (`--build` after the
+  no-cache build refreshed the layer cache). The previous image IDs are gone. Volumes and data are unaffected.
+- Step 17: the app container logs `netlib-blas: dlopen(libblas.so.3) failed` during MLlib training (pure-JVM BLAS
+  fallback; harmless).
 - Step 16: the streaming runs show latency at replay rates of at most about 13 events/s. The pipeline's
   maximum throughput was not load-tested.
 - Step 16: the UI segment comes from one headless Chromium on the same host. Its samples are a subset by
@@ -1392,6 +1475,11 @@ Step 15: `make sim-tyre-model-sample && make whatif-consistency-sample`, then
 `uv run pytest tests/unit/test_sim_tyre_model.py tests/unit/test_race_sim.py tests/unit/test_whatif.py tests/unit/test_lap_log.py tests/unit/test_api_whatif.py tests/unit/test_sim_consistency.py tests/unit/test_makefile_sim.py -q`
 and `make web-test`. Full lake (needs `make up-full`): `make sim-tyre-model-full && make whatif-consistency-full`.
 Live: `ENABLE_REPLAY=1 make api`, then `curl -X POST localhost:8001/api/races/2024/5/whatif -H 'content-type: application/json' -d '{"attacker":"<P4>","defender":"<P3>"}'` during a replay.
+
+Step 17: `uv run pytest tests/unit/test_demo_replay.py tests/unit/test_makefile_demo.py tests/unit/test_check_traceability.py tests/unit/test_ci_workflow.py tests/unit/test_repo_docs.py tests/unit/test_model_deploy.py tests/unit/test_api_replay.py -q`
+(or `make test-demo`), `uv run python scripts/check_traceability.py` (expect MISSING 0), then with `make up`:
+`make sample-data && make demo` (prints the dashboard URL) and `cd web && E2E_NO_SERVER=1 npx playwright test e2e/smoke.spec.ts`.
+Clean clone: `docs/reproduce.md` §4.
 
 Step 16: `uv run pytest tests/unit/test_ablation.py tests/unit/test_oracle_dev.py tests/unit/test_experiments_runner.py tests/unit/test_streaming_runs.py tests/unit/test_demo.py tests/unit/test_latency.py tests/unit/test_latency_bench.py tests/unit/test_model_test_summary.py tests/unit/test_makefile_api.py -q`;
 `make experiments-sample` (expect exit 0); with `make up-full`: `make experiments` (expect 66 OK, the 2 what-if DIFFs).

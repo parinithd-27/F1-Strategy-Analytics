@@ -2,7 +2,7 @@
 
 | # | Commitment (proposal) | Step | File or module |
 |---|---|---|---|
-| 1 | Partitioned multi-season data lake (timing, results, pit stops, telemetry) | S4, S5 | `lake/writer.py`, `lake/paths.py`, `etl/clean.py` |
+| 1 | Partitioned multi-season data lake (timing, results, pit stops, telemetry) | S4, S5 | raw zone `ingest/sinks.py` (`FileSink`, `HdfsSink`), `lake/paths.py`; clean and feature tables `etl/io.write_partitioned`, `etl/clean.py` |
 | 2 | Raw data in HDFS | S2, S4 | `docker-compose.yml` (hdfs profile), `ingest/cli.py --sink hdfs` |
 | 3 | Clean Parquet partitioned by season and race | S5 | `etl/clean.py`, `lake/schemas.py` |
 | 4 | FastF1 ingestion (timing and telemetry: speed, throttle, brake, gear, RPM) | S3, S4, S4C | FastF1-derived data via TracingInsights (FastF1 itself needs an F1 TV login since Oct 2026): `ingest/tracinginsights_loader.py`, `ingest/tracinginsights_parse.py`, `ingest/tracinginsights_pins.json`; `ingest/fastf1_loader.py` kept as the optional direct path. Audit: `docs/data_source_audit.md` |
@@ -40,9 +40,9 @@
 | 36 | Metric: event throughput | S16 | `results/streaming_throughput.csv` (messages/s and lap messages/s received, events/s produced, per run). **Done**: findings in `docs/experiments.md` |
 | 37 | Metric: Redis read/write latency at streaming rate | S11, S16 | `experiments/redis_latency.py`, `serving/latency_bench.py` (S16: default output `data/redis_latency/<stamp>/`, `--record`), `make redis-latency [RECORD=1]`; Step 11 first run (noisy, other services up, old WSL config) `results/redis_latency.csv`; S16 quiet-stack rerun `results/redis_latency_quiet.csv`; fingerprints in `results/README.md`. **Done**: both runs in `docs/experiments.md` |
 | 38 | Metric: resource usage | S10, S16 | `experiments/_resources.py` (re-exports `bench/resources.py`: psutil RSS/CPU of a process tree, cgroup memory, host MemAvailable, `docker stats` per container, peaks per window) → peak columns of `results/scalability.csv` (S10) and `results/streaming_resources.csv` (S16: per streaming run, every container and the host job's tree); fingerprints in `results/README.md`. **Done**: S10 and S16 |
-| 39 | Metric: calibration | S9 | `results/calibration.*` |
+| 39 | Metric: calibration | S9 | `results/calibration_*.csv`, `results/reliability_*.png` (per feature set and setting; `model/calibrate.py`) |
 | 40 | Metric: useful and consistent what-if comparisons | S15 | `results/whatif_consistency.csv` / `.png` (written only by `make whatif-consistency-full RECORD=1`, which adds the 2025 held-out row) |
 | 41 | Metric: interactive dashboard | S14, S15 | `web/` (race picker, live race page, replay control, what-if panel; Playwright smoke test `web/e2e/smoke.spec.ts`); UI latency samples `web/src/lib/debugLatency.ts` → `results/ui_latency.csv` |
-| 42 | Reproducible end-to-end pipeline | S17 | `Makefile`, `docs/reproduce.md`, `.github/workflows/ci.yml` |
+| 42 | Reproducible end-to-end pipeline | S17 | `Makefile` (`make demo`: `demo-pipeline` + `demo-replay` from a fresh clone, sample mode, no credentials or HDFS), `model/deploy.py --source sample` (sample deployment model), `demo_replay.py` (headless replay check), `make api-up MODEL_DIR=`; `docs/reproduce.md` (sample and full mode, every target that writes `results/`); `.github/workflows/ci.yml` (python, web, e2e: `make demo DEMO_WAIT=finished` + Playwright `web/e2e/smoke.spec.ts`); `scripts/check_traceability.py`; `README.md`, `CITATION.cff`; tests `test_demo_replay.py`, `test_makefile_demo.py`, `test_ci_workflow.py`, `test_check_traceability.py`, `test_model_deploy.py`, `test_repo_docs.py` |
 | 43 | Timeline W1-W8 | all | build plan step headers |
 | 44 | Report, docs, demo rehearsal | S18 | `docs/report/`, `docs/demo_script.md` |

@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "F1 Strategy Analytics at Scale"
+abstract: >-
+  An end-to-end big-data pipeline for Formula 1 undercut strategy: a partitioned 2021-2025 data
+  lake on HDFS, Spark RDD/DataFrame/SQL feature engineering, a calibrated MLlib model of undercut
+  success evaluated on a sealed 2025 test season, Kafka and Spark Structured Streaming replay with
+  a Redis serving layer, a FastAPI + Next.js dashboard, and a Monte Carlo what-if simulator.
+  Course project of team Data Wranglers, DA231o, MTech, Indian Institute of Science (IISc).
+authors:
+  - given-names: Parinith
+    family-names: D.
+  - given-names: Dakshinesh
+    family-names: K.
+  - given-names: Rohan
+    family-names: Deore
+  - given-names: Kaushal
+    family-names: V.
+repository-code: "https://github.com/parinithd-27/F1-Strategy-Analytics"
+license: MIT
+keywords:
+  - formula-1
+  - big-data
+  - apache-spark
+  - kafka
+  - structured-streaming
+  - redis
+  - mllib
+  - data-lake

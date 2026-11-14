@@ -7,7 +7,8 @@
 name: f1sa
 
 x-app-image: &app-image
-  image: f1sa-app:dev
+  # F1SA_IMAGE_TAG (default dev) lets a second checkout build its own images (Step 17 clone check).
+  image: f1sa-app:${F1SA_IMAGE_TAG:-dev}
   build:
     context: .
     dockerfile: docker/spark/Dockerfile
@@ -189,6 +190,9 @@ services:
       # UI latency samples (ENABLE_DEBUG=1); `make api-up UI_LATENCY_CSV=data/demo/...` keeps
       # them out of results/ (Step 16). Relative to /workspace.
       API_UI_LATENCY_CSV: ${API_UI_LATENCY_CSV:-results/ui_latency.csv}
+      # The deployment model /api/health loads and replays score with (relative to /workspace).
+      # `make api-up MODEL_DIR=models/undercut/sample_deploy_real_G3.5_k2` is make demo's.
+      API_MODEL_DIR: ${API_MODEL_DIR:-models/undercut/deploy_real_G3.5_k2}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
     volumes:
@@ -228,7 +232,7 @@ services:
   # 127.0.0.1 only. The browser calls the API at NEXT_PUBLIC_API_URL (inlined at build time); the
   # API's CORS origin is http://localhost:3000, so open the dashboard via localhost, not 127.0.0.1.
   web:
-    image: f1sa-web:dev
+    image: f1sa-web:${F1SA_IMAGE_TAG:-dev}
     build:
       context: ./web
       dockerfile: ../docker/web/Dockerfile

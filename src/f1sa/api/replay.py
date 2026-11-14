@@ -152,11 +152,16 @@ def stream_job_argv(
     timeout_s: float,
     allow_test_season: bool,
     python: str = sys.executable,
+    model_dir: Path | None = None,
 ) -> list[str]:
+    """The stream job's argv. ``model_dir`` (the API's ``API_MODEL_DIR``) makes the replay score
+    with the model ``/api/health`` reports; ``None`` keeps the stream job's default."""
     argv = [python, "-m", "f1sa.streaming.stream_job"]
     argv += ["--checkpoint", str(checkpoint), "--stop-after-session-end", f"{season}:{round_}"]
     argv += ["--ready-file", str(ready_file), "--results-dir", str(results_dir)]
     argv += ["--timeout-s", str(int(timeout_s))]
+    if model_dir is not None:
+        argv += ["--model-dir", str(model_dir)]
     if allow_test_season:
         argv.append("--allow-test-season")
     return argv
@@ -225,6 +230,7 @@ class ReplayManager:
         poll_s: float = 0.1,
         python: str = sys.executable,
         clock: Callable[[], datetime] = utc_now,
+        model_dir: Path | None = None,
     ) -> None:
         if max_running < 1:
             raise ValueError(f"max_running must be >= 1, got {max_running}")
@@ -238,6 +244,7 @@ class ReplayManager:
         self.grace_s = grace_s
         self.poll_s = poll_s
         self.python = python
+        self.model_dir = model_dir
         self._clock = clock
         self._lock = asyncio.Lock()
         self._closing = False
@@ -287,6 +294,7 @@ class ReplayManager:
                 timeout_s=self.ready_timeout_s + RACE_SECONDS / speed + self.end_timeout_s,
                 allow_test_season=self.allow_test_season,
                 python=self.python,
+                model_dir=self.model_dir,
             )
             stream = await self._launcher(argv)
             job = ReplayJob(season, round_, speed, rid, results, now, stream=stream)

@@ -28,6 +28,12 @@ def test_model_dir_is_the_stream_jobs_model() -> None:
     assert Settings().api_model_dir == DEFAULT_MODEL_DIR
 
 
+def test_model_dir_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``make api-up MODEL_DIR=...`` (make demo: the sample deployment model) sets API_MODEL_DIR."""
+    monkeypatch.setenv("API_MODEL_DIR", "models/undercut/sample_deploy_real_G3.5_k2")
+    assert Settings().api_model_dir == Path("models/undercut/sample_deploy_real_G3.5_k2")
+
+
 @pytest.mark.parametrize(("raw", "expected"), [("1", True), ("0", False), ("true", True)])
 def test_flags_parse_from_env(monkeypatch: pytest.MonkeyPatch, raw: str, expected: bool) -> None:
     for name in ("ENABLE_REPLAY", "ENABLE_DEBUG", "ALLOW_TEST_SEASON"):

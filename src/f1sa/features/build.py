@@ -255,11 +255,15 @@ def write_full_counts(
 
 
 def check_results_dir(results_dir: Path) -> None:
-    """Results may only be written under ``./results`` (relative to the working directory)."""
+    """Results may only be written under ``./results``, or in a run folder under ``./data/demo``
+    (``make demo`` keeps its counts out of the committed results; relative to the working
+    directory)."""
     allowed = (Path.cwd() / "results").resolve()
+    demo = (Path.cwd() / "data" / "demo").resolve()
     target = results_dir.resolve()
-    if target != allowed and allowed not in target.parents:
-        raise BuildError(f"results dir {results_dir} is outside {allowed}")
+    if target == allowed or allowed in target.parents or demo in target.parents:
+        return
+    raise BuildError(f"results dir {results_dir} is outside {allowed} and {demo}/<run>")
 
 
 def delete_partitions(
@@ -316,7 +320,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "--results-dir",
         type=Path,
         default=Path("results"),
-        help="where the undercut counts CSV is written (must be under ./results)",
+        help="where the undercut counts CSV is written (under ./results or ./data/demo/<run>)",
     )
     parser.add_argument(
         "--full-counts",

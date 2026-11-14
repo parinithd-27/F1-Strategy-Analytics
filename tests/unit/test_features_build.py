@@ -98,6 +98,10 @@ def test_results_dir_outside_results_is_refused(
         )
     build.check_results_dir(Path("results"))
     build.check_results_dir(Path("results") / "sub")
+    build.check_results_dir(Path("data/demo/demo_20261114T000000Z"))  # make demo
+    for bad in (Path("data/demo"), Path("data/lake"), Path("data/demo/../lake/x")):
+        with pytest.raises(BuildError, match="outside"):
+            build.check_results_dir(bad)
 
 
 def test_main_rejects_results_dir_outside_results(

@@ -1,5 +1,15 @@
 name: CI
 
+# Three jobs, in parallel, each under 30 minutes:
+#   python  ruff (lint + format), mypy, the traceability check and the Python unit tests;
+#   web     ESLint, TypeScript, Vitest and the production build of the dashboard;
+#   e2e     the core profile (kafka, redis, app, api, web) on sample data only: make sample-data,
+#           make demo (sample ETL + features + sample model in the app container, then a 60x
+#           replay through Kafka -> Structured Streaming -> Redis -> API, waited until it
+#           finishes) and the Playwright smoke test against the web container.
+# Not in CI: tests/integration (they need HDFS and the Spark standalone cluster, `make up-full`),
+# every full-data target and every measurement. See docs/reproduce.md.
+
 on:
   push:
     branches: [main]
@@ -38,17 +48,19 @@ jobs:
         run: uv sync --all-extras --locked
 
       - name: Ruff lint
-        run: uv run ruff check src tests
+        run: uv run ruff check src tests experiments scripts
 
       - name: Ruff format check
-        run: uv run ruff format --check src tests
+        run: uv run ruff format --check src tests experiments scripts
 
       - name: mypy
-        run: uv run mypy src
+        run: uv run mypy src scripts/check_traceability.py
+
+      - name: Traceability (every file named in docs/traceability.md exists)
+        run: uv run python scripts/check_traceability.py
 
       - name: Unit tests
         run: uv run pytest tests/unit -q
-
 
   web:
     runs-on: ubuntu-latest
@@ -82,3 +94,67 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+  e2e:
+    name: demo + streaming smoke + Playwright (core profile, sample data)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app image is about 7 GB; the hosted runner's free disk is too small without this.
+      - name: Free disk space for the images
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Start the core profile (builds the app and web images)
+        run: make up
+
+      - name: Sample data (validates data/sample offline)
+        run: make sample-data
+
+      - name: make demo (sample pipeline + sample model, 60x replay until it finishes)
+        run: make demo DEMO_WAIT=finished
+
+      - name: results/ is unchanged
+        run: |
+          git status --porcelain -- results/
+          test -z "$(git status --porcelain -- results/)"
+
+      - name: Install the dashboard and Playwright Chromium
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Playwright smoke test against the web container
+        working-directory: web
+        env:
+          E2E_NO_SERVER: "1"
+        run: npx playwright test e2e/smoke.spec.ts
+
+      - name: Container status and logs (on failure)
+        if: failure()
+        run: |
+          docker compose --profile core ps -a
+          docker compose --profile core logs --tail 200
+
+      - name: Stop the stack (containers only, volumes kept)
+        if: always()
+        run: make down

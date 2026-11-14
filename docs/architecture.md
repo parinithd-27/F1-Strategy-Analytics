@@ -1,15 +1,18 @@
 # Architecture
 
-This is a skeleton. Each section is filled in by the step that builds that layer (see [traceability.md](traceability.md)).
+How the pipeline is built, layer by layer. Each section was written by the step that built that layer (see
+[traceability.md](traceability.md) for the commitment of each file). To run it, see the [README](../README.md) and
+[reproduce.md](reproduce.md).
 
 ```mermaid
 flowchart LR
     J[Jolpica-F1 API] --> I[ingest]
-    F[FastF1] --> I
+    TI[TracingInsights<br/>FastF1-derived, pinned] --> I
+    F[FastF1<br/>optional, F1 TV Access] -.-> I
     I --> R[(Raw zone<br/>HDFS or file://)]
     R --> C[(Clean Parquet<br/>season=/round=)]
     C --> S[Spark RDD / DataFrame / SQL<br/>feature tables]
-    S --> M[MLlib GBT<br/>+ calibration]
+    S --> M[MLlib LR + GBT<br/>+ Platt calibration]
     C --> K[[Kafka replay<br/>f1.race.events]]
     K --> SS[Spark Structured Streaming<br/>undercut detection]
     M --> SS
@@ -24,15 +27,16 @@ flowchart LR
 | Package | Responsibility |
 |---|---|
 | `ingest` | Jolpica client (rate-limited, cached, resumable) and FastF1 loader |
-| `lake` | Paths, schemas and writers for the raw and clean zones |
+| `lake` | Raw-zone paths, schemas and quality checks (the writers are `ingest/sinks.py` for the raw zone and `etl/io.write_partitioned` for the clean and feature zones) |
 | `etl` | Spark jobs that demonstrate the RDD, DataFrame and SQL APIs |
 | `features` | Gap change, tyre age, out-lap pace, pit loss, telemetry aggregates, undercut label |
-| `model` | Chronological split, GBT training, calibration, explanation, baselines |
+| `model` | Chronological split, LR and GBT training, calibration, explanation, baselines, the deployment model (full and sample) |
 | `streaming` | Kafka producer (race replay), Structured Streaming job, Redis sink |
 | `serving` | Redis key contract and store (TTL on session end) |
 | `sim` | What-if race simulation (pit now / pit next lap / stay out) |
 | `api` | FastAPI routes and the SSE stream for the dashboard |
-| `bench` | Step 10 Spark benchmarks: replication, timing, resource sampling, scalability grid, partitioning/caching (docs/experiments.md) |
+| `bench` | Step 10 Spark benchmarks: replication, timing, resource sampling, scalability grid, partitioning/caching (docs/experiments.md); Step 16 streaming runs and `make experiments` |
+| top level | `config.py` (the only source of paths and endpoints), `demo_runs.py` (demo output folders), `demo_replay.py` (`make demo`'s headless replay check, Step 17) |
 
 ## Rules
 - Storage root comes **only** from `f1sa.config.Settings.data_lake_uri`. No other module hardcodes paths or endpoints.
@@ -60,7 +64,8 @@ Defined in `docker-compose.yml`, project name `f1sa`. `make up` starts `core`; `
 - The app image installs `spark-sql-kafka-0-10_2.13:4.2.1` (plus `kafka-clients`, `spark-token-provider-kafka` and `commons-pool2`) into `$SPARK_HOME/jars` at build time, so Structured Streaming needs no network at runtime. Inside containers, Kafka is `kafka:29092`. From the host, it is `localhost:9092`.
 - HDFS is a single-node dev setup: `dfs.replication=1` and permissions disabled (`docker/hadoop/`). The NameNode is formatted on first start only.
 - The app container mounts the repo read-only at `/workspace`, with `data/`, `results/` and `models/` (Step 9c) mounted read-write over it.
-- The api container mounts the repo and `data/` read-only, with `data/demo` and `data/checkpoints` read-write on top (a replay's outputs and stream-job state), `results/` read-write (`ui_latency.csv`) and `models/` read-only. `make up`, `up-full` and `api-up` create the two host folders first, because Docker would otherwise create them owned by root. A write anywhere else under `/workspace/data` fails with EROFS (checked: `manifest.json`).
+- Images are tagged `${F1SA_IMAGE_TAG:-dev}` (Step 17), so a second checkout can build its own images (`F1SA_IMAGE_TAG=clone`, with `COMPOSE_PROJECT_NAME` for separate containers and volumes). Without a project `.env`, the Makefile exports `APP_UID=$(id -u)` so the container user can write the bind mounts on any host (CI runners use UID 1001). With a `.env`, its `APP_UID` is used.
+- The api container mounts the repo and `data/` read-only, with `data/demo` and `data/checkpoints` read-write on top (a replay's outputs and stream-job state), `results/` read-write (`ui_latency.csv`) and `models/` read-only. `make up`, `up-full` and `api-up` create the host folders of the bind mounts first (`data/demo`, `data/checkpoints`, `models/undercut`, `models/sim`), because Docker would otherwise create them owned by root (a fresh clone has no `models/`). A write anywhere else under `/workspace/data` fails with EROFS (checked: `manifest.json`).
 
 ### Memory budget
 The Docker Desktop WSL 2 VM is capped by `memory=` in the Windows file `%UserProfile%\.wslconfig`. On the dev machine the VM now has 14 GB and 12 CPUs (`free -g`, `nproc`; it had about 9 GiB and 6 CPUs before Step 10). Each container has a hard `mem_limit`:
@@ -484,8 +489,9 @@ undercut_attempts + stints + telemetry_lap_features --dataset.load_attempts--> o
   (microseconds per pair, no JVM round trip). GBT is saved and loadable for batch and dashboard comparison; a Spark
   `transform` per micro-batch would add a Spark job (tens to hundreds of ms) for a non-primary model.
 - **How containers reach `models/`.** The app service mounts `./models:/workspace/models` read-write (the repo
-  itself stays `:ro`). The API container (S13) will mount `./models:/workspace/models:ro` and load
-  `lr/scorer.json` without Spark. The container has no git, so the Makefile passes `F1SA_GIT_SHA` /
+  itself stays `:ro`). The API container (S13) mounts `./models:/workspace/models:ro` and loads
+  `lr/scorer.json` of `API_MODEL_DIR` (default `models/undercut/deploy_real_G3.5_k2`) without Spark; its replays
+  pass the same folder to the stream job (`--model-dir`), so `/api/health` reports the model the replay scores with. The container has no git, so the Makefile passes `F1SA_GIT_SHA` /
   `F1SA_GIT_DIRTY`; without a sha the run refuses.
 
 
@@ -542,8 +548,8 @@ clean zone (one race) --producer: race order x SPEED, key=driver_id, acks=all, i
     restores it and skips a replayed `batch_id`.
   - On `session_end` from every partition, the job evaluates what is left, writes, calls `end_session`, and then
     writes nothing more for that race.
-  - Scoring uses `lr/scorer.json` of `models/undercut/deploy_real_G3.5_k2`. The metadata must say `real`,
-    G = 3.5, k = 2.
+  - Scoring uses `lr/scorer.json` of `--model-dir` (default `models/undercut/deploy_real_G3.5_k2`; `make demo`
+    passes the sample model through the API). The metadata must say `real`, G = 3.5, k = 2.
   - Outputs: `results/stream_progress.jsonl` (`StreamingQueryProgress`) and `results/stream_batches.jsonl`
     (per batch counts and Redis write time), both started fresh each run.
   - On the host, the Kafka connector comes from `spark.jars.packages` (the exact pinned coordinate) with the ivy
@@ -897,3 +903,40 @@ request:  Redis hashes (api/state)  +  lap log (race channel)  +  features/pit_l
   the expected gap and interval as text. The sensitivity rows are a labelled row group, and the model P is text.
   Reserved height, bar transition only without reduced motion, and the table scrolls inside the panel at 375 px.
 
+
+## Demo and CI (Step 17)
+- **`make demo`** (after `make up` and `make sample-data`) needs no credentials, no HDFS and no host Java.
+  - **`demo-pipeline`** runs in the app container (`docker compose exec`): sample ETL, sample features (counts to
+    `data/demo/<run>/`, never `results/`), the sample deployment model and the sample tyre model.
+  - **`demo-replay`** recreates only the api with `REPLAY=1 MODEL_DIR=models/undercut/sample_deploy_real_G3.5_k2`,
+    then runs `f1sa.demo_replay` in the app container against `http://api:8000`:
+    - checks: health (Redis, Kafka, model and its version, synthetic lake) and that the race is listed as
+      synthetic;
+    - then it POSTs a 60x replay, polls `/api/replays` and `/state` until 20 cars are in Redis (with
+      `DEMO_WAIT=finished`, until the replay has finished), and prints the dashboard URL;
+    - a failed replay stops the wait with its error.
+- **Sample deployment model** (`model/deploy.py --source sample`). The same frozen procedure as
+  `make model-save-full`, on the two sample races:
+  - 2023 R5 trains it, and 2024 R5 calibrates it (identity calibration: only 1 validation row);
+  - it writes `models/undercut/sample_deploy_real_G3.5_k2/` and never `deploy_*`;
+  - metadata: `source: sample`, `smoke_test: true`, a SMOKE TEST stamp and a sample test-season statement;
+  - `reproduction.json` records the development comparison as skipped (there is no development run). The reload
+    round trip and the scorer-vs-Spark check (1e-9) must still pass;
+  - `results/` is never written;
+  - it passes the stream job's `load_model` checks (feature set `real`, G = 3.5, k = 2, inputs equal to the
+    metadata features).
+- **CI** (`.github/workflows/ci.yml`) runs three parallel jobs, each under 30 minutes:
+  - `python`: ruff, format, mypy, `scripts/check_traceability.py`, unit tests;
+  - `web`: lint, typecheck, Vitest, build;
+  - `e2e`: core profile, `make sample-data`, `make demo DEMO_WAIT=finished`, a check that `results/` is
+    unchanged, the Playwright smoke test against the web container, and `make down`.
+
+  It uses the uv and npm caches, and never the full profile, full data or 2025. `tests/integration` (HDFS, HttpFS,
+  Spark standalone) is run by hand (`docs/reproduce.md`).
+- **`scripts/check_traceability.py`** resolves every backticked file reference in `docs/traceability.md`:
+  - repo-relative and package-relative paths, the previous path's folder, `{a,b}` expansion, placeholders and
+    globs;
+  - `file::test`, `module.attr` and `make <target>`.
+
+  Gitignored outputs (`data/`, `models/`) are reported as GENERATED, and rows of pending steps (S18) as PENDING.
+  Exit 1 on anything missing.

@@ -44,3 +44,15 @@ The **code** in this repository is MIT-licensed (see [LICENSE](LICENSE)). The **
 - Every synthetic record is marked `is_synthetic=true`. Synthetic values are **not** real Formula 1 data and must not be presented as real.
 - The sample contains **no** TracingInsights data; it stays Jolpica + synthetic and remains the demo default.
 - No other data is committed to this repository.
+
+## Models, demo and CI (Step 17)
+- No model file is committed (`models/` is gitignored). `make demo` builds a **sample deployment model**
+  (`models/undercut/sample_deploy_real_G3.5_k2/`) on your machine from the committed sample. It is trained on
+  Jolpica-derived features (CC BY-NC-SA 4.0) of one sample race, stamped SMOKE TEST, and must not be shared as a
+  real model.
+- The real deployment model (`make model-save-full`) is built locally from the full lake and is not
+  redistributed. Its weights derive from Jolpica data, so the CC BY-NC-SA terms apply to any shared copy.
+- CI (`.github/workflows/ci.yml`) uses only `data/sample/`. It downloads no Jolpica, TracingInsights, FastF1 or
+  OpenF1 data, and it needs no credentials.
+- `CITATION.cff` cites the code. When you publish results, also credit the data sources above (Jolpica-F1,
+  TracingInsights, FastF1).
