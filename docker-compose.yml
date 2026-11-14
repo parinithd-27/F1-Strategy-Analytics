@@ -186,6 +186,9 @@ services:
       ENABLE_REPLAY: ${ENABLE_REPLAY:-0}
       ENABLE_DEBUG: ${ENABLE_DEBUG:-0}
       ALLOW_TEST_SEASON: ${ALLOW_TEST_SEASON:-0}
+      # UI latency samples (ENABLE_DEBUG=1); `make api-up UI_LATENCY_CSV=data/demo/...` keeps
+      # them out of results/ (Step 16). Relative to /workspace.
+      API_UI_LATENCY_CSV: ${API_UI_LATENCY_CSV:-results/ui_latency.csv}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
     volumes:

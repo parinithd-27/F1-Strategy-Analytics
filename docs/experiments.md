@@ -399,3 +399,192 @@ each median may include recovery time. The IQRs (17.1 s and 5.4 s) do not show i
 
 The final plot footnote names the four aborted cells and says the first attempt failed with the
 StackOverflowError (fixed). Hollow markers in the plot are the two merged re-runs.
+
+# Step 16: final experiments
+
+Traceability: #30 (ablation), #31 (replay one race, event-to-result delay), #35 (streaming latency),
+#36 (event throughput), #37 (Redis latency at streaming rate), #38 (resource usage). Model-side
+results (paired ablation intervals, ORACLE) are read in `docs/model_results.md`.
+
+## Experiments and how to run them
+
+| Experiment | Command | Runtime (this host) | Outputs | Can show | Cannot show |
+|---|---|---|---|---|---|
+| Paired ablation intervals (#30) | `make ablation-full RECORD=1` (host precheck, then the app container) | 1 min 45 s | `data/ablation/<run>/` (per-attempt scores, `exact_match.csv`, self-check); RECORD: `results/ablation_paired.{csv,png}`, README section | Feature-set differences on 2025 with one shared set of race resamples, from the frozen 9f models; it stops before any interval unless all 720 committed `model_eval` rows reproduce exactly | Significance (none claimed); any change of the primary set or the deployed model; GBT differences ≤ 0.043 PR-AUC (row order alone, spec v2 §5) |
+| ORACLE on development data (#30) | `make oracle-dev-full RECORD=1` (app container) | 2 min 49 s | `data/oracle/<run>/`; RECORD: `results/model_dev_{eval,loso}_oracle{,_G5.0_k3}.csv` | How much the realised out-lap delta adds on 2024 validation and 2021-2024 LOSO | Anything about 2025 (never loaded) or a deployable model: the input is **not usable at decision time** |
+| Streaming replay suite (#31, #35, #36, #38) | `make stream-latency-suite RECORD=1` (host, sample lake, core profile only) | 28 min 28 s | `data/demo/<suite>/`; RECORD: `results/streaming_latency_{s10,s60,s1w900}.csv`, `stream_{batches,progress}_{tag}.jsonl`, `streaming_latency_summary.csv`, `streaming_throughput.csv`, `streaming_resources.csv`, README sections | Per-hop delay (Kafka + trigger, batch work, Redis Pub/Sub, API SSE) and its tail at 1x/10x/60x, the first (prior-loading) batch apart, rates and peak resources on this host | Network costs between machines (one host, one clock), real 2025 data, races other than 2024 R5 |
+| UI render segment (#35) | `make api-up DEBUG=1 UI_LATENCY_CSV=data/demo/ui_latency/ui_latency.csv`, web container stopped, then `make stream-latency-ui RECORD=1` | 2 min 9 s (incl. the dashboard build) | `data/demo/<suite>_ui/`; RECORD: `results/ui_latency.csv`, `ui_latency_summary.csv`, `stream_*_s60ui.*`, `ui_streaming_*.csv` | SSE send → browser paint for the events the page sampled | Every event: the page posts at most 50 samples at once and drops ids beyond that (a subset); one browser on the same host |
+| Redis latency, quiet stack (#37) | `make redis-latency RECORD=1` | 3 min 31 s | default `data/redis_latency/<stamp>/`; RECORD: `results/redis_latency_quiet.csv`, README section | Write/read latency of the serving contract at 1/10/60 batches/s on a quiet host | Behaviour under the streaming job's load (it runs alone) |
+| Regenerable generators (all) | `make experiments` (app container) / `make experiments-sample` (host, SAMPLE) | 19 min 26 s / 1 min 27 s | `data/experiments/<run_id>/` only (`results/` is never written); `summary.txt` | Whether each committed non-2025 output is reproduced byte for byte (OK / DIFF / MISSING / NEW) | Generators that open 2025 or refuse to overwrite (skipped, printed); measurements (skipped, printed) |
+
+`make experiments` runs, each with its working directory set to the sandbox (its own `./results`,
+`./models`, `./data`): `model-dev-full`, `model-dev-tyre-full`, `model-dev-ti-full` (both settings),
+`model-dev-permutation-ti-full`, `oracle-dev-full`, `whatif-consistency-full` (without RECORD: no 2025 row) and
+`stream-parity-full`. It never runs `model-test-full`, `whatif-consistency-full RECORD=1`, `ablation-full`
+(they open 2025 and refuse to overwrite), `model-test-summary` (covered by a unit test) or the measurements
+(`experiments-spark`, the streaming suite, the UI run, Redis); it prints each with its command. A what-if
+check that fails (the pre-registered ordering cell, exit 1) is a recorded result, not a crash.
+`make experiments-sample` runs `etl-sample`, `features-sample`, `model-eval-sample`, `sim-tyre-model-sample` and
+`whatif-consistency-sample` on the host against a sandbox copy of the sample lake (so `data/lake` is not
+rewritten), stamped SAMPLE.
+
+## `make experiments` (full lake), run `exp_20261114T105954Z`
+
+19 min 26 s in the app container (generator times: `model-dev-full` 211 s, `model-dev-tyre-full` 227 s,
+`model-dev-ti-full` 247 s, `model-dev-permutation-ti-full` 204 s, `oracle-dev-full` 161 s,
+`whatif-consistency-full` 17 s, `stream-parity-full` 98 s). `results/` was not written.
+
+- **66 OK, 2 DIFF, 0 MISSING.** Every development model file of `real`, `real_tyre` and `real_ti` (CSV, JSON and
+  PNG, both settings), both permutation files, the four ORACLE files and `stream_parity_full.csv` are
+  byte-identical to the committed files.
+- The two DIFFs are both what-if outputs, and they are expected. Without RECORD the what-if run has no 2025
+  held-out row, and the committed `whatif_consistency.csv` and `.png` have it. With the 2025 rows dropped, the
+  committed CSV is byte-identical to the sandbox CSV (OK). The PNG draws the 2025 row, so it differs.
+- `whatif-consistency-full` exited 1 because of the pre-registered ordering check (Step 15 Known issue).
+  `make experiments` counts that as a recorded result, not a crash.
+
+## Streaming latency and throughput on a quiet stack (#31, #35, #36, #38)
+
+**Setup.**
+- 2024 R5 from the sample lake on the host: real Jolpica laps and pit stops, synthetic tyres. It has 1,113
+  events, and 1,252 messages are published (laps, pit_in, pit_out, 141 undercut alerts, session_end).
+- Only the core profile was running (kafka, redis, api, web). HDFS, Spark and the app container were stopped
+  for these runs and restored afterwards with `make up-full`.
+- Producer, stream job (`local[2]`, 500 ms trigger), Pub/Sub subscriber and SSE client all run on the WSL
+  host, and the API runs in its container. All of them share one kernel clock.
+- Suite `streamlat_20261114T112159Z`, 28 min 28 s, three runs one after another:
+  - `s10`: 10x, the full race;
+  - `s60`: 60x, the full race;
+  - `s1w900`: 1x, the first 900 wall seconds.
+- Every message of every run was seen on both Pub/Sub and SSE (1252/1252, 1252/1252, 232/232).
+
+**Latency (ms), steady state, without the first race batch**
+(`results/streaming_latency_summary.csv`, scope `steady`):
+
+| Run | produced → batch p50 / p95 / p99 | batch → Redis write p50 / p99 | Redis → Pub/Sub p50 / p99 | Redis → SSE client p50 / p99 | end to end (Pub/Sub) p50 / p95 / p99 | n |
+|---|---|---|---|---|---|---|
+| s10 | 780.5 / 1222.9 / 1584.1 | 4 / 12 | 1 / 6.6 | 2 / 8 | 786.5 / 1227.0 / 1586.5 | 1242 |
+| s60 | 790 / 1454 / 1752 | 5 / 10 | 1 / 3 | 2 / 5 | 798 / 1461.5 / 1757 | 1231 |
+| s1w900 | 726 / 1037.5 / 1113.7 | 1 / 5 | 1 / 4.7 | 2 / 5.4 | 729 / 1039 / 1115.4 | 231 |
+
+**The first race batch.** This batch loads the race's pit-loss and out-lap priors with Spark (scope
+`first_batch`):
+
+| Run | rows | batch → Redis write | end to end p50 | all rows end to end p99 |
+|---|---|---|---|---|
+| s10 | 9 | 1326 ms | 2825 ms | 2871.5 ms |
+| s60 | 20 | 1310 ms | 3315.5 ms | 3287.5 ms |
+| s1w900 | 1 | 1406 ms | 3380 ms | 1426.5 ms |
+
+- **The trigger and the Kafka hop dominate.** About 0.73–0.80 s at the median is producer → micro-batch start:
+  the 500 ms trigger interval, the Kafka read and Spark planning.
+- **The serving hops are milliseconds.** The batch's work is 1–5 ms at the median, Redis → Pub/Sub 1 ms, and
+  Redis → API → SSE client 2 ms, all under 13 ms at p99 in the steady state.
+- **The tail grows with the replay speed.** The steady-state p95 is 1.04 s at 1x, 1.23 s at 10x and 1.46 s at
+  60x: faster replay puts more events behind each trigger.
+- **The first race batch costs about 1.3–1.4 s more**, once per race, because it loads the priors. It is the
+  whole p99 of the "all" rows at 10x and 60x (2.9 s and 3.3 s against 1.6 s and 1.8 s without it).
+- **Run-to-run comparison.** Step 12's recorded 60x run (other services up) had end-to-end p50 814 / p95 1481 /
+  p99 3303 ms. The quiet 60x run has p50 807 / p95 1510.5 / p99 3287.5 ms, so the numbers agree within run-to-run
+  variance. Over the three 60x runs of this step (an unrecorded smoke run, s60 and s60ui), the steady-state
+  end-to-end p50 was 841, 798 and 813 ms.
+
+**Throughput** (`results/streaming_throughput.csv`): received messages/s, lap messages/s and produced events/s.
+
+| Run | messages/s | lap messages/s | produced events/s |
+|---|---|---|---|
+| s10 | 2.08 | 1.71 | 2.07 |
+| s60 | 12.71 | 10.46 | 12.43 |
+| s1w900 | 0.27 | 0.21 | 0.27 |
+
+The received rate equals the produced rate at every speed, so no backlog builds up. At 60x this replay offers
+only about 12 events/s, so these runs do not show the pipeline's maximum throughput. That would need a
+synthetic load test, which was not run.
+
+**Resources** (`results/streaming_resources.csv`; peaks per run window):
+
+| Run | host job tree (demo + stream-job JVM + producer): peak RSS / peak CPU / mean CPU | kafka | api | redis | web |
+|---|---|---|---|---|---|
+| s10 | 1.85 GiB / 494 % / 23 % | 639 MiB, 170 % | 82 MiB, 8.7 % | 28 MiB, 2.7 % | 110 MiB, 12.7 % |
+| s60 | 1.62 GiB / 502 % / 70 % | 641 MiB, 171 % | 73 MiB, 7.6 % | 23 MiB, 2.7 % | 109 MiB, 9.9 % |
+| s1w900 | 1.63 GiB / 511 % / 11 % | 642 MiB, 166 % | 73 MiB, 7.7 % | 27 MiB, 2.8 % | 132 MiB, 13.6 % |
+
+- CPU % is per core (100 % = one core).
+- The host job's peaks come from the JVM and Spark start-up, and its mean depends on the run's length.
+- The kafka CPU peak (about 170 %) is a `docker stats` sample at start-up.
+- Lowest host `MemAvailable` was 8.05 GiB of about 14 GiB during the suite, and 7.80 GiB during the UI run.
+
+**UI render segment** (suite `streamlat_20261114T115429Z_ui`; `results/ui_latency.csv`,
+`ui_latency_summary.csv`).
+
+Setup:
+- One more 60x run (`s60ui`) with the dashboard open in headless Chromium: a Next.js production build with
+  `NEXT_PUBLIC_DEBUG_LATENCY=1` on the host (the web container was stopped).
+- The API was recreated with `ENABLE_DEBUG=1` and its samples written to `data/demo/ui_latency/`. Afterwards
+  the API was recreated with its default settings and the web container was started again.
+
+| Segment | n | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|
+| API SSE send → browser paint | 1252 | 28 ms | 37 ms | 40 ms | 41 ms |
+| Redis write → browser paint | 1251 | 34 ms | 41 ms | 293 ms | 293 ms |
+| produced → browser paint | 1251 | 855 ms | 1519.5 ms | 3443.5 ms | 3579 ms |
+
+- **The UI samples are a subset by design.** The page posts at most 50 samples at once and drops ids beyond
+  that, and all ids applied in one render share one paint time (two animation frames after the update).
+- At 60x only about 12 events/s arrive, so nothing was dropped in this run: 1252 samples for 1252 messages.
+- 1110 lap and pit samples join the harness rows by `event_id`. Alerts and `session_end` carry ids made by the
+  API, so they cannot be joined that way; their server-side timings come from the API row itself.
+- The host Next.js server and the browser are not in the resource table (`results/ui_streaming_resources.csv`
+  covers the replay and the containers).
+- Correction: the first `ui_latency_summary.csv` written by the recorded run divided by the lap and pit count
+  (1110) and showed `subset_fraction` 1.128. It was rebuilt from the same raw samples with
+  `streaming_runs.resummarise_ui` (no new measurement). `ui_latency.csv` was byte-identical, and the summary
+  now shows 1.0.
+
+## Redis latency: first run and quiet rerun (#37)
+
+| Rate | Operation | First run (Step 11, 2026-11-12; noisy, other services up) p50 / p95 / p99 ms | Quiet rerun (Step 16, 2026-11-14) p50 / p95 / p99 ms | Achieved rate / late ticks (first → quiet) |
+|---|---|---|---|---|
+| 1/s | write (20-driver batch) | 1.31 / 2.04 / 2.24 | 1.69 / 2.57 / 2.59 | 1.00/0 → 1.00/0 |
+| 1/s | HGETALL | 0.25 / 0.49 / 0.63 | 0.23 / 0.54 / 0.71 | |
+| 1/s | ZRANGE | 0.28 / 0.52 / 0.68 | 0.24 / 0.34 / 0.36 | |
+| 10/s | write | 2.06 / 3.48 / 25.75 | 1.61 / 2.64 / 3.06 | 10.00/8 → 10.00/0 |
+| 10/s | HGETALL | 0.41 / 0.67 / 1.42 | 0.22 / 0.52 / 0.73 | |
+| 10/s | ZRANGE | 0.50 / 0.82 / 4.10 | 0.23 / 0.36 / 0.43 | |
+| 60/s | write | 2.10 / 9.20 / 19.77 | 1.21 / 1.59 / 1.78 | 51.09/2876 → 60.00/0 |
+| 60/s | HGETALL | 0.44 / 1.09 / 8.17 | 0.18 / 0.32 / 0.41 | |
+| 60/s | ZRANGE | 0.54 / 1.70 / 8.77 | 0.24 / 0.34 / 0.41 | |
+| — | `redis-cli --latency` PING in the container (min / avg / max) | 0.053 / 0.282 / 10.02 | 0.068 / 0.219 / 1.33 | |
+
+- Files: the first run is `results/redis_latency.csv` (kept byte-identical), and the quiet rerun is
+  `results/redis_latency_quiet.csv` (`make redis-latency RECORD=1`).
+- **Different hosts.** The Step 11 fingerprint was taken under the old WSL configuration (6 logical CPUs,
+  9.7 GiB). The rerun used the current one (12 logical CPUs, about 14 GiB). The two runs differ in host as well
+  as in background load, so the comparison is not only "quiet against noisy".
+- On the quiet stack every rate met its schedule (60.00/s, 0 late ticks), and every p99 is below 3.1 ms.
+- The tail outliers of the first run (write p99 19.8–25.8 ms, 2876 late ticks at 60/s) are therefore load on
+  that host, not Redis.
+- These numbers are client-side over the Docker port mapping on one host. They do not include a network.
+
+## `make experiments-sample`, run `exp_20261114T115905Z_SAMPLE` (SAMPLE stamp)
+
+1 min 27 s on the host, against a sandbox copy of the sample lake (`data/lake` is not rewritten). Result:
+**7 OK, 1 OK (metadata differs), 0 DIFF, 0 MISSING, 2 NEW**, exit 0.
+
+- `undercut_counts_sample.csv` and all six `model-eval-sample` outputs are byte-identical to the committed
+  files.
+- `models/sim/tyre_model_sample.json` is `OK (metadata differs)`.
+  - Comparison rule: for outputs declared with metadata fields, the string values of `created_utc` and `git_sha`
+    are masked, and the rest of the file is compared byte for byte. A file that then matches is reported as
+    `OK (metadata differs)` with the ignored fields named. Any other difference is still `DIFF`, including
+    `git_dirty`.
+  - `models/` is not committed, so the comparison is with the local file.
+- The two what-if sample files are `NEW`: Step 15 never committed sample what-if outputs.
+- The first sample run (`exp_20261114T105801Z_SAMPLE`) showed `model_eval_sample.csv` and
+  `calibration_sample.csv` as DIFF.
+  - Cause: the committed files dated from 2026-11-11, before the `decision_threshold` column and the
+    `ece_5bin_*` calibration columns existed.
+  - They are sample smoke outputs, not frozen findings. They were regenerated with the normal target
+    `make model-eval-sample`, which always writes `results/*_sample` (it has no RECORD switch).
+  - Only those two files changed. The other four sample outputs were rewritten byte-identically, and no
+    full-data or 2025 file changed.

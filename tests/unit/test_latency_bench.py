@@ -232,12 +232,34 @@ def test_main_end_to_end_on_fakeredis(
 
     monkeypatch.setattr(redis.Redis, "from_url", staticmethod(from_url))
     argv = ["--rates", "40", "--duration", "0.05", "--skip-cli"]
-    assert LB.main(argv) == 0
-    rows = list(csv.DictReader((tmp_path / "results" / LB.CSV_NAME).open()))
+    assert LB.main(argv) == 0  # default: a new data/redis_latency/<stamp>/ folder
+    (default,) = sorted(tmp_path.glob("data/redis_latency/*/" + LB.CSV_NAME))
+    rows = list(csv.DictReader(default.open()))
     assert [r["operation"] for r in rows] == ["write", "hgetall", "zrange"]
-    assert "redis_cli=skipped" in (tmp_path / "results" / LB.README_NAME).read_text()
-    assert LB.main(argv) == 0  # the namespace was cleaned, so a rerun works
+    assert "redis_cli=skipped" in (default.parent / LB.README_NAME).read_text()
+    assert not (tmp_path / "results").exists()  # never results/ without --record
     assert LB.main([*argv, "--results-dir", str(tmp_path / "elsewhere")]) == 2
+    # --record: the quiet-stack name in results/, never the Step 11 file, never twice
+    (tmp_path / "results").mkdir()
+    (tmp_path / "results" / LB.CSV_NAME).write_text("step 11\n")
+    assert LB.main([*argv, "--record"]) == 0  # the namespace was cleaned, so a rerun works
+    assert (tmp_path / "results" / LB.CSV_NAME).read_text() == "step 11\n"
+    assert (tmp_path / "results" / LB.RECORD_CSV_NAME).is_file()
+    readme = (tmp_path / "results" / LB.README_NAME).read_text()
+    assert f"## `{LB.RECORD_CSV_NAME}` (" in readme
+    assert LB.main([*argv, "--record"]) == 2
+    assert LB.main([*argv, "--record", "--results-dir", "results"]) == 2
+    assert LB.main([*argv, "--results-dir", "results"]) == 2  # its redis_latency.csv exists
+
+
+def test_output_target() -> None:
+    from datetime import UTC, datetime
+
+    now = datetime(2026, 11, 14, 12, 0, 0, tzinfo=UTC)
+    assert LB.output_target(None, False, now) == (
+        Path("data/redis_latency/20261114T120000Z"),
+        LB.CSV_NAME,
+    )
 
 
 def test_main_reports_unreachable_redis(
@@ -251,3 +273,4 @@ def test_main_reports_unreachable_redis(
     assert LB.main(["--rates", "1", "--duration", "0.01", "--skip-cli"]) == 3
     assert "not reachable" in capsys.readouterr().err
     assert not (tmp_path / "results" / LB.CSV_NAME).exists()
+    assert not list(tmp_path.glob("data/redis_latency/*/" + LB.CSV_NAME))

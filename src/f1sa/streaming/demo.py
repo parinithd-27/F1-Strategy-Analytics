@@ -12,12 +12,23 @@ wait for the job to process ``session_end``; write ``results/streaming_latency.c
 latency per segment, the throughput and the Redis state. Producer, job and subscriber run on one
 host, so every timestamp comes from one clock.
 
+Step 16 options (the quiet-stack runs, ``f1sa.bench.streaming_runs``):
+
+* ``--sse-url``: also read the API's SSE stream (``/api/races/{s}/{r}/events``) on the host and
+  write ``streaming_latency_sse.csv``: every Pub/Sub row with the SSE receive time of the same
+  message and a flag for the first micro-batch that carried race states (it loads the priors).
+* ``--window-s``: replay only the first ``window`` wall seconds. The producer is stopped after the
+  window, the run waits until no message has arrived for ``--idle-s`` seconds, and the job is
+  stopped with SIGINT (its ``finally`` shuts Spark down). There is no ``session_end`` in such a
+  run, so the race keys keep only their safety TTL.
+
 Exit codes: 0 ok, 1 a step failed, 2 a service is not reachable.
 """
 
 from __future__ import annotations
 
 import argparse
+import signal
 import subprocess
 import sys
 import threading
@@ -30,6 +41,7 @@ from f1sa.config import Settings, get_settings
 from f1sa.streaming import latency as L
 
 READY_TIMEOUT_S = 300.0
+SSE_CONNECT_TIMEOUT_S = 30.0
 """The first run on the host resolves the Kafka connector from Maven (once), then Spark starts."""
 
 
@@ -135,6 +147,9 @@ def parse_args(argv: Iterable[str] | None) -> argparse.Namespace:
     p.add_argument(
         "--race-seconds", type=float, default=7200.0, help="upper bound of the race span"
     )
+    p.add_argument("--window-s", type=float, default=None, help="replay only this many seconds")
+    p.add_argument("--idle-s", type=float, default=10.0, help="window run: quiet time before stop")
+    p.add_argument("--sse-url", default=None, help="also read the API's SSE stream (host)")
     return p.parse_args(list(argv) if argv is not None else None)
 
 
@@ -144,12 +159,18 @@ def main(
     popen: Callable[[list[str]], Any] = subprocess.Popen,
     run: Callable[[list[str]], int] = lambda cmd: subprocess.run(cmd, check=False).returncode,
     check: Callable[[Settings], int] = check_services,
-    subscriber: Callable[[Settings, int, int, float], list[dict[str, Any]]] | None = None,
+    subscriber: Callable[..., list[dict[str, Any]]] | None = None,
     state: Callable[[Settings, int, int], str] | None = None,
+    sse: Callable[..., list[dict[str, Any]]] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
 ) -> int:
     args = parse_args(argv)
     if not args.speed > 0:
         print("error: --speed must be > 0", file=sys.stderr)
+        return 2
+    if args.window_s is not None and not args.window_s > 0:
+        print("error: --window-s must be > 0", file=sys.stderr)
         return 2
     settings = get_settings()
     try:
@@ -164,22 +185,63 @@ def main(
     print(f"topic {settings.kafka_topic_events}: {n} partitions; checkpoint {checkpoint}")
 
     rows: list[dict[str, Any]] = []
+    live: list[dict[str, Any]] = []
+    stop = threading.Event()
     sub = subscriber or _redis_subscriber
-    listener = threading.Thread(
-        target=lambda: rows.extend(sub(settings, args.season, args.round, timeout)), daemon=True
-    )
+    window = args.window_s is not None
+
+    def listen() -> None:
+        if window:
+            rows.extend(
+                sub(settings, args.season, args.round, timeout, stop=stop.is_set, live=live)
+            )
+        else:
+            rows.extend(sub(settings, args.season, args.round, timeout))
+
+    listener = threading.Thread(target=listen, daemon=True)
     listener.start()
+    sse_rows: list[dict[str, Any]] = []
+    sse_thread: threading.Thread | None = None
+    if args.sse_url:
+        connected = threading.Event()
+        reader = sse or _sse_subscriber
+        url = str(args.sse_url)
+        sse_thread = threading.Thread(
+            target=lambda: sse_rows.extend(reader(url, timeout, stop, connected)), daemon=True
+        )
+        sse_thread.start()
+        if not connected.wait(timeout=SSE_CONNECT_TIMEOUT_S):
+            stop.set()
+            print(f"error: the SSE stream {args.sse_url} did not connect", file=sys.stderr)
+            return 2
     job = popen(job_command(args.season, args.round, checkpoint, ready, args.results_dir, timeout))
     try:
         wait_ready(job, ready, READY_TIMEOUT_S)
-        rc = run(producer_command(args.season, args.round, args.speed))
-        if rc != 0:
-            raise DemoError(f"the producer failed with exit code {rc}")
-        job_rc = job.wait(timeout=timeout)
-        if job_rc != 0:
-            raise DemoError(f"the stream job failed with exit code {job_rc}")
+        if window:
+            stopped = run_window(
+                popen(producer_command(args.season, args.round, args.speed)),
+                float(args.window_s),
+                live,
+                float(args.idle_s),
+                sleep=sleep,
+                clock=clock,
+            )
+            print(f"window {args.window_s:g} s: {stopped}; stopping the job (SIGINT)")
+            stop.set()
+            stop_job(job)
+        else:
+            rc = run(producer_command(args.season, args.round, args.speed))
+            if rc != 0:
+                raise DemoError(f"the producer failed with exit code {rc}")
+            job_rc = job.wait(timeout=timeout)
+            if job_rc != 0:
+                raise DemoError(f"the stream job failed with exit code {job_rc}")
         listener.join(timeout=60)
+        if sse_thread is not None:
+            sse_thread.join(timeout=30)
+            stop.set()
     except (DemoError, subprocess.TimeoutExpired) as exc:
+        stop.set()
         print(f"error: {exc}", file=sys.stderr)
         if job.poll() is None:
             job.terminate()
@@ -187,8 +249,17 @@ def main(
     path = args.results_dir / "streaming_latency.csv"
     L.write_csv(rows, path)
     print(f"wrote {path}")
+    if args.sse_url:
+        first = L.first_race_batch_ms(args.results_dir / "stream_batches.jsonl")
+        ext = L.join_sse(rows, sse_rows, first)
+        sse_path = args.results_dir / "streaming_latency_sse.csv"
+        L.write_rows(ext, sse_path, L.SSE_COLUMNS)
+        matched = sum(r["sse_received_at_ms"] is not None for r in ext)
+        print(f"wrote {sse_path}: {matched} of {len(ext)} messages also seen on SSE")
     report(rows)
     print((state or redis_state)(settings, args.season, args.round))
+    if window:
+        return 0 if rows else 1
     if not any(r["type"] == "session_end" for r in rows):
         print("error: the subscriber did not receive session_end", file=sys.stderr)
         return 1
@@ -209,8 +280,56 @@ def redis_state(settings: Settings, season: int, round_: int) -> str:
     )
 
 
+def run_window(
+    producer: Any,
+    window_s: float,
+    live: Sequence[Any],
+    idle_s: float,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+    max_drain_s: float = 300.0,
+) -> str:
+    """Let the producer run for ``window_s`` (or until it exits), stop it, then wait until no new
+    message has arrived for ``idle_s``; returns a description of how the window ended."""
+    start = clock()
+    while clock() - start < window_s and producer.poll() is None:
+        sleep(0.5)
+    ended = "producer finished" if producer.poll() is not None else "producer stopped"
+    if producer.poll() is None:
+        producer.terminate()
+        try:
+            producer.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            producer.kill()
+    seen, quiet_since, drain_start = len(live), clock(), clock()
+    while clock() - quiet_since < idle_s and clock() - drain_start < max_drain_s:
+        sleep(0.5)
+        if len(live) != seen:
+            seen, quiet_since = len(live), clock()
+    return f"{ended} after {clock() - start:.0f} s, {seen} messages, quiet for {idle_s:g} s"
+
+
+def stop_job(job: Any, timeout_s: float = 120.0) -> int | None:
+    """SIGINT (the job's ``finally`` stops the query and Spark), then terminate if it hangs."""
+    if job.poll() is not None:
+        return int(job.returncode)
+    job.send_signal(signal.SIGINT)
+    try:
+        return int(job.wait(timeout=timeout_s))
+    except subprocess.TimeoutExpired:
+        job.terminate()
+        return None
+
+
 def _redis_subscriber(
-    settings: Settings, season: int, round_: int, timeout: float
+    settings: Settings,
+    season: int,
+    round_: int,
+    timeout: float,
+    *,
+    stop: Callable[[], bool] = lambda: False,
+    live: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     import redis
 
@@ -218,7 +337,47 @@ def _redis_subscriber(
     pubsub = client.pubsub()  # type: ignore[no-untyped-call]
     L.subscribe_channel(pubsub, season, round_)
     try:
-        rows, _ended = L.collect(pubsub, timeout_s=timeout)
+        rows, _ended = L.collect(
+            pubsub, timeout_s=timeout, stop=stop, on_row=live.append if live is not None else None
+        )
     finally:
         pubsub.close()
+    return rows
+
+
+def _sse_subscriber(
+    url: str, timeout: float, stop: threading.Event, connected: threading.Event
+) -> list[dict[str, Any]]:
+    """Read the API's SSE stream until ``session_end``, ``stop`` or ``timeout``; one latency row
+    per frame with the host receive time (same clock as the producer and the job)."""
+    import requests
+
+    from f1sa.streaming.redis_sink import now_ms
+
+    rows: list[dict[str, Any]] = []
+    resp = requests.get(url, stream=True, timeout=(5, timeout))
+    resp.raise_for_status()
+
+    def closer() -> None:
+        stop.wait(timeout)
+        resp.close()
+
+    threading.Thread(target=closer, daemon=True).start()
+
+    def lines() -> Iterable[str]:
+        for line in resp.iter_lines(decode_unicode=True):
+            if line == ": connected":
+                connected.set()
+            yield str(line)
+
+    try:
+        for _event, _eid, data in L.parse_sse(lines()):
+            row = L.sse_row(data, now_ms())
+            rows.append(row)
+            if row["type"] == "session_end" or stop.is_set():
+                break
+    except (requests.RequestException, AttributeError, ValueError, OSError):
+        pass  # closed by ``closer`` after stop / timeout
+    finally:
+        resp.close()
     return rows

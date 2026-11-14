@@ -151,6 +151,36 @@ model-test-full: ## THE single test-season run (docs/model_spec_v2.md): 3 featur
 model-test-summary: ## 2025 test summary from the COMMITTED 9f files (no evaluation): results/model_test_summary.csv + Results tables in docs/model_results.md
 	$(UV) run python experiments/model_test_summary.py
 
+# ---------------------------------------------------------------- Step 16 model experiments
+# ablation-full scores the 2025 test season again with the SAVED frozen 9f models (no refit,
+# docs/model_spec_v2.md §4): a host precheck (git: committed model_eval inputs), then the app
+# container. Exact match with the committed files and with the earlier run come before any
+# interval. Outputs in data/ablation/<run_id>/; RECORD=1 adds results/ablation_paired.{csv,png}
+# (refused if they exist) and a fingerprint section in results/README.md.
+# oracle-dev-full: ORACLE (realised out-lap delta, NOT usable at decision time) on 2021-2024 only;
+# outputs in data/oracle/<run_id>/; RECORD=1 -> results/model_dev_{eval,loso}_oracle*.csv.
+ABLATION_RECORD = $(if $(filter 1,$(RECORD)), --record,)
+
+.PHONY: ablation-full oracle-dev-full
+ablation-full: ## Paired 2025 ablation intervals from the FROZEN 9f models (no refit) [RECORD=1 -> results/ablation_paired.*]
+	$(UV) run python experiments/ablation.py --source full --allow-test-season --precheck$(ABLATION_RECORD)
+	$(COMPOSE) exec -T -e PYTHONPATH=/workspace/src -e DATA_LAKE_URI=$(HDFS_LAKE) -e F1SA_GIT_SHA=$(GIT_SHA) -e F1SA_GIT_DIRTY=$(GIT_DIRTY) app python experiments/ablation.py --source full --allow-test-season$(ABLATION_RECORD)
+
+oracle-dev-full: ## DEVELOPMENT ORACLE variant (not usable at decision time; 2021-2024 only) [RECORD=1 -> results/model_dev_*_oracle*]
+	$(APP_EXEC) python experiments/oracle_dev.py --source full$(ABLATION_RECORD)
+
+# make experiments: every regenerable non-2025 generator in a sandbox data/experiments/<run_id>/
+# (its own ./results and ./models), outputs compared with the committed results/ by sha256 (OK /
+# DIFF / MISSING / NEW). results/ is never written. Generators that open 2025 or refuse to
+# overwrite, and the measurements, are skipped and printed. experiments needs make up-full;
+# experiments-sample runs on the host against a sandbox copy of the sample lake (SAMPLE stamp).
+.PHONY: experiments experiments-sample
+experiments: ## Rerun regenerable generators (full lake, app container) in data/experiments/<id>/ and sha256-compare with results/
+	experiments/run_all.sh
+
+experiments-sample: ## The same on the sample bundle (host, < 10 min, SAMPLE stamp, writes only data/)
+	experiments/run_all.sh --sample
+
 nuke: ## DESTRUCTIVE: remove containers AND volumes (requires CONFIRM=yes)
 	@echo "WARNING: this deletes all f1sa volumes (Kafka log data, HDFS namenode/datanode data)."
 	@if [ "$(CONFIRM)" != "yes" ]; then echo "Refusing: re-run as 'make nuke CONFIRM=yes'." >&2; exit 1; fi
@@ -177,6 +207,25 @@ endif
 
 stream-parity-full: ## Batch vs stream feature parity over 2021-2024 (app container, HDFS lake; 2025 never read)
 	$(APP_EXEC) python experiments/stream_parity.py --seasons 2021-2024
+
+# Step 16 quiet-stack measurements (core profile only: kafka, redis, api, web; services are never
+# started, stopped or recreated by these targets). Sample lake on the host. Outputs in
+# data/demo/<suite_id>/ (data/redis_latency/<stamp>/ for Redis); RECORD=1 copies them to NEW
+# results/ names (refused if they exist; the Step 11/12 files are never touched) and appends one
+# fingerprint section per file to results/README.md. stream-latency-ui needs the api recreated with
+# `make api-up DEBUG=1 UI_LATENCY_CSV=data/demo/ui_latency/ui_latency.csv` and port 3000 free.
+STREAM_RECORD = $(if $(filter 1,$(RECORD)), --record,)
+
+.PHONY: stream-latency-suite stream-latency-ui redis-latency
+stream-latency-suite: ## Replay 2024 R5 at 10x and 60x (full race) and 1x (15-min window) with SSE, resources [RECORD=1]
+	@test -d data/lake/features/pit_loss -a -d data/lake/clean/laps || { echo "Missing data/lake: run 'make etl-sample features-sample' first." >&2; exit 1; }
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python experiments/streaming_latency.py --suite$(STREAM_RECORD)
+
+stream-latency-ui: web/node_modules ## One 60x replay with the dashboard open (UI render samples; api DEBUG=1, port 3000 free) [RECORD=1]
+	DATA_LAKE_URI=file://$(CURDIR)/data/lake $(UV) run python experiments/streaming_latency.py --ui$(STREAM_RECORD)
+
+redis-latency: ## Redis read/write latency at 1/10/60 batches/s -> data/redis_latency/<stamp>/ [RECORD=1 -> results/redis_latency_quiet.csv]
+	$(UV) run python experiments/redis_latency.py$(STREAM_RECORD)
 
 # ---------------------------------------------------------------- what-if (Step 15)
 # Tyre models are written only to models/sim/ (never /f1/*). The consistency run writes to
@@ -269,16 +318,17 @@ flag01 = $(if $(filter 1,$(1)),1,0)
 api: ## FastAPI on the host at 127.0.0.1:$(API_PORT) (default 8001; docs /api/docs; needs make up)
 	DATA_LAKE_URI=file://$(CURDIR)/data/lake API_PORT=$(API_PORT) $(UV) run python -m f1sa.api
 
-api-up: api-dirs ## Recreate only the api container: FULL=1 (HDFS lake; needs make up-full) REPLAY=1 DEBUG=1 TEST_SEASON=1
+api-up: api-dirs ## Recreate only the api container: FULL=1 (HDFS lake; needs make up-full) REPLAY=1 DEBUG=1 TEST_SEASON=1 [UI_LATENCY_CSV=data/demo/...]
 ifeq ($(call flag01,$(FULL)),1)
 	@scripts/wait_for.sh -t 5 namenode datanode httpfs >/dev/null 2>&1 || { echo "FULL=1 needs the hdfs profile (namenode, datanode, httpfs healthy): run 'make up-full' first." >&2; exit 1; }
 endif
 	API_DATA_LAKE_URI=$(if $(filter 1,$(FULL)),$(API_HDFS_LAKE),$(API_FILE_LAKE)) \
 	ENABLE_REPLAY=$(call flag01,$(REPLAY)) ENABLE_DEBUG=$(call flag01,$(DEBUG)) \
 	ALLOW_TEST_SEASON=$(call flag01,$(TEST_SEASON)) \
+	API_UI_LATENCY_CSV=$(or $(UI_LATENCY_CSV),results/ui_latency.csv) \
 	$(COMPOSE) --profile core up -d --no-deps --no-build --force-recreate api
 	scripts/wait_for.sh -t 120 api
-	@echo "api: lake=$(if $(filter 1,$(FULL)),hdfs (full),file (sample)) replay=$(call flag01,$(REPLAY)) debug=$(call flag01,$(DEBUG)) test_season=$(call flag01,$(TEST_SEASON))"
+	@echo "api: lake=$(if $(filter 1,$(FULL)),hdfs (full),file (sample)) replay=$(call flag01,$(REPLAY)) debug=$(call flag01,$(DEBUG)) test_season=$(call flag01,$(TEST_SEASON)) ui_latency_csv=$(or $(UI_LATENCY_CSV),results/ui_latency.csv)"
 
 api-dirs: # host folders of the api's read-write mounts (Docker would create them root-owned)
 	@mkdir -p data/demo data/checkpoints

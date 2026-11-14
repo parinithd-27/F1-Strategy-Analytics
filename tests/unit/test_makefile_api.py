@@ -54,6 +54,12 @@ def test_api_up_full_mode_and_flags() -> None:
     assert "ENABLE_REPLAY=0" in _api_up("REPLAY=yes"), "only 1 enables a flag"
 
 
+def test_api_up_ui_latency_csv_defaults_to_results_and_can_go_to_data() -> None:
+    assert "API_UI_LATENCY_CSV=results/ui_latency.csv" in _api_up()
+    out = _api_up("DEBUG=1", "UI_LATENCY_CSV=data/demo/ui_latency/ui_latency.csv")
+    assert "API_UI_LATENCY_CSV=data/demo/ui_latency/ui_latency.csv" in out
+
+
 def test_api_up_recreates_only_the_api_service() -> None:
     out = _api_up("FULL=1", "REPLAY=1")
     compose = [ln for ln in out.splitlines() if "docker compose" in ln]
@@ -97,6 +103,7 @@ def test_compose_api_service() -> None:
     assert env["ENABLE_REPLAY"] == "${ENABLE_REPLAY:-0}"
     assert env["ENABLE_DEBUG"] == "${ENABLE_DEBUG:-0}"
     assert env["ALLOW_TEST_SEASON"] == "${ALLOW_TEST_SEASON:-0}"
+    assert env["API_UI_LATENCY_CSV"] == "${API_UI_LATENCY_CSV:-results/ui_latency.csv}"
     assert api["mem_limit"] == "2048m"
     assert set(api["depends_on"]) == {"kafka", "kafka-init", "redis"}
     assert "healthcheck" in api

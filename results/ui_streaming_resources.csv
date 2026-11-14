@@ -1,0 +1,5 @@
+run,scope,name,samples,peak_mem_bytes,peak_cpu_pct,mean_cpu_pct,peak_rss_bytes,min_host_available_bytes,window_start_utc,window_s
+s60ui,host_job,demo + stream job JVM + producer (psutil tree),236,,553.7,74.29915254237288,1777520640,8371380224,2026-11-14T11:54:35Z,118.5
+s60ui,container,f1sa-api-1,59,78590771,10.19,,,,2026-11-14T11:54:35Z,118.5
+s60ui,container,f1sa-kafka-1,59,677065523,172.98,,,,2026-11-14T11:54:35Z,118.5
+s60ui,container,f1sa-redis-1,59,24903680,2.64,,,,2026-11-14T11:54:35Z,118.5

@@ -1,38 +1,38 @@
 # SMOKE TEST: 2 sample races, synthetic compounds/telemetry; not findings
-source,smoke_test,feature_set,g,k,model,split,metric,value,ci_kind,ci_low,ci_high,n_valid,n_attempts,n_races,note
-sample,true,real,3.5,2,lr,validation,f1_positive,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,lr,validation,macro_f1,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,lr,validation,pr_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,lr,validation,roc_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,lr,validation,brier,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,lr,validation,ece,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,lr_calibrated,validation,f1_positive,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,lr_calibrated,validation,macro_f1,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,lr_calibrated,validation,pr_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,lr_calibrated,validation,roc_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,lr_calibrated,validation,brier,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,lr_calibrated,validation,ece,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,gbt,validation,f1_positive,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,gbt,validation,macro_f1,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,gbt,validation,pr_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,gbt,validation,roc_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,gbt,validation,brier,0.004194,,,,0,1,1,
-sample,true,real,3.5,2,gbt,validation,ece,0.064758,,,,0,1,1,
-sample,true,real,3.5,2,gbt_calibrated,validation,f1_positive,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,gbt_calibrated,validation,macro_f1,1.000000,,,,0,1,1,
-sample,true,real,3.5,2,gbt_calibrated,validation,pr_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,gbt_calibrated,validation,roc_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,gbt_calibrated,validation,brier,0.004194,,,,0,1,1,
-sample,true,real,3.5,2,gbt_calibrated,validation,ece,0.064758,,,,0,1,1,
-sample,true,real,3.5,2,majority,validation,f1_positive,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,majority,validation,macro_f1,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,majority,validation,pr_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,majority,validation,roc_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,majority,validation,brier,0.562500,,,,0,1,1,
-sample,true,real,3.5,2,majority,validation,ece,0.750000,,,,0,1,1,
-sample,true,real,3.5,2,rule,validation,f1_positive,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,rule,validation,macro_f1,0.000000,,,,0,1,1,
-sample,true,real,3.5,2,rule,validation,pr_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,rule,validation,roc_auc,,,,,0,1,1,only one class present (label=1)
-sample,true,real,3.5,2,rule,validation,brier,0.258190,,,,0,1,1,
-sample,true,real,3.5,2,rule,validation,ece,0.508124,,,,0,1,1,
+source,smoke_test,feature_set,g,k,model,split,metric,value,ci_kind,ci_low,ci_high,n_valid,n_attempts,n_races,note,decision_threshold
+sample,true,real,3.5,2,lr,validation,f1_positive,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,lr,validation,macro_f1,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,lr,validation,pr_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,lr,validation,roc_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,lr,validation,brier,0.000000,,,,0,1,1,,
+sample,true,real,3.5,2,lr,validation,ece,0.000000,,,,0,1,1,,
+sample,true,real,3.5,2,lr_calibrated,validation,f1_positive,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,lr_calibrated,validation,macro_f1,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,lr_calibrated,validation,pr_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,lr_calibrated,validation,roc_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,lr_calibrated,validation,brier,0.000000,,,,0,1,1,,
+sample,true,real,3.5,2,lr_calibrated,validation,ece,0.000000,,,,0,1,1,,
+sample,true,real,3.5,2,gbt,validation,f1_positive,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,gbt,validation,macro_f1,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,gbt,validation,pr_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,gbt,validation,roc_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,gbt,validation,brier,0.004194,,,,0,1,1,,
+sample,true,real,3.5,2,gbt,validation,ece,0.064758,,,,0,1,1,,
+sample,true,real,3.5,2,gbt_calibrated,validation,f1_positive,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,gbt_calibrated,validation,macro_f1,1.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,gbt_calibrated,validation,pr_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,gbt_calibrated,validation,roc_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,gbt_calibrated,validation,brier,0.004194,,,,0,1,1,,
+sample,true,real,3.5,2,gbt_calibrated,validation,ece,0.064758,,,,0,1,1,,
+sample,true,real,3.5,2,majority,validation,f1_positive,0.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,majority,validation,macro_f1,0.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,majority,validation,pr_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,majority,validation,roc_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,majority,validation,brier,0.562500,,,,0,1,1,,
+sample,true,real,3.5,2,majority,validation,ece,0.750000,,,,0,1,1,,
+sample,true,real,3.5,2,rule,validation,f1_positive,0.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,rule,validation,macro_f1,0.000000,,,,0,1,1,,0.500000
+sample,true,real,3.5,2,rule,validation,pr_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,rule,validation,roc_auc,,,,,0,1,1,only one class present (label=1),
+sample,true,real,3.5,2,rule,validation,brier,0.258190,,,,0,1,1,,
+sample,true,real,3.5,2,rule,validation,ece,0.508124,,,,0,1,1,,

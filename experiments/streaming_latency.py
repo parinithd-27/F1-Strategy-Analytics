@@ -12,6 +12,10 @@ Writes ``streaming_latency.csv``, ``stream_progress.jsonl`` and ``stream_batches
   overwrites the committed results;
 * with ``--record`` (``make stream-demo RECORD=1``) to ``results/``.
 
+Step 16: ``--suite`` (``make stream-latency-suite``) and ``--ui`` (``make stream-latency-ui``) run
+the quiet-stack replays of ``f1sa.bench.streaming_runs`` (outputs in ``data/demo/<suite_id>/``;
+``--record`` copies them to new ``results/`` names and never touches the Step 12 files).
+
 An explicit ``--results-dir`` is used as given, and cannot be combined with ``--record``. The logic
 lives in ``f1sa.streaming.demo`` (tested in ``tests/unit/test_demo.py``).
 """
@@ -58,7 +62,12 @@ def demo_argv(argv: Sequence[str], *, now: Callable[[], datetime] | None = None)
 
 
 def main(argv: Sequence[str] | None = None, **kwargs: Any) -> int:
-    return demo_main(demo_argv(sys.argv[1:] if argv is None else argv), **kwargs)
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "--suite" in args or "--ui" in args:
+        from f1sa.bench.streaming_runs import main as suite_main
+
+        return suite_main(args)
+    return demo_main(demo_argv(args), **kwargs)
 
 
 if __name__ == "__main__":

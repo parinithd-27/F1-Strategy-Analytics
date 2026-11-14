@@ -1,0 +1,16 @@
+run,scope,name,samples,peak_mem_bytes,peak_cpu_pct,mean_cpu_pct,peak_rss_bytes,min_host_available_bytes,window_start_utc,window_s
+s10,host_job,demo + stream job JVM + producer (psutil tree),1235,,494.3,22.802267206477733,1942208512,8648900608,2026-11-14T11:21:59Z,620.3
+s10,container,f1sa-api-1,308,86360719,8.65,,,,2026-11-14T11:21:59Z,620.3
+s10,container,f1sa-kafka-1,308,670249779,170.16,,,,2026-11-14T11:21:59Z,620.3
+s10,container,f1sa-redis-1,308,28846325,2.74,,,,2026-11-14T11:21:59Z,620.3
+s10,container,f1sa-web-1,308,114923929,12.71,,,,2026-11-14T11:21:59Z,620.3
+s60,host_job,demo + stream job JVM + producer (psutil tree),233,,501.8,70.31502145922747,1699909632,8825540608,2026-11-14T11:32:39Z,116.8
+s60,container,f1sa-api-1,58,76137103,7.58,,,,2026-11-14T11:32:39Z,116.8
+s60,container,f1sa-kafka-1,58,671927500,171.1,,,,2026-11-14T11:32:39Z,116.8
+s60,container,f1sa-redis-1,58,24431820,2.71,,,,2026-11-14T11:32:39Z,116.8
+s60,container,f1sa-web-1,58,114294784,9.91,,,,2026-11-14T11:32:39Z,116.8
+s1w900,host_job,demo + stream job JVM + producer (psutil tree),1851,,511.2,10.502539168017288,1709420544,8780238848,2026-11-14T11:34:56Z,930.3
+s1w900,container,f1sa-api-1,461,76587991,7.66,,,,2026-11-14T11:34:56Z,930.3
+s1w900,container,f1sa-kafka-1,461,672871219,165.5,,,,2026-11-14T11:34:56Z,930.3
+s1w900,container,f1sa-redis-1,461,27902607,2.79,,,,2026-11-14T11:34:56Z,930.3
+s1w900,container,f1sa-web-1,461,138726604,13.56,,,,2026-11-14T11:34:56Z,930.3

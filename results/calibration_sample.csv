@@ -1,4 +1,4 @@
 # SMOKE TEST: 2 sample races, synthetic compounds/telemetry; not findings
-model,split,chosen_method,brier_raw,brier_isotonic,brier_platt,brier_calibrated,ece_raw,ece_calibrated,n_attempts,reason
-lr,validation,identity,0.000000,,,0.000000,0.000000,0.000000,1,identity: only 1 validation row(s)
-gbt,validation,identity,0.004194,,,0.004194,0.064758,0.064758,1,identity: only 1 validation row(s)
+model,split,chosen_method,brier_raw,brier_isotonic,brier_platt,brier_calibrated,ece_raw,ece_calibrated,ece_5bin_raw,ece_5bin_calibrated,n_attempts,reason
+lr,validation,identity,0.000000,,,0.000000,0.000000,0.000000,0.000000,0.000000,1,identity: only 1 validation row(s)
+gbt,validation,identity,0.004194,,,0.004194,0.064758,0.064758,0.064758,0.064758,1,identity: only 1 validation row(s)

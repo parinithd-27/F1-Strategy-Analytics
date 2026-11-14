@@ -355,3 +355,43 @@ def test_make_target_runs_the_summary_script() -> None:
     lines = out.splitlines()  # $(UV) may expand to a full path to uv (set by `uv run`)
     assert len(lines) == 1 and lines[0].endswith("uv run python experiments/model_test_summary.py")
     assert "--allow-test-season" not in out and "model_eval.py" not in out
+
+
+# ------------------------------------------------------------------ Step 16 sections
+STEP16_HEADINGS = (
+    "## Paired ablation intervals (Step 16)\n",
+    "## ORACLE variant: development data only (Step 16)\n",
+)
+
+
+def _section(doc: str, heading: str) -> str:
+    start = doc.index(heading)
+    nxt = doc.find("\n## ", start + len(heading))
+    return doc[start:] if nxt == -1 else doc[start : nxt + 1]
+
+
+def test_step16_sections_sit_outside_results_and_survive_the_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``make model-test-summary`` (``run_summary``, which the target runs) rewrites only the body
+    of "## Results": the Step 16 sections of the real doc stay byte-identical. The run uses a copy
+    of the doc and invented inputs in tmp_path, so nothing in the repo is written."""
+    real_doc = (REPO_ROOT / "docs" / "model_results.md").read_text(encoding="utf-8")
+    results_at = real_doc.index(T.RESULTS_HEADING)
+    end_of_results = real_doc.find("\n## ", results_at + len(T.RESULTS_HEADING))
+    before = {h: _section(real_doc, h) for h in STEP16_HEADINGS}
+    for h in STEP16_HEADINGS:
+        assert real_doc.index(h) > end_of_results, f"{h.strip()} must come after ## Results"
+    monkeypatch.chdir(tmp_path)
+    _write_inputs(tmp_path)
+    doc = tmp_path / "docs" / "model_results.md"
+    doc.parent.mkdir()
+    doc.write_text(real_doc, encoding="utf-8")
+    T.run_summary(check=lambda paths: None)
+    after = doc.read_text(encoding="utf-8")
+    assert after != real_doc  # the invented inputs changed the Results tables ...
+    for h in STEP16_HEADINGS:  # ... and nothing else
+        assert _section(after, h) == before[h]
+    assert after[: after.index(T.RESULTS_HEADING)] == real_doc[:results_at]
+    tail_after = after[after.find("\n## ", after.index(T.RESULTS_HEADING) + 1) :]
+    assert tail_after == real_doc[end_of_results:]

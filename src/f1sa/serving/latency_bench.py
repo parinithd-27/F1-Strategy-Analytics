@@ -23,6 +23,12 @@ gives fewer than 30 intervals, the run stops with an error, and no row is invent
 
 The benchmark writes only to its own race, season 2100 round 30 (drivers ``bench_01`` to
 ``bench_20``). It refuses to start if that race already has keys, and deletes them afterwards.
+
+Outputs (Step 16): by default ``data/redis_latency/<UTC stamp>/redis_latency.csv`` with its own
+``README.md``, so a rerun never overwrites the committed Step 11 ``results/redis_latency.csv``.
+``--record`` (``make redis-latency RECORD=1``) writes ``results/redis_latency_quiet.csv`` and
+appends its fingerprint to ``results/README.md``; it refuses if that file exists. An explicit
+``--results-dir`` must lie under ``./results`` and refuses an existing CSV.
 """
 
 from __future__ import annotations
@@ -55,6 +61,8 @@ RATES: tuple[float, ...] = (1.0, 10.0, 60.0)
 DURATION_S = 60.0
 CLI_SECONDS = 30
 CSV_NAME = "redis_latency.csv"
+RECORD_CSV_NAME = "redis_latency_quiet.csv"
+DEFAULT_ROOT = Path("data/redis_latency")
 README_NAME = "README.md"
 COLUMNS = (
     "source",
@@ -275,6 +283,28 @@ def check_results_dir(results_dir: Path) -> None:
         raise BenchError(f"results dir {results_dir} is outside {allowed}")
 
 
+def output_target(
+    results_dir: Path | None, record: bool, now: datetime | None = None
+) -> tuple[Path, str]:
+    """``(folder, csv name)``: ``results/redis_latency_quiet.csv`` with ``record`` (refused if it
+    exists), an explicit folder under ``./results`` (refused if its CSV exists), else a new
+    ``data/redis_latency/<UTC stamp>/`` folder."""
+    if record:
+        if results_dir is not None:
+            raise BenchError("--record writes results/; do not combine it with --results-dir")
+        target = Path("results")
+        if (target / RECORD_CSV_NAME).exists():
+            raise BenchError(f"{target / RECORD_CSV_NAME} exists and is never overwritten")
+        return target, RECORD_CSV_NAME
+    if results_dir is not None:
+        check_results_dir(results_dir)
+        if (results_dir / CSV_NAME).exists():
+            raise BenchError(f"{results_dir / CSV_NAME} exists and is never overwritten")
+        return results_dir, CSV_NAME
+    stamp = (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
+    return DEFAULT_ROOT / stamp, CSV_NAME
+
+
 def _fmt(v: Any) -> Any:
     return f"{v:.4f}" if isinstance(v, float) else v
 
@@ -422,10 +452,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--rates", type=float, nargs="+", default=list(RATES))
     ap.add_argument("--duration", type=float, default=DURATION_S)
     ap.add_argument("--skip-cli", action="store_true", help="skip redis-cli --latency")
-    ap.add_argument("--results-dir", type=Path, default=Path("results"))
+    ap.add_argument("--results-dir", type=Path, default=None)
+    ap.add_argument("--record", action="store_true", help=f"write results/{RECORD_CSV_NAME}")
     args = ap.parse_args(argv)
     try:
-        check_results_dir(args.results_dir)
+        results_dir, csv_name = output_target(args.results_dir, args.record)
         settings = get_settings()
         store = RaceStore.from_settings(settings)
         reader = redis.Redis.from_url(settings.redis_url, decode_responses=True)
@@ -438,7 +469,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 duration_s=args.duration,
                 with_cli=not args.skip_cli,
             )
-            csv_path = args.results_dir / CSV_NAME
+            csv_path = results_dir / csv_name
             write_csv(csv_path, rows)
             params = {
                 "rates_per_s": "/".join(f"{r:g}" for r in args.rates),
@@ -447,11 +478,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "redis_cli": "skipped" if args.skip_cli else f"{CLI_SECONDS} x 1 s intervals",
             }
             append_readme(
-                args.results_dir / README_NAME,
-                CSV_NAME,
+                results_dir / README_NAME,
+                csv_name,
                 fingerprint(store.client, now=datetime.now(UTC), params=params),
             )
-            print(f"wrote {csv_path} and appended to {args.results_dir / README_NAME}")
+            print(f"wrote {csv_path} and appended to {results_dir / README_NAME}")
         finally:
             store.client.close()
             reader.close()

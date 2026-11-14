@@ -71,13 +71,113 @@ Against the majority baseline (traceability #17), the primary model's F1 for the
 
 - Neither ablation changes the primary feature set or the deployed model (`docs/model_spec_v2.md` §4).
 - GBT differences of 0.043 PR-AUC or less come from row order alone and are not interpretable (§5).
-- Open item: §4 also requires a **paired race-cluster bootstrap interval for each feature-set difference**
-  (`real_tyre − real`, `real_ti − real`, `real_ti − real_tyre`, per model and setting, PR-AUC and Brier).
-  - These intervals are not in any committed output: the test runs save metrics, not per-attempt scores.
-  - So they are not reported here, and no difference is interpreted.
-  - They are computed in Step 16 from the saved frozen test-run models (no retraining, re-tuning or
-    re-calibration). An exact-match check against the committed `model_eval` metrics runs first, and on any
-    mismatch no interval is written.
+- §4 also requires a **paired race-cluster bootstrap interval for each feature-set difference**. The test runs
+  saved metrics, not per-attempt scores, so these intervals were computed in Step 16 from the saved frozen
+  models. They are in the next section, "Paired ablation intervals (Step 16)".
+
+## Paired ablation intervals (Step 16)
+
+Source: `results/ablation_paired.csv` (and `results/ablation_paired.png`), written by
+`make ablation-full RECORD=1` (`src/f1sa/model/ablation.py`). This section is outside "## Results", so
+`make model-test-summary` never rewrites it (a unit test checks that it stays byte-identical).
+
+**How the intervals were made.**
+- The six frozen test-run folders `models/undercut/full_{real,real_tyre,real_ti}_G{3.5,5.0}_k{2,3}/` scored
+  the 2024 validation and 2025 test splits again. Nothing was retrained, re-tuned or re-calibrated (the
+  Platt calibrators are read from each folder's `metadata.json`).
+- **Exact match first.** Every row of the six committed `results/model_eval*` files was recomputed: 720 rows,
+  9,360 values (value, interval, counts, note), all equal to the committed text at its 6 printed decimals.
+  The run would have stopped before any interval on a single mismatch.
+- **Same race resamples for every set.** One list of 1000 race-cluster resamples per setting (seed 42, the
+  protocol of the 9f runs) was applied to all three feature sets and both models. Taken per set, the same
+  draws reproduce every committed per-set race-cluster interval (756 of 756 values), so they are the
+  resamples of the 9f runs.
+- Each difference is `b − a` on the full split, with the 2.5 and 97.5 percentiles of the per-resample
+  differences. All 1000 resamples were valid for every row.
+
+**Disclosure: an earlier run.** An earlier Step 16 session ran the same computation once (2026-11-14 10:18 to
+10:21 UTC) and printed the PR-AUC and Brier differences. Its `results/` files were removed at 10:27 UTC
+(the working tree was restored to the last commit), and its per-attempt scores and log stayed in `data/`. The
+removal was a discard by the VS Code Git integration (`git clean -f -q -- results/ablation_paired.csv
+results/ablation_paired.png` at 10:26:21 UTC in its Git log), not by repo code. The
+recorded run had to reproduce that run exactly and did: identical per-attempt scores in all six files and the
+same 24 printed differences and intervals. Nothing was chosen or changed between the two runs.
+
+**G=3.5, k=2 (primary setting): 49 attempts, 19 races**
+
+| Model | Metric | `real_tyre − real` | `real_ti − real` | `real_ti − real_tyre` |
+|---|---|---|---|---|
+| calibrated LR | PR-AUC | +0.021 [-0.136, +0.128] | -0.040 [-0.205, +0.072] | -0.061 [-0.140, +0.018] |
+| calibrated LR | Brier | +0.002 [-0.020, +0.024] | +0.016 [-0.009, +0.038] | +0.014 [+0.002, +0.026] |
+| calibrated LR | ROC-AUC | -0.022 [-0.097, +0.021] | -0.062 [-0.126, -0.015] | -0.040 [-0.071, +0.013] |
+| calibrated LR | ECE (10 bins) | +0.002 [-0.075, +0.084] | +0.016 [-0.073, +0.111] | +0.014 [-0.078, +0.098] |
+| calibrated GBT | PR-AUC | -0.049 [-0.157, +0.078] | -0.098 [-0.207, +0.007] | -0.049 [-0.182, +0.064] |
+| calibrated GBT | Brier | +0.008 [-0.012, +0.025] | +0.017 [-0.027, +0.053] | +0.008 [-0.018, +0.031] |
+| calibrated GBT | ROC-AUC | -0.021 [-0.076, +0.073] | -0.050 [-0.129, +0.093] | -0.028 [-0.095, +0.061] |
+| calibrated GBT | ECE (10 bins) | +0.025 [-0.093, +0.146] | -0.020 [-0.127, +0.098] | -0.045 [-0.148, +0.050] |
+
+**G=5.0, k=3 (sensitivity setting): 60 attempts, 20 races**
+
+| Model | Metric | `real_tyre − real` | `real_ti − real` | `real_ti − real_tyre` |
+|---|---|---|---|---|
+| calibrated LR | PR-AUC | -0.015 [-0.074, +0.055] | -0.073 [-0.132, +0.012] | -0.058 [-0.136, +0.035] |
+| calibrated LR | Brier | +0.004 [-0.005, +0.012] | +0.013 [-0.001, +0.023] | +0.009 [-0.003, +0.020] |
+| calibrated LR | ROC-AUC | -0.007 [-0.035, +0.022] | -0.033 [-0.062, +0.012] | -0.025 [-0.053, +0.021] |
+| calibrated LR | ECE (10 bins) | +0.006 [-0.053, +0.075] | +0.013 [-0.061, +0.105] | +0.006 [-0.067, +0.099] |
+| calibrated GBT | PR-AUC | +0.048 [-0.050, +0.145] | +0.018 [-0.118, +0.125] | -0.030 [-0.127, +0.045] |
+| calibrated GBT | Brier | +0.001 [-0.013, +0.017] | +0.005 [-0.016, +0.031] | +0.004 [-0.015, +0.023] |
+| calibrated GBT | ROC-AUC | -0.003 [-0.084, +0.070] | -0.001 [-0.097, +0.092] | +0.001 [-0.091, +0.114] |
+| calibrated GBT | ECE (10 bins) | +0.058 [-0.042, +0.118] | +0.058 [-0.039, +0.116] | -0.000 [-0.083, +0.080] |
+
+**Reading (no significance claim).**
+- 46 of the 48 intervals contain 0. The two that do not are both calibrated LR at the primary setting:
+  - `real_ti − real` ROC-AUC, −0.062 [−0.126, −0.015];
+  - `real_ti − real_tyre` Brier, +0.014 [+0.002, +0.026].
+
+  With 48 intervals, one or two that exclude 0 are expected by chance alone, so neither is read as a
+  finding.
+- The direction is the same as in development. Adding the per-lap telemetry inputs (`real_ti`) gives
+  calibrated LR a lower PR-AUC and ROC-AUC and a higher (worse) Brier than `real` at both settings. In
+  development, the mean LOSO PR-AUC was likewise lower (0.374 against 0.413, `docs/model_spec_v2.md` §2).
+- `real_tyre − real` is close to 0 for calibrated LR at both settings (PR-AUC +0.021 and −0.015, Brier +0.002
+  and +0.004).
+- For GBT, differences of 0.043 PR-AUC or less come from row order alone and are not interpretable (§5).
+  - That rules out `real_ti − real` (+0.018) and `real_ti − real_tyre` (−0.030) at the sensitivity setting.
+  - The larger GBT PR-AUC differences (−0.049, −0.098 and −0.049 at the primary setting; +0.048 at the
+    sensitivity setting) all have intervals that contain 0.
+- On this 2025 sample, the telemetry and tyre inputs do not improve the model. The primary feature set
+  (`real`) and the deployed model are unchanged, as pre-registered (§4).
+
+## ORACLE variant: development data only (Step 16)
+
+**ORACLE: realised out-lap delta, not usable at decision time.**
+- The variant is `real` plus the attacker's realised out-lap delta (`oracle_attacker_realised_outlap_delta_s`),
+  which is measured after the decision lap.
+- `docs/model_spec_v2.md` §1 does not list ORACLE among the test-season sets, so it was **never evaluated on
+  2025**. Only the 2021-2024 partitions were read.
+- Train 2021-2023. Hyperparameters and Platt calibration on 2024 validation. LOSO over 2021-2024, raw scores
+  at the first grid point, as for the other sets.
+- Sources: `results/model_dev_eval_oracle{,_G5.0_k3}.csv` and `results/model_dev_loso_oracle{,_G5.0_k3}.csv`
+  (`make oracle-dev-full RECORD=1`). `real` comes from `results/model_dev_eval{,_G5.0_k3}.csv` and
+  `results/model_dev_loso{,_G5.0_k3}.csv`.
+
+| Setting | Model | `real` validation PR-AUC | ORACLE validation PR-AUC | `real` Brier | ORACLE Brier | `real` LOSO mean PR-AUC (raw) | ORACLE LOSO mean PR-AUC (raw) |
+|---|---|---|---|---|---|---|---|
+| G=3.5, k=2 | calibrated LR | 0.594 [0.444, 0.817] | 0.693 [0.482, 0.861] | 0.168 | 0.159 | 0.413 | 0.469 |
+| G=3.5, k=2 | calibrated GBT | 0.560 [0.356, 0.755] | 0.629 [0.377, 0.807] | 0.205 | 0.194 | 0.483 | 0.542 |
+| G=5.0, k=3 | calibrated LR | 0.738 [0.553, 0.864] | 0.737 [0.548, 0.872] | 0.176 | 0.173 | 0.534 | 0.554 |
+| G=5.0, k=3 | calibrated GBT | 0.590 [0.413, 0.748] | 0.614 [0.427, 0.812] | 0.193 | 0.179 | 0.558 | 0.566 |
+
+(Validation values with their race-cluster 95% intervals. LOSO numbers are raw-score means over the four
+folds and are not comparable with the calibrated validation columns.)
+
+**Reading.**
+- Knowing the realised out-lap delta helps most at the primary setting: validation PR-AUC 0.693 against 0.594
+  for calibrated LR, and a LOSO mean of 0.469 against 0.413. At the sensitivity setting it barely moves.
+- The two sets were tuned separately, and these are not paired intervals: they overlap widely, and no claim is
+  made.
+- The ORACLE column is unknown when the pit decision is made. These numbers show only how much of the
+  outcome the out-lap explains. They are not a model that could be deployed.
 
 ## 2025 attempt-level missing rates (`real_tyre`, `real_ti`)
 

@@ -1040,10 +1040,107 @@
     re-run outcome, and no longer says "pending" or "again". `make bench-replot RECORD=1` redrew only
     `results/scalability_build.png`. Test: `tests/unit/test_bench_supplement.py::test_not_drawn_groups_cells_by_reason`.
   - `docs/traceability.md` rows 27, 28, 33, 34 and 38 are marked Done with their result files.
+- Step 16 (2026-11-14): final experiments (#30, #31, #35, #36, #37, #38). **Done.**
+  - **Part 0.** The working tree was clean. An earlier, stopped Step 16 session had left gitignored files in
+    `data/`:
+    - `data/ablation_record.log` and `data/ablation/full_20261114T101856Z/`: a complete paired-ablation run at
+      10:18–10:21 UTC that printed the 2025 PR-AUC and Brier differences;
+    - `data/oracle_record.log`: a development ORACLE run.
+
+    Its code was restored to HEAD at 10:26 and its `results/` files were removed at 10:27. The files in
+    `data/` were kept. User decision: rerun, and the rerun must reproduce that run exactly.
+    Cause of the removal: the VS Code Git integration, not repo code. Its log
+    (`~/.vscode-server/data/logs/20261113T113403/exthost2/vscode.git/Git.log`) shows discards at 10:26:21:
+    `git clean -f -q -- results/ablation_paired.csv results/ablation_paired.png`, the new code files, and
+    `git checkout -q -- Makefile results/README.md ...`. At 10:27:30 it shows
+    `git clean -f -q -- results/model_dev_{eval,loso}_oracle*.csv`. There is no reflog entry, and
+    `data/ablation_record.log` ends normally (`exit 0`).
+  - **Paired ablation (#30)**, `make ablation-full RECORD=1` → `model/ablation.py`, `experiments/ablation.py`.
+    - It uses the frozen 9f models only (no refit, re-tuning or re-calibration).
+    - Exact match before any interval: all 720 rows (9,360 values) of the six committed `model_eval` files
+      were reproduced, and the 252-line test table matched.
+    - The per-attempt scores equal the earlier run's in all 6 files, and its 24 printed differences were
+      reproduced.
+    - One shared list of 1000 race-cluster resamples (seed 42) per setting reproduces all 756 committed per-set
+      interval values.
+    - 48 differences (`real_tyre − real`, `real_ti − real`, `real_ti − real_tyre`; calibrated LR and GBT;
+      PR-AUC, Brier, ROC-AUC, ECE10; both settings) → `results/ablation_paired.{csv,png}`.
+    - 46 of the 48 intervals contain 0; there is no significance claim.
+    - Reading in `docs/model_results.md` "Paired ablation intervals (Step 16)". That section is outside
+      "## Results", and a test keeps it byte-identical under `run_summary`.
+  - **ORACLE**, `make oracle-dev-full RECORD=1` → `model/oracle_dev.py`.
+    - `real` plus the realised out-lap delta. It is not usable at decision time.
+    - 2021-2024 only: 2024 validation and LOSO; 2025 is never loaded. Outputs:
+      `results/model_dev_{eval,loso}_oracle{,_G5.0_k3}.csv`.
+    - At the primary setting, calibrated LR validation PR-AUC is 0.693 against 0.594 for `real`, and the raw
+      LOSO mean is 0.469 against 0.413. At the sensitivity setting it is about the same.
+    - The numbers equal the earlier session's log.
+  - **Streaming (#31, #35, #36, #38).** `make stream-latency-suite RECORD=1` (`bench/streaming_runs.py`;
+    `streaming/demo.py` gains `--sse-url`, `--window-s` and `--idle-s`; `streaming/latency.py` gains the SSE
+    join and summaries; the producer, stream job and serving contract are unchanged).
+    - Core profile only. HDFS, Spark and app were stopped with user approval and restored with `make up-full`.
+    - 2024 R5 at 10x and 60x (full race) and at 1x (900 s window).
+    - Steady-state end to end p50 / p95 / p99: 786.5 / 1227 / 1586.5 ms (10x), 798 / 1461.5 / 1757 ms (60x),
+      729 / 1039 / 1115.4 ms (1x).
+    - The first race batch (prior loading) costs about 1.3–1.4 s more and is reported separately.
+    - Redis → SSE client: 2 ms p50.
+    - Throughput equals the produced rate (12.7 msg/s at 60x).
+    - Peaks: host job tree 1.6–1.85 GiB, kafka about 640 MiB, api below 90 MiB, redis below 30 MiB.
+  - **UI segment.** `make stream-latency-ui RECORD=1`.
+    - The api was recreated with `DEBUG=1 UI_LATENCY_CSV=data/demo/ui_latency/ui_latency.csv` and the web
+      container was stopped, both with approval. Both were restored afterwards.
+    - SSE send → paint p50 / p95 / p99: 28 / 37 / 40 ms.
+    - 1252 samples for 1252 messages (nothing dropped at 60x). The samples are a subset by design (at most 50
+      in flight).
+  - **Redis (#37) rerun on the quiet stack.** `make redis-latency RECORD=1` → `results/redis_latency_quiet.csv`.
+    - 60.00/s with 0 late ticks; every p99 is below 3.1 ms.
+    - The Step 11 values stay in `results/redis_latency.csv` as the first run (noisy; old WSL config with 6 CPUs
+      and 9.7 GiB, against 12 CPUs and about 14 GiB now).
+    - `latency_bench` now writes to `data/redis_latency/<stamp>/` unless `--record` is given.
+  - **`make experiments` / `make experiments-sample`** (`experiments/run_all.sh` → `bench/experiments.py`).
+    - Every regenerable non-2025 generator runs in a sandbox `data/experiments/<id>/`, and its outputs are
+      compared with `results/` by sha256. `results/` is never written.
+    - Generators that open 2025 and the measurements are skipped and printed.
+    - Full run: 19 min 26 s; 66 OK, 2 DIFF (the what-if CSV and PNG, which have the 2025 row; the CSV matches
+      without it).
+    - Sample run: 1 min 27 s; 7 OK, 1 OK (metadata differs) for the tyre model (`created_utc`, `git_sha`
+      masked; all else byte for byte), 2 NEW, exit 0.
+  - **Stale sample outputs regenerated (user request).** `results/model_eval_sample.csv` and
+    `calibration_sample.csv`, committed 2026-11-11 before `decision_threshold` and `ece_5bin` existed, were
+    rewritten with the normal `make model-eval-sample`.
+    - Only those two files changed; they equal the sandbox outputs of the current code.
+    - No full-data or 2025 file changed.
+  - **Results.**
+    - New files only (each RECORD target refuses existing names).
+    - The Step 11 and Step 12 files are byte-identical.
+    - `results/README.md` gains appended fingerprint sections: ablation, Redis, and one per streaming and UI
+      file. The ORACLE files carry their stamp line and no README section, like the other `model_dev_*` files.
+  - **Correction during the step.** The recorded `results/ui_latency_summary.csv` first used the lap and pit
+    count (1110) as the denominator, giving subset 1.128. It was rebuilt from the same raw samples
+    (`streaming_runs.resummarise_ui`, no new measurement); `ui_latency.csv` was unchanged.
+  - **Guard fix.** The full unit suite caught `ablation.py` calling `dataset._issue_test_token` directly
+    (`test_model_dataset.py::test_only_evaluate_issues_test_tokens`). The test split is now opened only through
+    `evaluate.evaluate_test`, and the guard is unchanged. A non-RECORD rerun of the fixed code reproduced the
+    recorded `ablation_paired.csv` and `.png` and all six score files byte for byte
+    (`data/ablation/full_20261114T121522Z`).
+  - **Infra.** `docker-compose.yml` api gains `API_UI_LATENCY_CSV` (default `results/ui_latency.csv`, unchanged),
+    and `make api-up` gains `UI_LATENCY_CSV=`.
+  - **Tests.** New: `test_ablation.py`, `test_oracle_dev.py`, `test_experiments_runner.py`,
+    `test_streaming_runs.py`. Extended: `test_demo.py`, `test_latency.py`, `test_latency_bench.py`,
+    `test_makefile_api.py`, `test_model_test_summary.py`. New gated `web/e2e/latency.spec.ts`.
 ## Next
-- S16: streaming latency and throughput (#35, #36) from `make stream-demo` on the core profile only, with the
-  run-to-run variance; S13 API reads the Redis state and SSE-forwards the events channel.
+- S17: reproducible end-to-end pipeline (#42): `docs/reproduce.md`, CI; point it at `make experiments` /
+  `make experiments-sample` for the regeneration check.
 ## Known issues
+- Step 16: the streaming runs show latency at replay rates of at most about 13 events/s. The pipeline's
+  maximum throughput was not load-tested.
+- Step 16: the UI segment comes from one headless Chromium on the same host. Its samples are a subset by
+  design (at most 50 in flight; none were dropped at 60x). Alerts and `session_end` cannot be joined to the
+  harness by `event_id`.
+- Step 16: in `make experiments`, the what-if PNG always differs from the committed one, because without RECORD
+  it has no 2025 row. The CSV is compared without the 2025 rows.
+- Step 16: the window run (1x, 900 s) has no `session_end`, so its race keys keep only the safety TTL. The job
+  is stopped with SIGINT, which logs a KeyboardInterrupt traceback.
 - Step 10: the 20 recorded ok build cells (telemetry cells do not use the filter) were timed with the old
   OR-chain filter, the two re-run cells with the flat `IN` (about 10 s per run faster at 96 races), so the re-run
   points are comparable only with each other. A full re-run of the grid was not done (hours).
@@ -1295,6 +1392,10 @@ Step 15: `make sim-tyre-model-sample && make whatif-consistency-sample`, then
 `uv run pytest tests/unit/test_sim_tyre_model.py tests/unit/test_race_sim.py tests/unit/test_whatif.py tests/unit/test_lap_log.py tests/unit/test_api_whatif.py tests/unit/test_sim_consistency.py tests/unit/test_makefile_sim.py -q`
 and `make web-test`. Full lake (needs `make up-full`): `make sim-tyre-model-full && make whatif-consistency-full`.
 Live: `ENABLE_REPLAY=1 make api`, then `curl -X POST localhost:8001/api/races/2024/5/whatif -H 'content-type: application/json' -d '{"attacker":"<P4>","defender":"<P3>"}'` during a replay.
+
+Step 16: `uv run pytest tests/unit/test_ablation.py tests/unit/test_oracle_dev.py tests/unit/test_experiments_runner.py tests/unit/test_streaming_runs.py tests/unit/test_demo.py tests/unit/test_latency.py tests/unit/test_latency_bench.py tests/unit/test_model_test_summary.py tests/unit/test_makefile_api.py -q`;
+`make experiments-sample` (expect exit 0); with `make up-full`: `make experiments` (expect 66 OK, the 2 what-if DIFFs).
+Measurements (core profile only): `make stream-latency-suite`, `make redis-latency` (no RECORD: data/ only).
 
 ## 9f approval
 - 2026-11-13: label-definition-v1, model-spec-v1 and model-spec-v2 approved for the single 2025 test run by Parinith D. on behalf of the team (Data Wranglers). No further sign-off required.
